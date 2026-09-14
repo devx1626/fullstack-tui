@@ -155,6 +155,19 @@ export class Store {
     this.save();
   }
 
+  /**
+   * Persist in-progress code WITHOUT recording an attempt (QoL Q8 autosave,
+   * errors-and-qol-spec §4.4). `lastCode` is an existing field older app
+   * versions already read, so this stays schema-compatible. Debounce lives
+   * with the caller.
+   */
+  saveDraft(id, code) {
+    const rec = this.challengeRecord(id);
+    rec.lastCode = code;
+    this.data.challenges[id] = rec;
+    this.save();
+  }
+
   useHint(id) {
     const rec = this.challengeRecord(id);
     rec.hintsUsed += 1;

@@ -45,6 +45,8 @@ if (process.argv.includes('--spike')) {
       if (/\.jsx$/.test(f)) entries.push({ in: `spike/${f}`, out: `spike/${f.replace(/\.jsx$/, '')}` });
     }
   }
+  // Test harness for node:test files that render JSX components.
+  entries.push({ in: 'src/ui/harness.jsx', out: 'harness' });
 }
 
 if (watch) {

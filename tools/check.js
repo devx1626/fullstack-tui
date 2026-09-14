@@ -360,7 +360,60 @@ probe('backspace removes both halves of an empty pair', () => {
 fs.rmSync(path.join(ROOT, '.data', 'check-tmp.json'), { force: true });
 
 // 5. Command registry / keymap lint (overhaul task 0.7a; spec E2/S3).
-process.stdout.write('\n5. command registry & keymap\n');
+// 6. QoL contract: replay-driven feature assertions (errors-and-qol-spec §6).
+process.stdout.write('\n6. QoL contract (feature replays)\n');
+try {
+  const { emptyEditor, editorText } = await import('../src/views/editor.js');
+
+  // Replay Q8 (autosave): typing stops → saveDraft lands the buffer in
+  // lastCode without bumping attempts, and progress.json stays loadable.
+  const q8store = new Store(path.join(ROOT, '.data', 'check-qol.json'));
+  const q8id = 'qol.replay.autosave';
+  const draftEd = emptyEditor('const x = 1;');
+  q8store.saveDraft(q8id, editorText(draftEd));
+  const q8rec = q8store.challengeRecord(q8id);
+  if (q8rec.lastCode !== 'const x = 1;') fail(`Q8 autosave: lastCode got ${JSON.stringify(q8rec.lastCode)}`);
+  else if (q8rec.attempts !== 0) fail(`Q8 autosave: attempts bumped to ${q8rec.attempts}`);
+  else process.stdout.write('   ok  Q8 saveDraft persists lastCode without an attempt\n');
+
+  // Replay Q1 (resume): seed a challenge record → resumeTarget finds it.
+  const q1store = new Store(path.join(ROOT, '.data', 'check-qol.json'));
+  const q1mod = curriculum[0];
+  const q1lesson = q1mod.lessons[0];
+  const q1ch = q1lesson.challenges[0];
+  q1store.recordAttempt(`${q1lesson.id}.${q1ch.id}`, 'code', false);
+  const target = q1store.data.challenges[`${q1lesson.id}.${q1ch.id}`];
+  if (!target || target.passed !== false) fail('Q1 resume: seeded record missing');
+  else {
+    // The resume row must point at the first unpassed challenge of module 0.
+    const resumeApp = new App({ theme: pickTheme(), store: q1store });
+    resumeApp.w = 100;
+    resumeApp.h = 30;
+    resumeApp.screen.out = { write() {} };
+    const found = resumeApp.resumeTarget();
+    if (!found || found.lessonId !== q1lesson.id) fail(`Q1 resume: resumeTarget got ${JSON.stringify(found)}`);
+    else process.stdout.write(`   ok  Q1 resumeTarget lands on ${found.lessonId}\n`);
+  }
+
+  // Data-compat guard: the exercised store must round-trip the classic shape.
+  const round = new Store(path.join(ROOT, '.data', 'check-qol.json'));
+  const probe = round.data.challenges[`${q1lesson.id}.${q1ch.id}`];
+  if (!probe || typeof probe.attempts !== 'number' || typeof probe.lastCode !== 'string') {
+    fail('QoL data-compat: record shape drifted');
+  } else if (round.data.version !== 1) {
+    fail(`QoL data-compat: version is ${round.data.version}, expected 1`);
+  } else {
+    process.stdout.write('   ok  progress store round-trips (version 1, classic shape)\n');
+  }
+
+  for (const f of ['check-qol.json']) {
+    fs.rmSync(path.join(ROOT, '.data', f), { force: true });
+  }
+} catch (err) {
+  fail(`QoL contract: ${err && err.stack ? err.stack.split('\n')[0] : err}`);
+}
+
+process.stdout.write('\n7. command registry & keymap\n');
 try {
   const { lintKeymap, COMMANDS, resolveKey } = await import('../src/ui/commands.js');
   const problems = lintKeymap();
