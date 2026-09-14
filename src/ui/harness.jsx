@@ -13,6 +13,7 @@ import { render, useInput, useApp } from 'ink';
 export { render, useInput, useApp, useState };
 export { Header, Panel, List, ScrollPane, Footer, Badge, Meter } from './components/chrome.jsx';
 export { Palette } from './components/palette.jsx';
+export { SplitPane } from './components/splitPane.jsx';
 
 /** createElement shorthand for tests. */
 export const el = (Component, props) => React.createElement(Component, props);

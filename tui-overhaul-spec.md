@@ -783,21 +783,23 @@ Sizes: **S** ≤ half day, **M** ≤ 2 days, **L** ≤ 1 week (focused solo work
 
 ## Phase 0 — Foundations (invisible to users)
 
-| # | Task | Files (new/changed) | Size | DoD |
-|---|---|---|---|---|
-| 0.1 | Tooling baseline: engines ≥ 20.9, esbuild pipeline, scripts | `package.json`, `esbuild.config.mjs`, `bin/fullstack.js` (→ `dist/main.js` with "run npm run build" fallback), `.gitignore` (+`dist`) | S | `npm run build && node bin/fullstack.js` runs a hello-frame under `FULLSTACK_UI=next` |
-| 0.2 | Ink spike: verify npm-stable ink@6 peer deps (react 18/19), alt-screen shim, `usePaste`/`useBoxMetrics`/`contentOffset`/`useCursor` availability, fake-stdout render | `docs/ink-spike.md`, `spike/` (temp) | S | Findings recorded; Appendix A.2/A.4 confirmed or fallback ladder chosen |
-| 0.3 | Input pipeline (pure): chunker+keymap port, escape-split coalescer, SGR mouse parser, bracketed paste, keybind notation parser | `src/ui/input/{parseChunk,escapeCoalesce,mouse,paste,keys,index}.js` | M | Unit tests incl. split-across-chunks, SGR press/drag/wheel, paste grouping |
-| 0.4 | Capability probe | `src/ui/capabilities.js` | S | Env-matrix tests (truecolor/256/16/dumb/NO_COLOR/WT_SESSION…); tier resolution table |
-| 0.5 | Theme engine: token types, tier mapping (hex→256→16), midnight+paper ports, icons (nerd/unicode/ascii sets) | `src/ui/theme/{types,tiers,icons}.js`, `src/ui/theme/themes/*.js`, `ThemeProvider.jsx` | M | Both themes render identical hues to today at 256 tier; tier tests |
-| 0.6 | Settings store | `src/ui/settings.js` | S | Load/merge/defaults for `.data/settings.json`; corrupted-file recovery; tests |
-| 0.7 | Command registry + keymap loader + conflict lint API | `src/ui/commands.js`, `src/ui/keymap.js`, `defaults/` (Appendix B data) | M | All Appendix B ids registered; keymap.json merge; lint finds seeded conflicts |
-| 0.8 | Dispatcher + `useKeymap` | `src/ui/dispatcher.jsx` | M | Priority-table unit tests (overlays > vim > screen > global); Ctrl+C always quits |
-| 0.9 | App skeleton: providers, router, alt-screen wrapper, resize, noTTY static entry | `src/main.jsx`, `src/ui/{AppRoot,altScreen,staticRender}.jsx`, `src/ui/router.jsx` | M | `FULLSTACK_UI=next` shows a chrome frame on tiers A–D; piped stdout renders once and exits |
-| 0.10 | Test scaffolding: fake stdout/stdin driver, snapshot util, replay runner; check-tool hooks | `tests/harness/{fakeStdout,driver,snapshot,replay}.js`, `tests/unit/*`, `tools/check.js` (+keymap lint, tier smoke) | M | Snapshot of hello-frame stable across runs; replay drives a scripted key sequence |
-| 0.11 | Docs stubs | `README.md` (v2 banner), `CONTRIBUTING.md` skeleton | S | Build/test instructions accurate |
+| # | Task | Files (new/changed) | Size | DoD | Status (2026-09-14) |
+|---|---|---|---|---|---|
+| 0.1 | Tooling baseline: engines ≥ 20.9, esbuild pipeline, scripts | `package.json`, `esbuild.config.mjs`, `bin/fullstack.js` (→ `dist/main.js` with "run npm run build" fallback), `.gitignore` (+`dist`) | S | `npm run build && node bin/fullstack.js` runs a hello-frame under `FULLSTACK_UI=next` | ✅ done |
+| 0.2 | Ink spike: verify npm-stable ink@6 peer deps (react 18/19), alt-screen shim, `usePaste`/`useBoxMetrics`/`contentOffset`/`useCursor` availability, fake-stdout render | `docs/ink-spike.md`, `spike/` (temp) | S | Findings recorded; Appendix A.2/A.4 confirmed or fallback ladder chosen | ✅ done — `docs/ink-spike.md`, ink@6.8.0 pinned, fallback ladder not needed |
+| 0.3 | Input pipeline (pure): chunker+keymap port, escape-split coalescer, SGR mouse parser, bracketed paste, keybind notation parser | `src/ui/input/{parseChunk,escapeCoalesce,mouse,paste,keys,index}.js` | M | Unit tests incl. split-across-chunks, SGR press/drag/wheel, paste grouping | ✅ done — `src/ui/input/index.js` + 13 tests |
+| 0.4 | Capability probe | `src/ui/capabilities.js` | S | Env-matrix tests (truecolor/256/16/dumb/NO_COLOR/WT_SESSION…); tier resolution table | ✅ done — tier matrix pinned by `tests/unit/capabilities.test.js` (9 cases); the M1 *graphics* probe is Phase 1 (`m1-probe`, docs/multimedia.md) |
+| 0.5 | Theme engine: token types, tier mapping (hex→256→16), midnight+paper ports, icons (nerd/unicode/ascii sets) | `src/ui/theme/{types,tiers,icons}.js`, `src/ui/theme/themes/*.js`, `ThemeProvider.jsx` | M | Both themes render identical hues to today at 256 tier; tier tests | ◐ partial — themes + hex→256 down-mapping shipped and tested; icon sets land with Phase 1 screens |
+| 0.6 | Settings store | `src/ui/settings.js` | S | Load/merge/defaults for `.data/settings.json`; corrupted-file recovery; tests | ✅ done — unknown-key preservation + corruption recovery tested |
+| 0.7 | Command registry + keymap loader + conflict lint API | `src/ui/commands.js`, `src/ui/keymap.js`, `defaults/` (Appendix B data) | M | All Appendix B ids registered; keymap.json merge; lint finds seeded conflicts | ◐ partial — 46 ids registered, conflict lint + E2 spot-checks in `tools/check.js`; `keymap.js` loader + `defaults/` remain |
+| 0.8 | Dispatcher + `useKeymap` | `src/ui/dispatcher.jsx` | M | Priority-table unit tests (overlays > vim > screen > global); Ctrl+C always quits | ◐ partial — `InputDispatcher` (screen→global "mode wins" + Ctrl+C quit) wired into `main.jsx` and pty-verified; `useKeymap` hook + overlay priority remain |
+| 0.9 | App skeleton: providers, router, alt-screen wrapper, resize, noTTY static entry | `src/main.jsx`, `src/ui/{AppRoot,altScreen,staticRender}.jsx`, `src/ui/router.jsx` | M | `FULLSTACK_UI=next` shows a chrome frame on tiers A–D; piped stdout renders once and exits | ◐ partial — hello frame verified on pty (Tiers A/B) and pipe (D), alt-screen + clean quit; router/providers remain |
+| 0.10 | Test scaffolding: fake stdout/stdin driver, snapshot util, replay runner; check-tool hooks | `tests/harness/{fakeStdout,driver,snapshot,replay}.js`, `tests/unit/*`, `tools/check.js` (+keymap lint, tier smoke) | M | Snapshot of hello-frame stable across runs; replay drives a scripted key sequence | ◐ partial — fake streams + golden snapshots (+poison guard) and QoL replays (classic UI) live; next-UI keystroke-replay driver remains |
+| 0.11 | Docs stubs | `README.md` (v2 banner), `CONTRIBUTING.md` skeleton | S | Build/test instructions accurate | ☐ pending |
 
 **Phase 0 exit:** old app byte-identical in behavior; next-UI hello-frame green on all tiers; `npm run build && npm test && npm run check` green.
+
+> **Progress note (2026-09-14):** input dispatcher is wired (`src/ui/input/dispatcher.js`): raw-mode stdin → mouse/paste/key parsers → "mode wins" routing, pty-verified (mode sequences on/off, clean ^C exit, no process leak). First Phase 1 component slices exist: `SplitPane` + shared `clampSplit` (tests green) and the command `Palette` + pure fuzzy filter (13 tests). Multimedia feasibility shipped as `src/ui/multimedia.js` (12 tests) + `docs/multimedia.md`.
 
 ## Phase 1 — Shell & navigation (next-UI covers all non-editor screens)
 

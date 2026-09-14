@@ -1,17 +1,19 @@
 /**
  * FULLSTACK_UI=next entry point.
  *
- * Phase 0: proves the pipeline end-to-end — providers mount, alt-screen
- * wrapper engages on a TTY, the chrome frame renders, Ctrl+C quits cleanly.
- * Screens arrive in Phase 1; the classic UI remains the default entry.
+ * Phase 0 complete: providers mount, alt-screen engages on a TTY, the chrome
+ * frame renders, and the input pipeline (task 0.4) routes keys/mouse/paste
+ * through the dispatcher. Screens arrive in Phase 1; the classic UI remains
+ * the default entry until the Phase 4 cut-over.
  */
 import React from 'react';
 import { render, Text, Box } from 'ink';
 import { detectCapabilities } from './ui/capabilities.js';
 import { themeForCapabilities } from './ui/theme/index.js';
 import { AltScreen } from './ui/altScreen.jsx';
+import { InputDispatcher } from './ui/input/dispatcher.js';
 
-function ChromeFrame({ theme, tier }) {
+function ChromeFrame({ theme, tier, input }) {
   const w = 58;
   const line = '─'.repeat(w - 2);
   return (
@@ -21,7 +23,7 @@ function ChromeFrame({ theme, tier }) {
       <Text color={theme.muted}>  theme: {theme.name} · tier: {tier}</Text>
       <Text color={theme.muted}>  screens land in Phase 1 — classic UI is still the default</Text>
       <Text color={theme.accent}>╰{line}╯</Text>
-      <Text color={theme.faint}>  ctrl+c quit</Text>
+      <Text color={theme.faint}>  ctrl+c quit · input: {input}</Text>
     </Box>
   );
 }
@@ -32,27 +34,24 @@ export function main() {
 
   // Piped stdout / TERM=dumb: one-shot static render, then exit (spec §7.1 Tier D).
   if (!caps.isTTY) {
-    render(<ChromeFrame theme={theme} tier={caps.tier} />, { patchConsole: false });
+    render(<ChromeFrame theme={theme} tier={caps.tier} input="none (pipe)" />, { patchConsole: false });
     return;
   }
 
   // Ctrl+C is ours (E4 fix): exitOnCtrlC would unmount Ink's tree but leave
   // our stdin hold alive, so the process lingered after ^C on a real TTY.
-  const { unmount, waitUntilExit } = render(
+  const { unmount } = render(
     <AltScreen>
-      <ChromeFrame theme={theme} tier={caps.tier} />
+      <ChromeFrame theme={theme} tier={caps.tier} input="keys · mouse · paste" />
     </AltScreen>,
     { exitOnCtrlC: false, patchConsole: true },
   );
 
-  // Phase 0: no screens consume input yet, so hold stdin to keep the app
-  // alive and watch for the ^C byte (raw mode) plus SIGINT (cooked mode).
-  // The input pipeline (task 0.3) replaces this ad-hoc watcher.
   let done = false;
-  const cleanup = () => {
+  const quit = () => {
     if (done) return;
     done = true;
-    process.stdin.pause();
+    dispatcher.stop();
     try {
       unmount(); // flushes the alt-screen restore + final frame
     } catch {
@@ -63,10 +62,22 @@ export function main() {
     // the classic app's quit() does.
     setTimeout(() => process.exit(0), 30); // let the restore write flush
   };
-  process.stdin.resume();
-  process.stdin.on('data', (buf) => {
-    if (buf.includes(0x03)) cleanup();
+
+  // Task 0.4: the dispatcher owns stdin (raw mode), parses mouse/paste/keys
+  // byte-level, and routes events to the focused screen then the global handler.
+  const dispatcher = new InputDispatcher({
+    stdout: process.stdout,
+    stdin: process.stdin,
+    getRoute: () => ({
+      // Phase 1 screens install real handlers here; the frame consumes nothing.
+      onKey: () => false,
+      onMouse: () => false,
+      onPaste: () => false,
+    }),
+    globalHandler: () => false, // palette/quit/help land in Phase 1
+    onQuit: quit,
   });
-  process.on('SIGINT', cleanup);
-  void waitUntilExit;
+  dispatcher.start();
+
+  process.on('SIGINT', quit); // cooked-mode fallback (e.g. kill -INT)
 }

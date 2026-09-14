@@ -161,13 +161,13 @@ New section after the existing ones:
 
 ## 7. Sequencing (merged timeline)
 
-| Step | Content | Gate |
-|---|---|---|
-| **0. Stabilization** | E1–E4 + S1–S4 (§3), with tests/repro notes | `npm run build && npm test && npm run check` green; E4 pty repro resolved |
-| **Phase 0 (+0.7a)** | Registry skeleton + QoL command registration; Q3 endpoints live | Registry smoke replays green |
-| **Phase 1 (+QoL)** | Q1, Q2, Q4 (text), Q5, Q6, Q7, Q8, Q9, Q10 (classic), Q13, Q14; palette consumes registry | Full QoL contract green on classic |
-| **Phase 2 (+QoL)** | Q4 (caret jump), Q11 soft-wrap (Appendix E 2.8 addendum), Q12 | Phase 2 gate + soft-wrap unit/replay |
-| **Phase 4** | Recap & toasts reproduced on the Ink UI at cut-over; flourishes (decoration tier) for Q5 | Cut-over checklist includes QoL parity |
+| Step | Content | Gate | Status (2026-09-14) |
+|---|---|---|---|
+| **0. Stabilization** | E1–E4 + S1–S4 (§3), with tests/repro notes | `npm run build && npm test && npm run check` green; E4 pty repro resolved | ✅ done — E1–E4 fixed (E4 regression-covered by `tools/repro-e4.sh`), S1/S3/S4 cleared, S2 fixed |
+| **Phase 0 (+0.7a)** | Registry skeleton + QoL command registration; Q3 endpoints live | Registry smoke replays green | ✅ done — 46 ids + conflict lint; Q1/Q5/Q6/Q8/Q14 replays green; settings store shipped |
+| **Phase 1 (+QoL)** | Q1, Q2, Q4 (text), Q5, Q6, Q7, Q8, Q9, Q10 (classic), Q13, Q14; palette consumes registry | Full QoL contract green on classic | ◐ well underway — Q5/Q6/Q8/Q14 shipped on classic; palette component + fuzzy filter built (registry data wired); remaining: Q2/Q4/Q7/Q9/Q10/Q13 |
+| **Phase 2 (+QoL)** | Q4 (caret jump), Q11 soft-wrap (Appendix E 2.8 addendum), Q12 | Phase 2 gate + soft-wrap unit/replay | ☐ pending |
+| **Phase 4** | Recap & toasts reproduced on the Ink UI at cut-over; flourishes (decoration tier) for Q5 | Cut-over checklist includes QoL parity | ☐ pending — see also docs/multimedia.md for M0–M2 flourishes (OSC 8 links, bell, cursor shapes, notifications, optional inline screenshots) |
 
 ---
 
@@ -185,6 +185,8 @@ New section after the existing ones:
 ---
 
 ## 9. Acceptance Criteria
+
+<!-- 2026-09-14: multimedia feasibility assessed — see docs/multimedia.md. Audio/video ruled out; M0 primitives (links, bell, cursor, notify) and M1 probe plan shipped in src/ui/multimedia.js. -->
 
 - [ ] Stabilization pass: all E-items fixed with tests; all S-items verified (fixed or documented not-a-bug with evidence).
 - [ ] No footer/help hint names a nonexistent key (lint-enforced).

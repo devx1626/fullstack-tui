@@ -66,7 +66,12 @@ export function parseKeys(chunk) {
 const MOUSE_RE = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])/;
 
 export class MouseParser {
-  constructor() { this.pending = ''; }
+  constructor({ rawPassThrough = false } = {}) {
+    this.pending = '';
+    // rawPassThrough: emit unconsumed bytes as {type:'bytes', text} instead of
+    // parsing keys — used when a downstream layer (coalescer) owns key parsing.
+    this.rawPassThrough = rawPassThrough;
+  }
 
   /**
    * Feed bytes; returns mouse events and consumes them, leaving non-mouse
@@ -87,7 +92,7 @@ export class MouseParser {
       m = MOUSE_RE.exec(this.pending.slice(idx));
       if (!m) break; // incomplete — wait for more bytes
       const before = this.pending.slice(0, idx);
-      if (before) events.push(...this.keys(before));
+      if (before) events.push(...(this.rawPassThrough ? [{ type: 'bytes', text: before }] : this.keys(before)));
       const bits = Number(m[1]);
       const button = bits & 3;
       const motion = (bits & 32) !== 0;
@@ -118,7 +123,11 @@ export class MouseParser {
       } else if (/\x1b\[[0-9;<]*$/.test(this.pending)) {
         // incomplete escape-ish tail: hold
       } else {
-        events.push(...this.keys(this.pending));
+        if (this.rawPassThrough) {
+          events.push({ type: 'bytes', text: this.pending });
+        } else {
+          events.push(...this.keys(this.pending));
+        }
         this.pending = '';
       }
     }
@@ -142,7 +151,10 @@ export const pasteSeq = { on: '\x1b[?2004h', off: '\x1b[?2004l' };
 
 /** Groups bytes between \x1b[200~ and \x1b[201~ into one paste event. */
 export class PasteBuffer {
-  constructor() { this.active = false; this.buf = ''; this.intro = ''; }
+  constructor({ rawPassThrough = false } = {}) {
+    this.active = false; this.buf = ''; this.intro = '';
+    this.rawPassThrough = rawPassThrough;
+  }
 
   feed(chunk) {
     const events = [];
@@ -155,11 +167,17 @@ export class PasteBuffer {
           // Emit everything up to the last possible sequence intro.
           const keep = /(?:\x1b\[\d*)?$/.exec(work)[0] || '';
           const head = work.slice(0, work.length - keep.length);
-          if (head) events.push(...parseKeys(head));
+          if (head) {
+            if (this.rawPassThrough) events.push({ type: 'bytes', text: head });
+            else events.push(...parseKeys(head));
+          }
           this.intro = keep;
           return events;
         }
-        if (start > 0) events.push(...parseKeys(work.slice(0, start)));
+        if (start > 0) {
+          if (this.rawPassThrough) events.push({ type: 'bytes', text: work.slice(0, start) });
+          else events.push(...parseKeys(work.slice(0, start)));
+        }
         this.active = true;
         this.buf = '';
         work = work.slice(start + 6);
