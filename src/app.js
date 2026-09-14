@@ -30,6 +30,7 @@ import renderBrowser, { BROWSER_TABS } from './views/browser.js';
 import renderPalette from './views/palette.js';
 import renderSettings from './views/settings.js';
 import { Settings } from './ui/settings.js';
+import { notify, BEL } from './ui/multimedia.js';
 import { runJs, stringify } from './core/runner.js';
 import { elementTree, previewParts as buildPreviewParts, synthesisParts } from './core/browser.js';
 
@@ -88,6 +89,9 @@ export class App {
     this.settings = settings || new Settings();
     this.curriculum = curriculum;
     this.screen = new Screen(process.stdout);
+    // M0 feedback gate: notifications/bell only on a real TTY (never in the
+    // check tool, tests, or piped output). FULLSTACK_HEADLESS forces it off.
+    this.isTTY = !!process.stdout.isTTY && !process.env.FULLSTACK_HEADLESS;
     const { w, h } = dimensions();
     this.w = w;
     this.h = h;
@@ -616,7 +620,7 @@ export class App {
     ];
 
     this.screen.resize(w, h);
-    this.screen.present(rows, { bg: this.theme.bg });
+    this.screen.present(rows, { bg: this.theme.bg }, this.linkAnnotations(rows));
 
     // Keep the terminal cursor parked at the editor caret so hardware cursors
     // and IMEs behave, but keep it hidden otherwise. Writes go through the
@@ -1220,6 +1224,49 @@ export class App {
     this.render();
   }
 
+  /**
+   * M0 multimedia (docs/multimedia.md §3): desktop notification + BEL when a
+   * check run completes — the learner has often switched windows while the
+   * sandbox runs. OSC 9/777 and BEL are no-ops on terminals that ignore them;
+   * suppressed when piped, in tests, or when settings.sound is 'off'.
+   */
+  notifyDone(title) {
+    if (!this.isTTY) return;
+    if ((this.settings.data.sound ?? 'bell') === 'off') return;
+    try {
+      process.stdout.write(notify(title, 'fullstack-tui'));
+      process.stdout.write(BEL);
+    } catch {
+      /* never let feedback crash the check path */
+    }
+  }
+
+  /**
+   * M0: OSC 8 hyperlink annotations for the current frame (docs/multimedia.md
+   * §3). Only visible curriculum-source URLs become clickable; positions are
+   * located by scanning the plain row text, so any future layout shift stays
+   * correct automatically. Suppressed when the terminal is headless/piped.
+   */
+  linkAnnotations(rows) {
+    if (!this.isTTY) return [];
+    const mod = this.curriculum[this.state.moduleIndex];
+    const src = mod && mod.source ? mod.source : null;
+    if (!src || this.current.name !== 'module') return [];
+    const links = [];
+    for (let i = 0; i < rows.length && i < 5; i += 1) {
+      const text = rows[i].map((s) => s && s.text ? s.text : '').join('');
+      for (const url of [src.url, src.roadmap, src.docs]) {
+        if (!url) continue;
+        const col = text.indexOf(url);
+        if (col !== -1) {
+          links.push({ row: i + 1, col, len: url.length, url, id: `src-${mod.id}` });
+          break; // one link per row is plenty; first URL wins the row
+        }
+      }
+    }
+    return links;
+  }
+
   async checkChallenge() {
     const { challenge, lesson } = this.state.challenge;
     const code = this.state.editors 
@@ -1244,9 +1291,11 @@ export class App {
             : milestones[0].replace('module-', '').replace(/-(\d+)$/, ' $1%')}`
         : '';
       this.saveToWorkspace(false);
+      this.notifyDone(`Passed: ${challenge.title}`);
       this.note(`All checks passed. Saved to your workspace - press Ctrl+P to see it.${milestoneText}`, 'good', true);
     } else {
       const failed = result.results.filter((r) => !r.ok).length;
+      this.notifyDone(`${failed} check(s) failing in ${challenge.title}`);
       this.note(`${failed} check(s) still failing - read the messages on the left.`, 'bad', true);
     }
     this.state.pane = this.w >= 104 ? 'both' : 'brief';

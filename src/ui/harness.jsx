@@ -9,8 +9,9 @@
  */
 import React, { useState } from 'react';
 import { render, useInput, useApp } from 'ink';
+import { useKeymap, getCurrentRoute, setCurrentRoute, clearRoute } from './useKeymap.js';
 
-export { render, useInput, useApp, useState };
+export { render, useInput, useApp, useState, useKeymap, getCurrentRoute, setCurrentRoute, clearRoute };
 export { Header, Panel, List, ScrollPane, Footer, Badge, Meter } from './components/chrome.jsx';
 export { Palette } from './components/palette.jsx';
 export { SplitPane } from './components/splitPane.jsx';

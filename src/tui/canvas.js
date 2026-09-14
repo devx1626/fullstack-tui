@@ -196,13 +196,34 @@ export class Screen {
     }
   }
 
-  present(rows, fill = {}) {
+  /** Overlay OSC 8 hyperlinks onto an already-diffed row string (M0). */
+  static linkify(line, links) {
+    let out = line;
+    // Apply right-to-left so earlier edits don't shift later column math.
+    for (const { col, len, url, id } of links.slice().sort((a, b) => b.col - a.col)) {
+      const prefix = out.slice(0, col);
+      const target = out.slice(col, col + len);
+      const params = id ? `id=${id}` : '';
+      const wrapped = `\x1b]8;${params};${url}\x1b\\${target}\x1b]8;;\x1b\\`;
+      out = prefix + wrapped + out.slice(col + len);
+    }
+    return out;
+  }
+
+  present(rows, fill = {}, links = []) {
+    const byRow = new Map();
+    for (const l of links) {
+      if (!byRow.has(l.row)) byRow.set(l.row, []);
+      byRow.get(l.row).push(l);
+    }
     const buffer = [];
     for (let i = 0; i < this.h; i += 1) {
       const line = paint(fit(rows[i] || [], this.w, fill));
-      if (this.prev[i] === line) continue;
-      buffer.push(seq.moveTo(i + 1, 1) + line);
-      this.prev[i] = line;
+      const rowLinks = byRow.get(i + 1);
+      const rendered = rowLinks ? Screen.linkify(line, rowLinks) : line;
+      if (this.prev[i] === rendered) continue;
+      buffer.push(seq.moveTo(i + 1, 1) + rendered);
+      this.prev[i] = rendered;
     }
     if (buffer.length) this.out.write(buffer.join(''));
   }

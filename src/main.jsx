@@ -12,6 +12,7 @@ import { detectCapabilities } from './ui/capabilities.js';
 import { themeForCapabilities } from './ui/theme/index.js';
 import { AltScreen } from './ui/altScreen.jsx';
 import { InputDispatcher } from './ui/input/dispatcher.js';
+import { getCurrentRoute } from './ui/useKeymap.js';
 
 function ChromeFrame({ theme, tier, input }) {
   const w = 58;
@@ -68,12 +69,9 @@ export function main() {
   const dispatcher = new InputDispatcher({
     stdout: process.stdout,
     stdin: process.stdin,
-    getRoute: () => ({
-      // Phase 1 screens install real handlers here; the frame consumes nothing.
-      onKey: () => false,
-      onMouse: () => false,
-      onPaste: () => false,
-    }),
+    // Screens register their handlers via useKeymap(); the hook's route
+    // registry is the single source of truth for "who is focused".
+    getRoute: () => getCurrentRoute(),
     globalHandler: () => false, // palette/quit/help land in Phase 1
     onQuit: quit,
   });

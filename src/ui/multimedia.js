@@ -20,13 +20,16 @@ export const DOC_BASE = 'https://developer.mozilla.org/en-US/docs/';
 /**
  * OSC 8 hyperlink (M0 — supported by every modern terminal; unknown
  * terminals ignore the wrapper and print the label as plain text).
+ * Wire format: `ESC ] 8 ; params ; URI ST label ESC ] 8 ; ; ST` — the params
+ * field comes BEFORE the URI. The optional `id=` param lets terminals dedupe
+ * hover state across repeats of the same link.
  * @param {string} url destination
  * @param {string} label visible text
- * @param {string} [id] optional link id so terminals dedupe hover state
+ * @param {string} [id] optional link id
  */
 export function osc8(url, label, id) {
-  const idPart = id ? `;id=${id}` : '';
-  return `\x1b]8;;${url}${idPart}\x1b\\${label}\x1b]8;;\x1b\\`;
+  const params = id ? `id=${id}` : '';
+  return `\x1b]8;${params};${url}\x1b\\${label}\x1b]8;;\x1b\\`;
 }
 
 /** MDN doc link for a lesson/challenge topic, as an OSC 8 string. */
@@ -103,7 +106,7 @@ export function graphicsFromEnv(env = process.env) {
 /**
  * iTerm2 inline image (M1): base64 PNG/JPEG wrapped in the 1337 sequence.
  * Kitty and WezTerm also honor it — one builder covers the two most common
- * graphics paths; the kitty chunked protocol is added when the probe lands.
+ * graphics paths.
  */
 export function iterm2Image(base64, { name = 'image.png', width, height } = {}) {
   const size = [];
@@ -114,4 +117,28 @@ export function iterm2Image(base64, { name = 'image.png', width, height } = {}) 
     ? `\x1b]1337;File=${args};size=${base64.length}:\n${base64}\x1b\\`
     : `\x1b]1337;File=${args}:${base64}\x1b\\`;
   return body;
+}
+
+const KITTY_CHUNK = 4096;
+
+/**
+ * Kitty graphics protocol image (M1): PNG direct (f=100), action T(ransmit
+ * +display), quiet q=2. Payloads larger than 4096 base64 chars are chunked
+ * with m=1 continuations — required by the spec for large images.
+ */
+export function kittyImage(base64, { quiet = 2 } = {}) {
+  const chunks = [];
+  for (let i = 0; i < base64.length; i += KITTY_CHUNK) {
+    chunks.push(base64.slice(i, i + KITTY_CHUNK));
+  }
+  if (chunks.length === 0) chunks.push('');
+  let out = '';
+  chunks.forEach((chunk, i) => {
+    const last = i === chunks.length - 1;
+    const ctrl = i === 0
+      ? `f=100,a=T,q=${quiet},m=${last ? 0 : 1}`
+      : `m=${last ? 0 : 1}`;
+    out += `\x1b_G${ctrl};${chunk}\x1b\\`;
+  });
+  return out;
 }

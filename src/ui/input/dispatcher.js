@@ -62,11 +62,24 @@ export class InputDispatcher {
     }
   }
 
+  /**
+   * Sequential parser chain: mouse → paste → keys/coalescer. Each stage
+   * (rawPassThrough) hands its UNCONSUMED bytes to the next, so a mouse
+   * sequence can never leak into the key parser as phantom Escape+chars —
+   * feeding all stages the full chunk in parallel did exactly that.
+   */
   feed(text) {
-    for (const ev of this.mouse.feed(text)) this.route(ev);
-    for (const ev of this.paste.feed(text)) this.route(ev);
-    // Remaining bytes go through the coalescer (keys, split-sequence repair).
-    for (const ev of this.coalescer.feed(text)) this.route(ev);
+    const rest1 = [];
+    for (const ev of this.mouse.feed(text)) {
+      if (ev.type === 'bytes') rest1.push(ev.text);
+      else this.route(ev);
+    }
+    const rest2 = [];
+    for (const ev of this.paste.feed(rest1.join(''))) {
+      if (ev.type === 'bytes') rest2.push(ev.text);
+      else this.route(ev);
+    }
+    for (const ev of this.coalescer.feed(rest2.join(''))) this.route(ev);
   }
 
   route(ev) {

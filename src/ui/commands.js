@@ -183,12 +183,16 @@ function conflictKey(binding, ids) {
   return `${binding}:${ids.slice().sort().join('|')}`;
 }
 
-/** Lint entry point for tools/check.js: throws nothing, returns problems. */
-export function lintKeymap() {
-  const { keymap, unknown } = mergeKeymap();
+/**
+ * Lint entry point for tools/check.js: throws nothing, returns problems.
+ * Accepts a pre-merged keymap (src/ui/keymap.js passes the user-merged one);
+ * defaults-only lint checks the repo's shipped bindings.
+ */
+export function lintKeymap(keymapArg = null) {
+  const merged = keymapArg ? { keymap: keymapArg, unknown: [] } : mergeKeymap();
   const problems = [];
-  for (const id of unknown) problems.push(`keymap: unknown command id "${id}"`);
-  for (const c of findConflicts(keymap)) {
+  for (const id of merged.unknown) problems.push(`keymap: unknown command id "${id}"`);
+  for (const c of findConflicts(merged.keymap)) {
     const key = conflictKey(c.binding, c.commands);
     const sameScreen = c.commands.every((id) => COMMANDS.find((x) => x.id === id)?.screen !== null)
       && new Set(c.commands.map((id) => COMMANDS.find((x) => x.id === id)?.screen)).size === 1;

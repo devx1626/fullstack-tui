@@ -19,6 +19,7 @@ export function defaults() {
     theme: null, // null = auto
     editor: { vimMode: true, tabSize: 2, wrap: false },
     mouse: true,
+    sound: 'bell', // 'bell' (BEL + OSC 9 notify) | 'off' — docs/multimedia.md §5
     icons: 'auto',
     goal: { daily: 3 }, // 0 = off
     milestonesSeen: [],

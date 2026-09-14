@@ -9,11 +9,13 @@ import {
   graphicsFromEnv, iterm2Image,
 } from '../../src/ui/multimedia.js';
 
-test('osc8 wraps label in the 8; preamble/closing and supports ids', () => {
+test('osc8 wraps label in the 8; preamble/closing with params BEFORE the URI', () => {
   const out = osc8('https://x', 'label', 'id1');
-  assert.ok(out.startsWith('\x1b]8;;https://x;id=id1\x1b\\'));
+  assert.ok(out.startsWith('\x1b]8;id=id1;https://x\x1b\\'), `got: ${JSON.stringify(out.slice(0, 30))}`);
   assert.ok(out.endsWith('\x1b]8;;\x1b\\'));
   assert.ok(out.includes('label'));
+  // No id → empty params field, URI untouched.
+  assert.ok(osc8('https://y', 'l').startsWith('\x1b]8;;https://y\x1b\\'));
 });
 
 test('mdnLink builds developer-doc links', () => {
