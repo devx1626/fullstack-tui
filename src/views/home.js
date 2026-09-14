@@ -42,6 +42,21 @@ export default function renderHome(app, w, h) {
     seg(' - most of them are bugs to hunt.', { fg: t.muted }),
   ], w, { bg: t.bg }));
 
+  // Q6 at-risk streak banner (errors-and-qol-spec §4.3): one per day,
+  // dismissable, only when the streak is genuinely at risk.
+  const settings = app.settings;
+  const streak0 = app.stats.streak || { current: 0, best: 0 };
+  if (settings && settings.bannerVisible(streak0)) {
+    rows.push(fit([
+      seg('  ⚑ ', { fg: t.warn, bold: true }),
+      seg(`${streak0.current}-day streak at risk`, { fg: t.warn, bold: true }),
+      seg(' — one challenge keeps it alive', { fg: t.muted }),
+      seg('   (x dismiss)', { fg: t.faint }),
+    ], w, { bg: t.bg }));
+  } else {
+    rows.push(fit([], w, { bg: t.bg }));
+  }
+
   const resume = app.resumeTarget();
   if (resume) {
     const entry = allLessons().find((e) => e.lesson.id === resume.lessonId);

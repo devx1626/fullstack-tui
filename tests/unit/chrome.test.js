@@ -1,6 +1,7 @@
 /**
- * Chrome component tests (task 1.1 slice): render via fake stdout and assert
- * on visible text. Run: node --test tests/unit/chrome.test.js
+ * Chrome component tests (task 1.1 slice): render via the shared snapshot
+ * helper (fake stdout) and assert on visible text.
+ * Run: node --test tests/unit/chrome.test.js
  *
  * These are .js tests importing .jsx components — resolved through the built
  * dist bundle when present, else skipped with a note (build required).
@@ -8,7 +9,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 // Components live in src/ui/components (jsx). Test via the harness entry
@@ -17,31 +17,13 @@ const harnessPath = new URL('../../dist/harness.js', import.meta.url).pathname;
 const harness = existsSync(harnessPath)
   ? await import(pathToFileURL(harnessPath).href)
   : null;
+const helper = await import(
+  pathToFileURL(new URL('../helpers/snapshot.js', import.meta.url).pathname)
+);
 
 if (harness) {
-  function fakeStdout() {
-    const chunks = [];
-    const out = new Writable({
-      write(chunk, _enc, cb) { chunks.push(chunk.toString()); cb(); },
-    });
-    out.columns = 80;
-    out.rows = 24;
-    out.chunks = chunks;
-    return out;
-  }
-
-  function renderToText(element) {
-    const out = fakeStdout();
-    const inst = harness.render(element, { stdout: out, exitOnCtrlC: false, patchConsole: false });
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        inst.unmount();
-        setTimeout(() => resolve(out.chunks.join('')), 20);
-      }, 30);
-    });
-  }
-
-  const strip = (s) => s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+  const renderToText = (element) => helper.renderToText(element, { render: harness.render });
+  const strip = helper.stripAnsi;
 
   test('Header shows title, subtitle and highlights the active tab', async () => {
     const text = strip(await renderToText(

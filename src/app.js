@@ -29,6 +29,7 @@ import renderWorkspace from './views/workspace.js';
 import renderBrowser, { BROWSER_TABS } from './views/browser.js';
 import renderPalette from './views/palette.js';
 import renderSettings from './views/settings.js';
+import { Settings } from './ui/settings.js';
 import { runJs, stringify } from './core/runner.js';
 import { elementTree, previewParts as buildPreviewParts, synthesisParts } from './core/browser.js';
 
@@ -81,9 +82,10 @@ const isNext = (key) => key.name === 'pagedown' || key.name === 'tab' || isChar(
 const isPrev = (key) => key.name === 'pageup' || key.name === 'shift-tab' || isChar(key, 'h');
 
 export class App {
-  constructor({ theme, store = new Store() } = {}) {
+  constructor({ theme, store = new Store(), settings = null } = {}) {
     this.theme = theme;
     this.store = store;
+    this.settings = settings || new Settings();
     this.curriculum = curriculum;
     this.screen = new Screen(process.stdout);
     const { w, h } = dimensions();
@@ -329,6 +331,10 @@ export class App {
 
     switch (this.current.name) {
       case 'home':
+        if (isChar(key, 'x') && this.settings.bannerVisible(this.stats.streak)) {
+          this.dismissBanner();
+          return;
+        }
         this.menuKey(key, this.curriculum.length, (i) => this.openModule(i));
         break;
       case 'module':
@@ -440,6 +446,13 @@ export class App {
       });
     });
     return items;
+  }
+
+  /** Q6: dismiss today's at-risk banner ('x' on home). */
+  dismissBanner() {
+    this.settings.dismissBanner();
+    this.note('Banner dismissed for today.', 'muted');
+    this.render();
   }
 
   menuKey(key, length, onEnter) {
@@ -1221,8 +1234,17 @@ export class App {
     this.state.results = result;
     this.store.recordAttempt(`${lesson.id}.${challenge.id}`, code, result.passed);
     if (result.passed) {
+      // Q5: celebrate streak milestones exactly once (7/30/100 days, new best).
+      const milestones = this.settings.takeMilestones(this.stats);
+      const milestoneText = milestones.length
+        ? ` ★ ${milestones[0].startsWith('streak-')
+          ? `${milestones[0].split('-')[1]}-day streak!`
+          : milestones[0].startsWith('best-')
+            ? `new best streak: ${milestones[0].split('-')[1]} days`
+            : milestones[0].replace('module-', '').replace(/-(\d+)$/, ' $1%')}`
+        : '';
       this.saveToWorkspace(false);
-      this.note('All checks passed. Saved to your workspace - press Ctrl+P to see it.', 'good', true);
+      this.note(`All checks passed. Saved to your workspace - press Ctrl+P to see it.${milestoneText}`, 'good', true);
     } else {
       const failed = result.results.filter((r) => !r.ok).length;
       this.note(`${failed} check(s) still failing - read the messages on the left.`, 'bad', true);

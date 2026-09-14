@@ -406,7 +406,57 @@ try {
     process.stdout.write('   ok  progress store round-trips (version 1, classic shape)\n');
   }
 
-  for (const f of ['check-qol.json']) {
+  // Replay Q6 (at-risk banner): visible at streak ≥2 with no dismissal, hidden
+  // after dismiss, re-shows on a later day.
+  const { Settings, today: settingsToday } = await import('../src/ui/settings.js');
+  const q6 = new Settings(path.join(ROOT, '.data', 'check-qol-settings.json'));
+  const sAtRisk = { current: 3, best: 5 };
+  if (!q6.bannerVisible(sAtRisk)) fail('Q6: banner should show at streak 3 with no dismissal');
+  else {
+    q6.dismissBanner();
+    if (q6.bannerVisible(sAtRisk)) fail('Q6: banner should hide after dismissal today');
+    else {
+      q6.data.bannerDismissedOn = '2000-01-01'; // simulate tomorrow
+      if (!q6.bannerVisible(sAtRisk)) fail('Q6: banner should re-show on a later day');
+      else process.stdout.write('   ok  Q6 banner shows, dismisses per-day, re-shows later\n');
+    }
+  }
+
+  // Replay Q5 (milestones): fired once, never twice; module thresholds fire.
+  const q5 = new Settings(path.join(ROOT, '.data', 'check-qol-settings.json'));
+  const fakeStats = {
+    streak: { current: 7, best: 7 },
+    perModule: [{ id: 'm1', percent: 50 }],
+  };
+  const first = q5.takeMilestones(fakeStats);
+  const again = q5.takeMilestones(fakeStats);
+  if (!(first.includes('streak-7') && first.includes('best-7') && first.includes('module-m1-25') && first.includes('module-m1-50'))) {
+    fail(`Q5: first take missing expected ids: ${JSON.stringify(first)}`);
+  } else if (again.length !== 0) {
+    fail(`Q5: milestones re-fired: ${JSON.stringify(again)}`);
+  } else {
+    process.stdout.write('   ok  Q5 milestones fire once (streak/best/module) and stay seen\n');
+  }
+
+  // Q14 goal math + Q2 recents while we have a Settings instance.
+  const q14store = new Store(path.join(ROOT, '.data', 'check-qol.json'));
+  const q14 = q5.goalProgress(q14store);
+  if (!q14 || q14.goal !== 3) fail(`Q14: goal default should be 3, got ${JSON.stringify(q14)}`);
+  else process.stdout.write('   ok  Q14 goal defaults to 3/day with progress math\n');
+  q5.pushRecent('a.b.c');
+  q5.pushRecent('d.e.f');
+  q5.pushRecent('a.b.c');
+  const rec = q5.data.palette.recent;
+  if (rec[0] !== 'a.b.c' || rec.length !== 2) fail(`Q2 recents MRU broken: ${JSON.stringify(rec)}`);
+  else process.stdout.write('   ok  Q2 palette recents keep MRU order (max 5)\n');
+
+  // Corrupted settings file recovers to defaults.
+  fs.writeFileSync(path.join(ROOT, '.data', 'check-qol-settings.json'), '{oops');
+  const corrupted = new Settings(path.join(ROOT, '.data', 'check-qol-settings.json'));
+  if (corrupted.goalDaily() !== 3) fail('Settings: corrupted file did not recover');
+  else process.stdout.write('   ok  settings recover to defaults on corruption\n');
+
+  for (const f of ['check-qol.json', 'check-qol-settings.json']) {
     fs.rmSync(path.join(ROOT, '.data', f), { force: true });
   }
 } catch (err) {
