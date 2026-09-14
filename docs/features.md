@@ -1,6 +1,21 @@
 # fullstack-tui — Feature Inventory
 
-*Ground truth as of 2026-09-14 (post Phase 0). This document is the canonical feature list — it feeds the README rewrite (overhaul §15) and the registry wiring (task 0.7a).*
+*Ground truth as of 2026-09-14 (post Phase 0, next-UI Phase 1 opened). This document is the canonical feature list — it feeds the README rewrite (overhaul §15) and the registry wiring (task 0.7a).*
+
+## Multimedia & rich terminal (M0–M2, docs/multimedia.md)
+
+- **M0 (live):** desktop notification + BEL when a check finishes (OSC 9/777; `settings.sound` gate, toggled in Settings with Space); OSC 8 clickable hyperlinks on module source URLs (course/roadmap/docs); DECSCUSR vim cursor shapes in the next-UI challenge screen (block = normal, bar = insert).
+- **M1 (probe-gated):** graphics capability probe (kitty query + DA1 sixel attribute, 150 ms bounded wait, env fallback) and a screenshot engine — headless Chromium via lazy-loaded Playwright renders the learner's HTML to a PNG, emitted inline through the kitty (chunked) or iTerm2 protocol. Opt-in (`FULLSTACK_SCREENSHOT=playwright`), graceful not-installed guidance, classic UI untouched.
+- **M2 (planned, editor port):** SGR 4:3 curly underlines for error squiggles.
+- **Ruled out:** audio playback and video — no terminal protocol; celebrations use BEL + visual chrome instead.
+
+## Next UI (FULLSTACK_UI=next, Ink 6 + React 19)
+
+- **Input:** `InputDispatcher` owns raw stdin (mouse SGR 1006, bracketed paste 2004, escape coalescer) feeding a sequential parser chain; "mode wins" routing (focused screen → global); Ctrl+C quits cleanly (E4-verified, no process leak).
+- **Shell:** `AppRoot` = ThemeProvider → RouterProvider (push/pop/replace/reset stack) → ScreenFrame with window-size tracking; alt-screen on TTY, one-shot static render when piped.
+- **Commands:** registry of 46 ids with `.data/keymap.json` user overrides (unknown ids/bad bindings reported, never fatal); `useKeymap(screen, onCommand)` resolves keys to command ids — components never handle raw keys.
+- **Components:** Header/TabBar, Footer, Panel, List, ScrollPane, Badge, Meter, SplitPane (drag-ready, clamp math shared with keyboard nudge), command Palette with fuzzy filter + recents-first ordering.
+- **Screens ported:** challenge slice (SplitPane brief|editor, registry commands, vim cursor). Dashboard/module/lesson/browser/settings ports follow.
 
 ---
 

@@ -15,6 +15,10 @@ export { render, useInput, useApp, useState, useKeymap, getCurrentRoute, setCurr
 export { Header, Panel, List, ScrollPane, Footer, Badge, Meter } from './components/chrome.jsx';
 export { Palette } from './components/palette.jsx';
 export { SplitPane } from './components/splitPane.jsx';
+export { RouterProvider, RouterView, useRouter } from './router.jsx';
+export { ChallengeScreen } from './screens/challenge.jsx';
+export { cursorShape } from './multimedia.js';
+export { Text, Box } from 'ink';
 
-/** createElement shorthand for tests. */
-export const el = (Component, props) => React.createElement(Component, props);
+/** createElement shorthand for tests (children variadic). */
+export const el = (Component, props, ...children) => React.createElement(Component, props, ...children);

@@ -347,11 +347,27 @@ export class App {
       case 'projects':
         this.projectsKey(key);
         break;
+      case 'settings':
+        // Sound toggle (M0, docs/multimedia.md §5): Space on the Sound row.
+        if (isChar(key, ' ') && this.state.cursor === 1) {
+          this.settings.data.sound = (this.settings.data.sound ?? 'bell') === 'off' ? 'bell' : 'off';
+          this.settings.save();
+          this.note(this.settings.data.sound === 'off'
+            ? 'Sound notifications off.'
+            : 'Sound notifications on (bell + desktop notify).', 'good');
+          this.render();
+          return;
+        }
+        if (['up', 'down', 'pageup', 'pagedown'].includes(key.name)) {
+          const step = key.name === 'pagedown' ? 10 : key.name === 'pageup' ? -10 : key.name === 'up' ? -1 : 1;
+          this.state.cursor = Math.max(0, this.state.cursor + step);
+          this.render();
+        }
+        break;
       case 'stats':
       case 'help':
       case 'resources':
       case 'workspace':
-      case 'settings':
         if (['up', 'down', 'pageup', 'pagedown'].includes(key.name)) {
           const step = key.name === 'pagedown' ? 10 : key.name === 'pageup' ? -10 : key.name === 'up' ? -1 : 1;
           this.state.cursor = Math.max(0, this.state.cursor + step);
@@ -647,6 +663,8 @@ export class App {
         return [['j/k', 'move'], ['Space', 'tick'], ['Esc', 'back'], ['q', 'quit']];
       case 'stats':
         return [['Esc', 'back'], ['?', 'help'], ['q', 'quit']];
+      case 'settings':
+        return [['j/k', 'move'], ['Space', 'toggle sound'], ['Esc', 'back'], ['q', 'quit']];
       case 'browser':
         return [['Tab', 'pane'], ['1-5', 'jump'], ['j/k', 'move'], ['Ctrl+B', 'editor'], ['Esc', 'back']];
       case 'workspace':

@@ -13,6 +13,17 @@ import { themeForCapabilities } from './ui/theme/index.js';
 import { AltScreen } from './ui/altScreen.jsx';
 import { InputDispatcher } from './ui/input/dispatcher.js';
 import { getCurrentRoute } from './ui/useKeymap.js';
+import { AppRoot } from './ui/AppRoot.jsx';
+
+/** Phase 0 placeholder screen registry; Phase 1 ports fill this in. */
+const SCREENS = {
+  home: () => (
+    <Box flexDirection="column">
+      <Text>  ◈ fullstack-tui — next UI</Text>
+      <Text color="gray">  screens port in Phase 1 — classic UI is still the default</Text>
+    </Box>
+  ),
+};
 
 function ChromeFrame({ theme, tier, input }) {
   const w = 58;
@@ -43,7 +54,7 @@ export function main() {
   // our stdin hold alive, so the process lingered after ^C on a real TTY.
   const { unmount } = render(
     <AltScreen>
-      <ChromeFrame theme={theme} tier={caps.tier} input="keys · mouse · paste" />
+      <AppRoot screens={SCREENS} />
     </AltScreen>,
     { exitOnCtrlC: false, patchConsole: true },
   );

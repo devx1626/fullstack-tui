@@ -39,8 +39,10 @@ export default function renderSettings(app, w, h) {
   rows.push(sectionLabel(t, w, 'App Settings', 'Preferences'));
   
   const home = process.env.HOME || '';
+  const sound = (app.settings?.data?.sound ?? 'bell') === 'off' ? 'Off' : 'Bell';
   const settings = [
     { label: 'Theme', value: 'Auto-detected', key: 'theme' },
+    { label: 'Sound', value: `${sound}  (Space to toggle)`, key: 'sound' },
     { label: 'Workspace', value: WORKSPACE.replace(home, '~'), key: 'workspace' },
     { label: 'Editor', value: process.env.EDITOR || process.env.VISUAL || 'vi', key: 'editor' },
   ];
