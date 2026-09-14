@@ -1,0 +1,74 @@
+123 challenges, 18 failing
+FAIL html-03.fix-links-images
+       - The in-page anchor has a matching target :: expected an in-page link like href="#team"
+FAIL html-03.write-figure-card
+       - The image offers a responsive source set :: images/dashboard-480.png 480w, images/dashboard-1200.png 1200w
+FAIL html-04.write-landing
+       - Heading outline has no skipped levels :: no headings found
+FAIL html-05.write-table
+       - Rows and columns form a real grid :: found 2 body rows - add more data
+FAIL html-06.a11y-audit
+       - The banner image reserves its space :: 600
+FAIL css-03.write-design-tokens
+       - A heading uses clamp() for fluid sizing :: use `clamp()` on a heading font-size
+       - Body type is rem with a comfortable line-height :: font-size should be rem-based
+FAIL js-01.write-format
+       - No loose equality :: that pattern is still present in your code
+FAIL js-05.fix-dom-counter
+       - The count can go negative :: 
+       - Reset is disabled at exactly 0 :: 
+FAIL exp-02.write-router
+       - an exact path matches :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a param captures the segment :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a param does not match a missing segment :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a param does not match extra segments :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - mismatched literals do not match :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a wildcard captures the rest :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a wildcard matches an empty remainder :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a GET route runs and responds :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - params reach the handler :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - middleware runs in registration order :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - middleware can short-circuit :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a POST route only matches POST :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - an unmatched route is a 404 through the router :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - next(err) reaches the error handler :: Timed out - looks like an infinite loop. Check your loop conditions.
+       - a thrown error is caught too :: Timed out - looks like an infinite loop. Check your loop conditions.
+FAIL exp-03.fix-client
+       - getJson parses a healthy response :: getJson is not defined
+       - getJson throws on a bad status :: 
+       - getNotes returns the array :: getNotes is not defined
+       - getNotes returns note objects :: getNotes is not defined
+       - getNotes survives a failure :: getNotes is not defined
+       - getNotes caches the unwrapped array :: getNotes is not defined
+       - retry returns a successful value immediately :: retry is not defined
+       - retry keeps going until it succeeds :: retry is not defined
+       - retry gives up and rethrows :: 
+FAIL exp-04.fix-security
+       - injection attempts cannot change the SQL :: Invalid id
+FAIL exp-04.write-auth
+       - a token round-trips :: 
+       - requireAuth accepts a good token and attaches the user :: 
+FAIL sql-01.fix-schema
+       - an orphan transaction is rejected :: UNIQUE constraint failed: accounts.id
+       - a zero amount is rejected :: UNIQUE constraint failed: accounts.id
+       - an unknown kind is rejected :: UNIQUE constraint failed: accounts.id
+       - a valid row is accepted :: UNIQUE constraint failed: accounts.id
+FAIL sql-02.write-queries
+       - query 4 finds the unsold product :: no single-column `name` result set
+       - query 5 returns the average order value :: expected ~114.8, got 65
+FAIL sql-02.fix-nulls
+       - query 1 keeps customers with no paid orders :: no such column: returned_at. Check the column names in your CREATE TABLE.
+       - query 1 counts only paid orders :: no such column: returned_at. Check the column names in your CREATE TABLE.
+       - query 2 does not use = NULL :: no such column: returned_at. Check the column names in your CREATE TABLE.
+       - query 2 returns the right rows :: no such column: returned_at. Check the column names in your CREATE TABLE.
+       - query 3 counts distinct cities :: no such column: returned_at. Check the column names in your CREATE TABLE.
+       - query 4 rounds the average :: no such column: returned_at. Check the column names in your CREATE TABLE.
+FAIL sql-03.write-joins
+       - query 1 sums paid spend correctly :: Kofi should be ~140, got 162.5
+FAIL sql-03.fix-joins
+       - query 2 counts four orders with items :: expected 4 orders with items, got 5
+FAIL sql-04.fix-guard
+       - the remaining data is intact :: expected 4 orders and 6 items, found 4 and 7
+
+slowest: exp-02.write-router 3506ms, git-02.write-history 1003ms, git-03.write-branch-merge 958ms, git-03.fix-branching 805ms, git-04.write-undo-recover 788ms, git-02.fix-commits 595ms, git-04.fix-secret-commit 472ms
+report written to tools/audit-report.json
