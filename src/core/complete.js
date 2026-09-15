@@ -25,8 +25,9 @@ const MARKUP = new Set(['html', 'htm', 'xhtml', 'xml', 'svg', 'jsx', 'tsx']);
 const CSS_LIKE = new Set(['css', 'scss', 'sass', 'less']);
 const JS_LIKE = new Set(['js', 'javascript', 'mjs', 'cjs', 'ts', 'typescript', 'node', 'nodejs']);
 const SHELL_LIKE = new Set(['sh', 'bash', 'shell', 'zsh', 'console', 'terminal', 'git']);
+const PY_LIKE = new Set(['py', 'python']);
 
-const ALIASES = { htm: 'html', javascript: 'js', mjs: 'js', cjs: 'js', nodejs: 'js', typescript: 'ts', bash: 'sh', shell: 'sh', zsh: 'sh', console: 'sh', terminal: 'sh', yml: 'yaml', dockerfile: 'docker', sqlite: 'sql', postgres: 'sql' };
+const ALIASES = { htm: 'html', javascript: 'js', mjs: 'js', cjs: 'js', nodejs: 'js', typescript: 'ts', bash: 'sh', shell: 'sh', zsh: 'sh', console: 'sh', terminal: 'sh', yml: 'yaml', dockerfile: 'docker', sqlite: 'sql', postgres: 'sql', python: 'py' };
 
 /** Map any language label the curriculum uses onto a known family. */
 export function normaliseLang(lang) {
@@ -36,6 +37,7 @@ export function normaliseLang(lang) {
   if (CSS_LIKE.has(resolved)) return 'css';
   if (JS_LIKE.has(resolved)) return 'js';
   if (SHELL_LIKE.has(resolved)) return 'sh';
+  if (PY_LIKE.has(resolved)) return 'py';
   if (resolved === 'sql') return 'sql';
   if (resolved === 'json') return 'json';
   if (resolved === 'yaml') return 'yaml';
@@ -630,6 +632,44 @@ function shellItems(before) {
 const JSON_WORDS = ['true', 'false', 'null'];
 const YAML_WORDS = ['true', 'false', 'null', '---'];
 
+// Python: the keywords/builtins a learner actually reaches for. `capture` is
+// the challenge-check helper injected by core/pyrun.js's prelude.
+const PY_WORDS = [
+  // statement keywords
+  'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def', 'del',
+  'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in',
+  'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield',
+  // constants
+  'True', 'False', 'None',
+  // builtins
+  'abs', 'all', 'any', 'bool', 'dict', 'dir', 'enumerate', 'filter', 'float', 'format',
+  'help', 'input', 'int', 'isinstance', 'len', 'list', 'map', 'max', 'min', 'open',
+  'pow', 'print', 'range', 'reversed', 'round', 'set', 'sorted', 'str', 'sum', 'tuple', 'type', 'zip',
+  // str methods learners use constantly
+  'capitalize', 'count', 'endswith', 'find', 'index', 'join', 'lower', 'lstrip', 'replace',
+  'rstrip', 'split', 'startswith', 'strip', 'title', 'upper',
+  // list/dict methods
+  'append', 'clear', 'copy', 'extend', 'get', 'items', 'keys', 'pop', 'remove', 'sort', 'values',
+  // common exceptions
+  'Exception', 'KeyError', 'IndexError', 'TypeError', 'ValueError', 'ZeroDivisionError',
+  // challenge harness helper
+  'capture',
+];
+
+/** Python items: word match with a kind tag, like the JSON/YAML word sets. */
+function pyItems(prefix) {
+  return PY_WORDS.filter((w) => matches(prefix, w)).map((w) => {
+    const kind = /^[A-Z]/.test(w)
+      ? 'kw' // builtins/exceptions/classes
+      : ['True', 'False', 'None'].includes(w)
+        ? 'kw'
+        : ['and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield'].includes(w)
+          ? 'kw' // keywords
+          : 'fn'; // builtins/methods
+    return item(w, kind, 'python');
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -663,6 +703,7 @@ export function completionsFor(lang, text, offset, limit = 60) {
   }
   else if (family === 'json') items = JSON_WORDS.filter((w) => matches(prefix, w)).map((w) => item(w, 'kw', 'JSON'));
   else if (family === 'yaml') items = YAML_WORDS.filter((w) => matches(prefix, w)).map((w) => item(w, 'kw', 'YAML'));
+  else if (family === 'py') items = pyItems(prefix);
 
   // Document words fill the gaps, but never outrank language knowledge.
   if (prefix.length >= 2) {

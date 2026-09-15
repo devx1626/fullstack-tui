@@ -26,8 +26,9 @@ import express from './06-express-and-apis.js';
 import sql from './07-databases-sql.js';
 import react from './08-react.js';
 import typescript from './09-typescript.js';
-import testing from './10-testing-and-debugging.js';
-import devops from './11-deploy-and-devops.js';
+import python from './10-python.js';
+import testing from './11-testing-and-debugging.js';
+import devops from './12-deploy-and-devops.js';
 
 export const curriculum = [
   html,
@@ -39,6 +40,7 @@ export const curriculum = [
   sql,
   react,
   typescript,
+  python,
   testing,
   devops,
 ];

@@ -40,7 +40,7 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 
 ## 2. The curriculum content
 
-- **10 modules** (HTML, JavaScript, CSS, Data & SQL, Git & CLI, Node, Express & APIs, Testing & Debugging, React, Capstones — exact titles via `--list`), each with `badge`, `tagline`, course source + roadmap links.
+- **12 modules** (HTML, JavaScript, CSS, Data & SQL, Git & CLI, Node, Express & APIs, Python, Testing & Debugging, React, DevOps & Deploy, Capstones — exact titles via `--list`), each with `badge`, `tagline`, course source + roadmap links.
 - **Lessons** with minute estimates, markdown-ish prose (inline `**bold**`, `` `code` ``, `*italic*`; paragraphs, headings, code blocks, tables, callouts), and a scroll position **persisted per lesson**.
 - **Challenges** per lesson, each with: `id`, `kind`, `difficulty`, `lang`, brief, `starter` code, ordered `hints` (Conceptual → Strategic → Code), a worked `solution`, and a `checks` array.
   - `write` — build from scratch.
@@ -129,7 +129,7 @@ Follow mode: element selection follows the caret position in markup challenges (
 ## 9. Quality tooling
 
 - `npm run check` / `test` (`tools/check.js`): curriculum deep-validation (shape, langs, check/solution presence, starter-fails-for-debug) + headless render smoke of screens + reference-solution verification (every check passes) + a battery of editor/sandbox unit checks (auto-pairing, completions, grader semantics).
-- `npm run verify` — the reference-solution + buggy-starter assertions across all 10 modules.
+- `npm run verify` — the reference-solution + buggy-starter assertions across all 12 modules (Python reference checks run live when `python3` is available, and are skipped gracefully when it is not).
 - `FULLSTACK_UI=next` pipeline: esbuild bundle (Node 20 target), capability detection, tier-mapped themes, alt-screen wrapper, Ctrl+C lifecycle — verified on a real pty (`tools/repro-e4.sh`).
 
 ## 10. Planned (spec'd, not yet built)

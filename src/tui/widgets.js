@@ -82,6 +82,15 @@ const RULES = {
     { re: /\b(?:true|false|null)\b/y, fg: 'keyword' },
     { re: /-?\b\d+(?:\.\d+)?\b/y, fg: 'number' },
   ],
+  py: [
+    { re: /#.*/y, fg: 'comment' },
+    { re: /[rbfu]{0,2}"(?:[^"\\\n]|\\.)*"/y, fg: 'string' },
+    { re: /[rbfu]{0,2}'(?:[^'\\\n]|\\.)*'/y, fg: 'string' },
+    { re: /\b(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b/y, fg: 'keyword' },
+    { re: /\b(?:abs|all|any|bool|dict|dir|enumerate|filter|float|format|input|int|isinstance|len|list|map|max|min|open|pow|print|range|reversed|round|set|sorted|str|sum|tuple|type|zip|capture)\b/y, fg: 'accentSoft' },
+    { re: /\b(?:Exception|KeyError|IndexError|TypeError|ValueError|ZeroDivisionError)\b/y, fg: 'accent' },
+    { re: /\b\d+(?:\.\d+)?\b/y, fg: 'number' },
+  ],
   md: [
     { re: /^#{1,6}[^\n]*/y, fg: 'keyword', bold: true },
     { re: /`[^`]*`/y, fg: 'string' },
@@ -95,6 +104,7 @@ const ALIAS = {
   jsonc: 'json',
   bash: 'sh', shell: 'sh', console: 'sh', terminal: 'sh', git: 'sh',
   htm: 'html', svg: 'html', xml: 'html',
+  python: 'py',
   sqlite: 'sql', postgres: 'sql',
   dockerfile: 'docker', containerfile: 'docker',
   yml: 'yaml', github: 'yaml', workflow: 'yaml',

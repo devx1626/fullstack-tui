@@ -22,6 +22,7 @@ import { Css } from './css.js';
 import { runSql } from './sqlrun.js';
 import { createRepo, parseScript } from './shexec.js';
 import { stripTypes } from './tsstrip.js';
+import { runPy, pyAvailable } from './pyrun.js';
 
 /**
  * Only treat source as markup when it *starts* like a document. Otherwise JS
@@ -59,6 +60,32 @@ export const T = {
    * `list()`, `commitCount()`, `lastCommitFiles()`, `run(cmd)`, `transcript`.
    */
   git: (label, test, hint) => ({ kind: 'git', label, test, hint }),
+  /**
+   * Python check. Three forms:
+   *   T.py('label', 'py expression', hint?) — truthiness in the learner's scope
+   *   T.py('label', { name: 'x', fn: (v) => v > 3 }, hint?) — capture a value
+   *     named `x` (via `capture('x', …)` in learner code) and assert in Node.
+   *   T.py('label', { expr: 'py expression' }, hint?) — the same expression form,
+   *     handy when the expression lives on its own line in source.
+   * (An object with neither `name` nor `expr` is an authoring mistake: it
+   * raises here, instead of silently never passing at check time.)
+   */
+  py: (label, spec, hint) => {
+    const isObj = typeof spec === 'object' && spec !== null;
+    const objForm = isObj && spec.name !== undefined;
+    const exprForm = typeof spec === 'string' || (isObj && typeof spec.expr === 'string');
+    if (!exprForm && !(objForm && typeof spec.fn === 'function')) {
+      throw new TypeError(`T.py(${JSON.stringify(label)}): need { name, fn } or { expr } or an expression string`);
+    }
+    return {
+      kind: 'py',
+      label,
+      expr: exprForm ? (typeof spec === 'string' ? spec : spec.expr) : null,
+      captureName: objForm ? spec.name : null,
+      captureFn: objForm ? spec.fn : null,
+      hint,
+    };
+  },
 };
 
 const isOk = (v) => v === true;
@@ -112,6 +139,15 @@ function prepare(challenge, code) {
     ctx.repo = createRepo({ files: challenge.files || {}, commands: parseScript(source) });
   }
 
+  const pyChecks = checks.filter((c) => c.kind === 'py');
+  if (pyChecks.length) {
+    ctx.pyRun = runPy(source, {
+      tests: pyChecks.filter((c) => c.expr).map((c) => ({ label: c.label, expr: c.expr })),
+      capture: pyChecks.filter((c) => c.captureName).map((c) => ({ name: c.captureName, expr: c.captureName })),
+      timeout: challenge.timeout || undefined,
+    });
+  }
+
   if (jsChecks.length || captureChecks.length) {
     let jsSource = isMarkup(source) ? extractScripts(source) : source;
     
@@ -163,11 +199,53 @@ function prepare(challenge, code) {
 }
 
 function assemble(ctx) {
-  const { checks, jsRun, dom, css, sqlRun, lintNotes } = ctx;
+  const { checks, jsRun, dom, css, sqlRun, lintNotes, pyRun } = ctx;
   const results = [];
   const jsChecks = checks.filter((c) => c.kind === 'js');
+  const pyExprChecks = checks.filter((c) => c.kind === 'py' && c.expr);
+  const pyCaptureChecks = checks.filter((c) => c.kind === 'py' && c.captureName);
 
   for (const check of checks) {
+    if (check.kind === 'py') {
+      if (pyRun?.unavailable) {
+        results.push({ label: check.label, ok: false, message: 'python3 is not installed on this machine', hint: check.hint });
+        continue;
+      }
+      if (check.captureName) {
+        const value = pyRun?.captured?.[check.captureName];
+        if (value === undefined) {
+          results.push({
+            label: check.label,
+            ok: false,
+            message: `add capture('${check.captureName}', …) in your code to record the value`,
+            hint: check.hint,
+          });
+          continue;
+        }
+        if (value && typeof value === 'object' && '__capture_error__' in value) {
+          results.push({ label: check.label, ok: false, message: `capture('${check.captureName}') failed: ${value.__capture_error__}`, hint: check.hint });
+          continue;
+        }
+        try {
+          const r = check.captureFn(value);
+          results.push({ label: check.label, ok: isOk(r), message: missMessage(r), hint: check.hint });
+        } catch (err) {
+          results.push({ label: check.label, ok: false, message: err.message, hint: check.hint });
+        }
+        continue;
+      }
+      // Expression check: results are positional over pyExprChecks.
+      const idx = pyExprChecks.indexOf(check);
+      const r = pyRun?.results?.[idx];
+      results.push({
+        label: check.label,
+        ok: !!(r && r.ok),
+        message: r && r.error ? r.error : pyRun && pyRun.error && !pyRun.unavailable ? pyRun.error : undefined,
+        hint: check.hint,
+      });
+      continue;
+    }
+
     if (check.kind === 'js') {
       const idx = jsChecks.indexOf(check);
       const r = jsRun?.results?.[idx];
@@ -271,8 +349,8 @@ function assemble(ctx) {
   return {
     passed,
     results,
-    logs: jsRun?.logs || [],
-    error: (jsRun && !jsRun.ok && jsRun.error) || sqlRun?.error || null,
+    logs: [...(pyRun?.logs || []), ...(jsRun?.logs || [])],
+    error: (pyRun && !pyRun.unavailable && pyRun.error) || (jsRun && !jsRun.ok && jsRun.error) || sqlRun?.error || null,
     lint: lintNotes,
     sql: sqlRun ? { rows: sqlRun.rows, columns: sqlRun.columns, available: sqlRun.available } : null,
   };
@@ -345,4 +423,4 @@ export function review(code, lang = 'js') {
   return notes;
 }
 
-export { runJs, runSql, Dom, Css, extractScripts, extractStyles, isMarkup };
+export { runJs, runSql, Dom, Css, extractScripts, extractStyles, isMarkup, runPy, pyAvailable };

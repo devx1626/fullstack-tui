@@ -15,6 +15,7 @@ export { render, useInput, useApp, useState, useKeymap, getCurrentRoute, setCurr
 export { Header, Panel, List, ScrollPane, Footer, Badge, Meter } from './components/chrome.jsx';
 export { Palette } from './components/palette.jsx';
 export { SplitPane } from './components/splitPane.jsx';
+export { Modal, Toast } from './components/overlays.jsx';
 export { RouterProvider, RouterView, useRouter } from './router.jsx';
 export { ChallengeScreen } from './screens/challenge.jsx';
 export { cursorShape } from './multimedia.js';

@@ -15,6 +15,8 @@ import { Store } from './core/store.js';
 import { evaluate, review } from './core/grade.js';
 import { saveArtifact, writePreview, openExternally, artifactPath } from './core/workspace.js';
 import { completionsFor, smartInsert, pairBackspace, normaliseLang } from './core/complete.js';
+import { expandAt } from './core/emmet.js';
+import { formatCodeAt, formatCode } from './core/format.js';
 import { emptyEditor, emptyEditors, editorText, editorTexts, insertChar, insertNewline, backspace, del, move, moveToLineEnd, moveToLineStart, setText, offsetOf, setTextAt } from './views/editor.js';
 
 import renderHome from './views/home.js';
@@ -658,7 +660,7 @@ export class App {
       case 'lesson':
         return [['j/k', 'scroll'], ['Tab', 'challenges'], ['m', 'mark read'], ['Esc', 'back'], ['q', 'quit']];
       case 'challenge':
-        return [['^S', 'check'], ['^Space', 'suggest'], ['^B', 'browser'], ['^R', 'reset'], ['^H', 'hint'], ['^G', 'solution'], ['^P', 'preview'], ['Esc', 'back']];
+        return [['^S', 'check'], ['^F', 'format'], ['^Space', 'suggest'], ['^B', 'browser'], ['^R', 'reset'], ['^H', 'hint'], ['^G', 'solution'], ['^P', 'preview'], ['Esc', 'back']];
       case 'projects':
         return [['j/k', 'move'], ['Space', 'tick'], ['Esc', 'back'], ['q', 'quit']];
       case 'stats':
@@ -777,17 +779,18 @@ export class App {
     }
 
     // While the completion popup is open it owns a handful of keys, the same
-    // way an editor's suggestion widget does.
-    if (this.state.completion && this.state.pane !== 'brief' && !this.state.showSolution) {
+    // way an editor's suggestion widget does. Tab is deliberately NOT taken:
+    // the editor's Tab = Emmet expansion, with suggestion-accept moving to
+    // Enter (VS Code's split), so `div.card*2<Tab>` works mid-popup.
+    if (this.state.completion && this.state.freeCompletion !== true && this.state.pane !== 'brief' && !this.state.showSolution) {
       if (key.name === 'up') return this.moveCompletion(-1);
       if (key.name === 'down') return this.moveCompletion(1);
       if (key.name === 'pageup') return this.moveCompletion(-5);
       if (key.name === 'pagedown') return this.moveCompletion(5);
-      if (key.name === 'tab' || key.name === 'enter') return this.acceptCompletion();
+      if (key.name === 'enter') return this.acceptCompletion();
       if (key.name === 'escape') {
         this.state.completion = null;
         this.render();
-        return;
       }
     }
     if (key.name === 'ctrl-space') {
@@ -818,6 +821,7 @@ export class App {
       this.checkChallenge();
       return;
     }
+    if (key.name === 'ctrl-f') return this.formatEditor();
     if (key.name === 'ctrl-r') return this.resetChallenge();
     if (key.name === 'ctrl-h') return this.revealHint();
     if (key.name === 'ctrl-g') {
@@ -893,6 +897,12 @@ export class App {
     }
 
     // -- the editor itself --
+    if (this.state.completion && key.name === 'tab' && this.state.pane !== 'brief' && !this.state.showSolution) {
+      // Tab with a live popup: expand emmet if there is an abbreviation,
+      // otherwise accept the top suggestion (the common quick path).
+      if (this.tryEmmetExpand(ed, {})) { this.render(); return; }
+      return this.acceptCompletion();
+    }
     switch (key.name) {
       case 'char':
         this.typeChar(ed, key.char);
@@ -905,6 +915,9 @@ export class App {
         this.state.completion = null;
         break;
       case 'tab':
+        // Emmet first: `div.card*2` + Tab expands; plain Tab keeps
+        // inserting the two-space indent.
+        if (this.tryEmmetExpand(ed, {})) break;
         insertChar(ed, ' ');
         insertChar(ed, ' ');
         break;
@@ -944,6 +957,40 @@ export class App {
     this.render();
   }
 
+  /**
+   * Emmet expansion at the caret. `requireStructure` restricts markup
+   * expansions to tokens with structural operators so Tab on a plain tag
+   * word stays an indent. Returns true when the document changed.
+   */
+  tryEmmetExpand(ed, opts) {
+    const lang = this.activeLang();
+    const text = editorText(ed);
+    const offset = offsetOf(ed);
+    const res = expandAt(lang, text, offset, opts);
+    if (!res) return false;
+    setTextAt(ed, res.text, res.offset);
+    this.state.completion = null; // the popup is now stale
+    return true;
+  }
+
+  /** Prettier-style format (Ctrl+F): CSS formats the enclosing rule; other languages the whole buffer. */
+  formatEditor() {
+    const ed = this.getActiveEditor();
+    if (!ed) return;
+    const lang = this.activeLang();
+    const text = editorText(ed);
+    const offset = offsetOf(ed);
+    const res = formatCodeAt(lang, text, offset);
+    if (!res) {
+      this.note("Couldn't format safely - fix the syntax first.", 'bad');
+      this.render();
+      return;
+    }
+    setTextAt(ed, res.text, res.offset);
+    this.note(res.text !== text ? 'Formatted.' : 'Already formatted.', 'muted');
+    this.render();
+  }
+
   challengeSolutionLines() {
     const ch = this.state.challenge?.challenge;
     if (!ch) return 0;
@@ -955,6 +1002,20 @@ export class App {
   /** Apply one typed character, with auto-pairing and auto-closed tags. */
   typeChar(ed, ch) {
     const lang = this.activeLang();
+    // Emmet CSS shorthand: `m10` + `;` completes to `margin: 10px;` —
+    // the expansion supplies the semicolon, so the typed one is skipped.
+    // The `;` is simulated into the document first, exactly the contract
+    // `expandAt(…, { trigger: ';' })` is tested against.
+    if (ch === ';' && normaliseLang(lang) === 'css') {
+      const text = editorText(ed);
+      const offset = offsetOf(ed);
+      const res = expandAt(lang, text.slice(0, offset) + ';' + text.slice(offset), offset + 1, { trigger: ';' });
+      if (res) {
+        setTextAt(ed, res.text, res.offset);
+        this.state.completion = null;
+        return;
+      }
+    }
     const text = editorText(ed);
     const offset = offsetOf(ed);
     const smart = smartInsert(text, offset, ch, lang);

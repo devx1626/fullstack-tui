@@ -199,6 +199,67 @@ try {
     app.onKey({ name: 'char', char: '>' });
     if (ed.lines.join('\n') !== '<p></p>') fail(`typing ">" did not close the tag: ${JSON.stringify(ed.lines)}`);
 
+    // Emmet: a compound abbreviation expands on Tab (and keeps its base indent
+    // once the user is off column 0). This challenge's tab is markup already.
+    ed.lines = ['  div.card*2'];
+    ed.row = 0;
+    ed.col = 13;
+    app.onKey({ name: 'tab' });
+    const emmetOut = ed.lines.join('\n');
+    if (emmetOut !== '  <div class="card"></div>\n  <div class="card"></div>') fail(`emmet Tab expansion produced ${JSON.stringify(emmetOut)}`);
+    // Plain Tab on a bare tag word stays an indent.
+    ed.lines = [''];
+    ed.row = 0;
+    ed.col = 0;
+    app.onKey({ name: 'tab' });
+    if (ed.lines.join('\n') !== '  ') fail(`plain Tab on an empty line produced ${JSON.stringify(ed.lines)}`);
+    // Prose never expands.
+    ed.lines = ['hello world'];
+    ed.row = 0;
+    ed.col = 11;
+    app.onKey({ name: 'tab' });
+    if (ed.lines.join('\n') !== 'hello world  ') fail(`Tab inside prose produced ${JSON.stringify(ed.lines)}`);
+
+    // CSS-language tests: rename the editor tab to a .css file so
+    // activeLang() resolves to css, then restore it.
+    delete app.state.editors.html;
+    app.state.editors['styles.css'] = ed;
+    // Emmet CSS shorthand: `m10` + `;` completes to a full declaration.
+    ed.lines = [''];
+    ed.row = 0;
+    ed.col = 0;
+    for (const ch of 'm10') app.onKey({ name: 'char', char: ch });
+    app.onKey({ name: 'char', char: ';' });
+    if (ed.lines.join('\n') !== 'margin: 10px;') fail(`css shorthand completion produced ${JSON.stringify(ed.lines)}`);
+    // ...but `color: red` + `;` (a finished declaration) is left alone.
+    ed.lines = ['color: red'];
+    ed.row = 0;
+    ed.col = 10;
+    app.onKey({ name: 'char', char: ';' });
+    if (ed.lines.join('\n') !== 'color: red;') fail(`css shorthand fired mid-declaration: ${JSON.stringify(ed.lines)}`);
+
+    // Prettier-style formatter (Ctrl+F): normalises a mangled stylesheet and
+    // keeps the caret on the formatted text.
+    ed.lines = ['body{color:red;margin:0}', 'h1{ font-size:2rem }'];
+    ed.row = 0;
+    ed.col = 0;
+    app.onKey({ name: 'ctrl-f' });
+    const fmtOut = ed.lines.join('\n');
+    if (!fmtOut.includes('body {') || !fmtOut.includes('  color: red;') || !fmtOut.includes('  margin: 0;')) fail(`Ctrl+F format produced ${JSON.stringify(fmtOut)}`);
+    if (!fmtOut.includes('h1 {') || !fmtOut.includes('  font-size: 2rem;')) fail(`Ctrl+F format dropped h1: ${JSON.stringify(fmtOut)}`);
+    // Formatting again is a no-op (idempotence).
+    app.onKey({ name: 'ctrl-f' });
+    if (ed.lines.join('\n') !== fmtOut) fail(`Ctrl+F is not idempotent: ${JSON.stringify(ed.lines.join('\n'))}`);
+    // The formatter refuses to mangle broken code.
+    ed.lines = ['body { color: '];
+    ed.row = 0;
+    ed.col = 0;
+    app.onKey({ name: 'ctrl-f' });
+    if (ed.lines.join('\n') !== 'body { color: ') fail(`Ctrl+F mangled broken css: ${JSON.stringify(ed.lines)}`);
+    if (!/format safely/.test(app.state.notice?.text || '')) fail(`no format-abort notice: ${JSON.stringify(app.state.notice)}`);
+    delete app.state.editors['styles.css'];
+    app.state.editors.html = ed;
+
     // The built-in browser + dev tools, on every pane.
     app.openBrowser();
     for (const tab of ['render', 'elements', 'styles', 'console', 'issues']) {

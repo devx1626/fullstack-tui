@@ -100,7 +100,7 @@ export const COMMANDS = [
   { id: 'editor.tabPrev', title: 'Previous file tab', screen: 'challenge', keys: { default: ['<C-q>'] }, run: 'switchEditorTab(-1)' },
   { id: 'editor.completionTrigger', title: 'Show completions', screen: 'challenge', keys: { default: ['<C-space>'] }, run: 'refreshCompletion' },
   { id: 'history.restore', title: 'Restore a checkpoint', screen: 'challenge', keys: { default: [] }, run: 'history.restore' },
-  { id: 'editor.format', title: 'Format code', screen: 'challenge', keys: { default: ['<C-f>'] }, run: 'editor.format' },
+  { id: 'editor.format', title: 'Format code (Prettier-style; CSS formats the enclosing rule)', screen: 'challenge', keys: { default: ['<C-f>'] }, run: 'formatEditor' },
 
   // Browser
   { id: 'browser.close', title: 'Back to editor', screen: 'browser', keys: { default: ['<C-b>'] }, run: 'pop' }, // Esc is app.back
