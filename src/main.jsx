@@ -20,6 +20,7 @@ import { dispatchGlobal } from './ui/host.jsx';
 import { HomeRoute, ModuleRoute, ChallengeRoute } from './ui/routes.jsx';
 import { Store } from './core/store.js';
 import { Settings } from './ui/settings.js';
+import { buildRecap } from './core/recap.js';
 import { curriculum, totals, allLessons } from './content/index.js';
 
 /**
@@ -89,6 +90,27 @@ export function main() {
       unmount(); // flushes the alt-screen restore + final frame
     } catch {
       /* terminal may already be gone */
+    }
+    // Q13: the recap goes to the normal screen after the alt screen is gone —
+    // the same contract as the classic quit path, fed by the same helpers.
+    try {
+      const t = services.store.stats(curriculum).totals;
+      const target = services.resumeTarget();
+      const session = services.sessionState;
+      const lines = buildRecap({
+        seconds: session.seconds,
+        passed: [...session.passed],
+        failures: session.failures,
+        totalPassed: t.challengesPassed,
+        totalChallenges: t.challenges,
+        streak: services.store.stats(curriculum).streak || 0,
+        todayCount: services.store.passedToday(),
+        dailyGoal: services.settings?.data?.goal?.daily || 0,
+        nextUp: target ? `${target.lessonId} · ${target.challengeId}` : null,
+      });
+      process.stdout.write(`\nSession recap\n${lines.join('\n')}\n\n`);
+    } catch {
+      /* a dying terminal must never break quitting */
     }
     // stdin.pause() alone does not unref the TTY handle while Ink still holds
     // its own stdin listeners — the loop would linger. Exit explicitly, like

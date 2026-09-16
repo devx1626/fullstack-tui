@@ -20,6 +20,12 @@ export function createServices({ store, curriculum, settings, overall, lessonInd
     settings,
     overall,
     lessonIndex: lessonIndex || [],
+    /**
+     * Q13 session accounting, shared with main.jsx's quit path (the Ink
+     * counterpart of the classic app's sessionPassed/sessionFailures).
+     * `seconds` is filled in at quit; passes/failures accrue per check run.
+     */
+    sessionState: { seconds: 0, passed: new Set(), failures: 0 },
     /** Resume / next-up target (Q1, Q2): first unpassed challenge, ids included. */
     resumeTarget() {
       const target = firstUnpassed(this.curriculum, (id) => this.store.isPassed(id));

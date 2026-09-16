@@ -813,7 +813,7 @@ Sizes: **S** ≤ half day, **M** ≤ 2 days, **L** ≤ 1 week (focused solo work
 | 1.4 | Screens: `home`, `module`, `lesson`, `projects`, `stats`, `help`, `resources`, `workspace`, `settings` | `src/screens/*.jsx` | L | Snapshot parity vs old views' content (same data, new chrome); replay goldens for nav flows |
 | 1.5 | Command palette (fuzzy over registry + "Go to" sources, recent list) on `<C-k>` | `src/screens/palette.jsx` | M | Fuzzy perf test (<2 ms/200 items); `<C-p>` no longer opens palette outside challenge |
 | 1.6 | Welcome tour (5 steps, sandbox, vim-on/modeless choice) gated by `onboardedAt` | `src/screens/tour.jsx` | M | Replay golden: full tour, skip path, modeless switch persists |
-| 1.7 | Challenge placeholder in next-UI ("editor lands next phase") so no dead route | `src/screens/challenge.jsx` (stub) | S | Route resolves without crash |
+| 1.7 | Challenge placeholder in next-UI ("editor lands next phase") so no dead route | `src/screens/challenge.jsx` (stub) | S | Route resolves without crash | ✅ superseded — the challenge route is real: brief + record-backed buffer, working Ctrl+S grader with Q7 results (counts/duration/micro-notes), hints recorded, solution toggle, suggest-only format (Q10), record-backed reset, driver-tested (`tests/unit/routes.test.js`) |
 | 1.8 | Keymap docs generator + check-tool screen×tier snapshot smoke | `tools/gen-keymap-docs.js`, `tools/check.js` | S | Keymap reference auto-generated matches registry; all screens render on tiers A–D |
 | 1.9 | Docs refresh for nav layer | `README.md`, `CONTRIBUTING.md` | S | Screenshots + keymap table current |
 

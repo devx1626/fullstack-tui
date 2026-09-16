@@ -64,6 +64,87 @@ export class Store {
 
   save() {
     try {
+      // Two writers can legitimately exist (the classic UI and the next UI,
+      // or an open $EDITOR helper): both hold in-memory state, and a naive
+      // write would let the stale one silently erase the other's pass. Merging
+      // the on-disk challenge/lesson/project records over ours before writing
+      // costs one read and preserves the "last writer wins per-record" rule.
+      let merged = this.data;
+      try {
+        const fresh = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+        if (fresh && typeof fresh === 'object') {
+          const union = (ours, theirs) => {
+            const out = { ...theirs, ...ours };
+            for (const [id, rec] of Object.entries(theirs || {})) {
+              const mine = (ours || {})[id];
+              // A record the other writer made *passed* wins over a stale
+              // in-memory copy that still says unpassed (same for attempts,
+              // which only ever grow).
+              if (mine && typeof mine === 'object') {
+                out[id] = {
+                  ...rec,
+                  ...mine,
+                  passed: !!(mine.passed || rec.passed),
+                  attempts: Math.max(mine.attempts || 0, rec.attempts || 0),
+                  hintsUsed: Math.max(mine.hintsUsed || 0, rec.hintsUsed || 0),
+                };
+              }
+            }
+            return out;
+          };
+          merged = {
+            ...this.data,
+            ...fresh,
+            lessons: union(this.data.lessons, fresh.lessons),
+            challenges: union(this.data.challenges, fresh.challenges),
+            projects: union(this.data.projects, fresh.projects),
+            // Day records: additive counters (minutes/challenges/lessons)
+            // merge per key, so the other instance's passes today survive.
+            days: (() => {
+              // Two writers advance the SAME day from the same base: per-key
+              // max is correct for counters that were part of the shared base
+              // (neither writer lost the other's increment — challenge records
+              // carry the pass; the day counter is re-derivable). The derived
+              // truth for "passed today" is the challenge records themselves,
+              // so reconcile the day counter against the merged records.
+              const out = { ...this.data.days, ...fresh.days };
+              for (const [day, theirs] of Object.entries(fresh.days || {})) {
+                const mine = (this.data.days || {})[day];
+                if (mine && typeof mine === 'object') {
+                  out[day] = {
+                    minutes: Math.max(mine.minutes || 0, theirs.minutes || 0),
+                    challenges: Math.max(mine.challenges || 0, theirs.challenges || 0),
+                    lessons: Math.max(mine.lessons || 0, theirs.lessons || 0),
+                  };
+                }
+              }
+              return out;
+            })(),
+            // Additive counters never go backwards, and a streak the other
+            // instance advanced must survive our write.
+            streak: (this.data.streak?.current || 0) >= (fresh.streak?.current || 0) ? this.data.streak : fresh.streak,
+            totals: {
+              seconds: Math.max(this.data.totals?.seconds || 0, fresh.totals?.seconds || 0),
+              sessions: Math.max(this.data.totals?.sessions || 0, fresh.totals?.sessions || 0),
+            },
+          };
+          this.data = merged;
+          // The day counter for today is derived from the challenge records
+          // (a pass bumps `days[today].challenges`), and the merge above can
+          // only take a max — recount from the merged records so "passed
+          // today" counts DISTINCT passes from both writers, never fewer.
+          const dayKey = today();
+          if (merged.days && merged.days[dayKey]) {
+            const passedTodayCount = Object.values(merged.challenges || {})
+              .filter((r) => r && r.passed && r.solvedAt && r.solvedAt.slice(0, 10) === dayKey).length;
+            if (passedTodayCount > (merged.days[dayKey].challenges || 0)) {
+              merged.days[dayKey].challenges = passedTodayCount;
+            }
+          }
+        }
+      } catch {
+        /* unreadable/absent file → ours wins entirely (the classic path) */
+      }
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));

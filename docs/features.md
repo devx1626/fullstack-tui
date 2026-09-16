@@ -86,6 +86,7 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 - **Tab size** (Settings → Tab size, cycles 2/4/8): drives `Tab`, auto-indent on Enter and indent-step backspace (`tests/unit/editor.test.js`).
 - **Visible bell**: a key a screen does not use answers with a one-line notice instead of redrawing an identical frame.
 - **Jump to a failing line** (`Ctrl+J`): when a failed check carries a line range the results pane shows `→ line N` and the key puts the caret there and reveals the editor.
+- **Torn-down frames render**: every view survives a render with no challenge loaded (reset flows, palette jumps) at any terminal size — verified by an 11-view × 8-size sweep including degenerate sizes.
 - **Bracket match** (`editor.bracketMatch`, palette): put the caret on (or right after) `(`/`[`/`{` and jump to its partner — strings and comments are masked first, and an unmatched bracket is reported instead of guessed. Palette-only in the modeless editor so `width: 50%` keeps typing a percent sign; `%` arrives with the vim engine.
 
 ## 5. The challenge workflow
@@ -136,6 +137,7 @@ Follow mode: element selection follows the caret position in markup challenges (
 ## 7. Progress, streaks & persistence
 
 - `.data/progress.json` (atomic tmp+rename writes; never crashes the TUI on disk errors): version, learner name, per-lesson `{read, completedAt, scroll}`, per-challenge records (§5), per-project `{checks, notes}`, per-day `{minutes, challenges, lessons}`, **streak** `{current, best, lastDay}` (timezone-local days), totals `{seconds, sessions}`, `lastSeen`.
+- **Multi-writer safe**: every save merges the on-disk records over the in-memory state — additive facts (`passed`, `attempts`, `hintsUsed`, day counters) never go backwards, so the classic UI and `FULLSTACK_UI=next` (or any helper) can share one progress file without a stale writer erasing a pass. A corrupted file falls back to the writer's own state (`tests/unit/storeMerge.test.js`).
 - Study time flushed every 30 s of active session (`unref`'d timer, headless-safe).
 - Resume: home resume row targets the first unpassed challenge.
 - Artifacts: `.workspace/<module>/<lesson>/<challenge>.<ext>` (or `/` + file names for synthesis; `.preview.html` for previews).
@@ -161,5 +163,5 @@ Follow mode: element selection follows the caret position in markup challenges (
 ## 10. Planned (spec'd, not yet built)
 
 Overhaul (`tui-overhaul-spec.md`): Ink 6 rewrite in 5 phases, vim-first editor (undo/selection/search/multi-cursor/snippets/signature help), mouse everywhere, Nerd-Font visual system with degrade tiers, 5 themes, command registry + rebindable keymap, welcome tour, resizable panes, network tab + click-to-inspect + live re-render, perf budget, replay/snapshot test suites.
-Errors & QoL (`errors-and-qol-spec.md`): the classic scope is complete (Q1–Q10, Q13, Q14 shipped with replays in `tools/check.js` §6/§8); what remains is reproducing that QoL set on the Ink UI at cut-over, plus Q12's `%` binding, which needs the Phase 2 vim engine.
+Errors & QoL (`errors-and-qol-spec.md`): the classic scope is complete (Q1–Q10, Q13, Q14 shipped with replays in `tools/check.js` §6/§8), and Q7/Q10/Q13 now also work on the Ink UI (results header with duration + micro-notes, suggest-only format, quit recap — `tests/unit/routes.test.js`); what remains there is the palette/tour screens plus Q12's `%` binding, which needs the Phase 2 vim engine.
 Next UI (`FULLSTACK_UI=next`): the remaining screen ports, the palette screen + welcome tour, and the Phase 2 editor (vim, undo, selection, search, multi-cursor, snippets).

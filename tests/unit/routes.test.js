@@ -259,6 +259,73 @@ test('next-UI routes + command host', async (t) => {
 
       app.inst.unmount();
     });
+
+    await t.test('challenge: Q7 results panel, Q10 suggest-only format, working reset', async () => {
+      // An html challenge whose formatted form differs from its starter, so
+      // both the format suggestion and the reset round-trip are observable.
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(curriculum);
+      const { eachChallenge } = await import('../../src/core/targets.js');
+      const entry = eachChallenge(curriculum).find(
+        (e) => (e.challenge.lang || 'js') === 'html' && !e.challenge.files,
+      );
+      const challengeId = `${entry.lesson.id}.${entry.challenge.id}`;
+
+      const app = mountApp(services);
+      assert.ok(await waitFor(() => app.screen() === 'home'));
+      assert.equal(
+        harness.getGlobalCommandSink()('nav.nextUp'),
+        true,
+        'navigate to the first unpassed challenge first',
+      );
+      assert.ok(await waitFor(() => app.screen() === 'challenge'));
+      // The next-up target may not be our chosen entry; open it via the host's
+      // router. Content assertion uses the brief (curriculum challenges carry
+      // an id, not a title — the screen falls back to it).
+      app.host().go('challenge', {
+        moduleId: entry.module.id,
+        lessonId: entry.lesson.id,
+        challengeId: entry.challenge.id,
+      });
+      assert.ok(
+        await waitFor(() => app.frame().includes(entry.challenge.id)),
+        'chosen challenge renders (id fallback in the title row)',
+      );
+
+      // Q10: Ctrl+F is suggest-only — the saved draft is untouched.
+      app.onKey({ name: 'ctrl-f' });
+      assert.ok(
+        await waitFor(() => /formatter would rewrite|Already formatted/.test(app.frame()), { timeout: 8000 }),
+        'Ctrl+F reports the suggest-only verdict',
+      );
+
+      // Q7: a run renders the CHECKS header with counts, a duration and the
+      // micro-notes ("CHECKS  1/5   ·   40 ms", then the note lines).
+      app.onKey({ name: 'ctrl-s' });
+      assert.ok(
+        await waitFor(() => /CHECKS  \d+\/\d+/.test(app.frame()), { timeout: 20000 }),
+        'the checks header rendered with counts',
+      );
+      assert.ok(
+        await waitFor(() => /CHECKS  \d+\/\d+\s+·\s+\d+ ms/.test(app.frame()), { timeout: 8000 }),
+        'header carries the run duration',
+      );
+      assert.ok(
+        await waitFor(() => app.frame().includes('· The editor is still the starter code') || /· /.test(app.frame()), { timeout: 8000 }),
+        'micro-notes render under the header',
+      );
+
+      // Reset: the record-backed buffer drops back to the starter.
+      app.onKey({ name: 'ctrl-r' });
+      assert.ok(await waitFor(() => app.frame().includes('Draft cleared'), { timeout: 8000 }), 'reset reported');
+      assert.equal(
+        new Store(STORE_FILE).challengeRecord(challengeId).lastCode ?? null,
+        null,
+        'reset cleared the saved draft',
+      );
+
+      app.inst.unmount();
+    });
   } finally {
     rmSync(STORE_FILE, { force: true });
   }

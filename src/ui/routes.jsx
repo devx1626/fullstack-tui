@@ -1,14 +1,12 @@
 /**
- * Route components (Phase 1 wiring) — the thin layer between the router, the
- * command host, and the ported screens.
+ * Challenge route (next-UI, Phase 1) — QoL parity with the classic UI.
  *
- * Division of labour:
- *   screens (screens/*.jsx)  render a view-model; they own no behavior
- *   routes  (this file)      cursor + what "open" means + running actions
- *   host    (host.jsx)       cross-screen commands, navigation, notices
- *
- * Each route also resolves its own data from services (the router only passes
- * ids), so `SCREENS` in main.jsx stays a plain name → component map.
+ * Reads the buffer from the progress record (lastCode → starter), so work
+ * survives restarts exactly like the classic editor's autosave (Q8). The
+ * buffer is never rewritten here: Ctrl+F reports what the formatter would do
+ * (suggest-only, Q10) until the Phase 2 editor lands, and a check run (Q7)
+ * reports per-check results with duration, micro-notes and the failing-check
+ * line numbers instead of a one-line shrug.
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import { Text } from 'ink';
@@ -28,9 +26,11 @@ function solutionText(challenge) {
   return Object.entries(sol).map(([name, text]) => `── ${name} ──\n${text}`).join('\n\n');
 }
 
-// ---------------------------------------------------------------------------
-// Home
-// ---------------------------------------------------------------------------
+/** One failing check, rendered as a numbered status line. */
+function failingLine(r) {
+  const base = `✗ ${r.label}${r.message ? ` — ${r.message}` : ''}`;
+  return Number.isFinite(r.line) && r.line >= 1 ? `${base} (→ line ${r.line})` : base;
+}
 
 export function HomeRoute() {
   const host = useHost();
@@ -120,6 +120,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [hintIndex, setHintIndex] = useState(0);
+  const [results, setResults] = useState(null); // Q7 view of the last run
 
   const target = useMemo(() => {
     if (!services) return null;
@@ -150,13 +151,32 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         setStatus('running your code…');
         try {
           const { evaluate } = await import('../core/grade.js');
+          const started = Date.now();
           const result = await evaluate(target.challenge, code);
+          result.durationMs = Date.now() - started;
+          const { checkNotes } = await import('../core/checkNotes.js');
+          result.notes = checkNotes({
+            results: result.results,
+            logs: result.logs,
+            code,
+            starter: target.challenge.starter,
+            hintsShown: hintIndex,
+            solutionShown: showSolution,
+          });
+          setResults(result);
           const passed = result.results.filter((r) => r.ok).length;
           const total = result.results.length;
-          setStatus(result.passed
-            ? `${total}/${total} checks passed — solved. Saved to your workspace.`
-            : `${passed}/${total} checks passed — read the failing messages in the classic UI for now.`);
-          if (result.passed) services.store.recordAttempt(challengeKey, code, true);
+          if (result.passed) {
+            // Q13 accounting + workspace parity with the classic pass path.
+            if (services.sessionState) services.sessionState.passed.add(challengeKey);
+            services.store.recordAttempt(challengeKey, code, true);
+            setStatus(`${total}/${total} checks passed in ${result.durationMs} ms — solved. Saved to your workspace.`);
+          } else {
+            if (services.sessionState) services.sessionState.failures += total - passed;
+            const failures = result.results.filter((r) => !r.ok);
+            const head = `${passed}/${total} checks passed in ${result.durationMs} ms — ${failures.length} failing:`;
+            setStatus([head, ...failures.slice(0, 4).map(failingLine)].join('\n'));
+          }
         } catch (err) {
           setStatus(`check threw: ${err && err.message ? err.message : err}`);
         } finally {
@@ -183,10 +203,26 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
           ? 'Solution hidden.'
           : `Solution for ${target.challenge.title} — Ctrl+G again to hide.`);
         return;
-      case 'challenge.reset':
+      case 'challenge.reset': {
+        // The classic pass path clears lastCode through resetChallenge; the
+        // buffer here is record-driven, so dropping the saved draft is reset.
+        services.store.saveDraft(challengeKey, null);
         setShowSolution(false);
-        setStatus('Reset needs the Phase 2 editor (the classic UI resets drafts today).');
+        setResults(null);
+        setStatus('Draft cleared — the starter is back (Ctrl+S re-checks it).');
         return;
+      }
+      case 'editor.format': {
+        // Suggest-only (Q10): never rewrite the buffer from a route.
+        const { formatCode } = await import('../core/format.js');
+        const out = formatCode(target.challenge.lang || 'js', code);
+        setStatus(!out
+          ? "Couldn't format safely — fix the syntax first."
+          : out.changed
+            ? 'The formatter would rewrite this buffer — the Phase 2 editor applies it. (The classic UI formats today: Ctrl+F.)'
+            : 'Already formatted.');
+        return;
+      }
       default:
         host.run(id);
     }
@@ -196,12 +232,13 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
 
   return (
     <ChallengeScreen
-      title={target.challenge.title}
+      title={target.challenge.title || target.challenge.id}
       brief={target.challenge.prompt || ''}
       code={code}
       width={host.width}
       status={status}
       busy={busy}
+      results={results}
       onCommand={onCommand}
     />
   );

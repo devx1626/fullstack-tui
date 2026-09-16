@@ -518,6 +518,12 @@ function renderSolution(app, w, h) {
 export default function renderChallenge(app, w, h) {
   const t = app.theme;
   app.state.editorCursorPos = null;
+  // The challenge context is torn down before the stack swaps (reset flows,
+  // palette jumps); rendering must survive a frame without it, not crash the
+  // whole TUI at any terminal size.
+  if (!app.state.challenge) {
+    return [fit([seg('  No challenge loaded - press Ctrl+P to pick one.', { fg: t.muted })], w, { bg: t.bg })];
+  }
   if (app.state.showSolution) return renderSolution(app, w, h);
 
   if (app.state.pane === 'both') {

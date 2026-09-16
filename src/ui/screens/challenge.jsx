@@ -19,13 +19,14 @@ import { useKeymap } from '../useKeymap.js';
 import { cursorShape } from '../multimedia.js';
 
 export function ChallengeScreen({
-  title = 'untitled challenge',
+  title,
   brief = '',
   code = '',
   mode = 'normal', // 'normal' | 'insert' — vim state arrives in Phase 2
   width = 80,
   status = null,
   busy = false,
+  results = null, // Q7: { passed, results, durationMs, notes }
   onCommand,
   onModeChange,
 }) {
@@ -58,7 +59,7 @@ export function ChallengeScreen({
         leftWidth={clamped}
         left={(
           <Box flexDirection="column">
-            <Text bold color="cyan"> {title}</Text>
+            <Text bold color="cyan"> {title || 'untitled challenge'}</Text>
             <Text> </Text>
             {brief.split('\n').map((line, i) => (
               <Text key={i} color="gray"> {line}</Text>
@@ -73,10 +74,27 @@ export function ChallengeScreen({
           </Box>
         )}
       />
+      {results ? (
+        <Box flexDirection="column">
+          <Text bold color={results.passed ? 'green' : 'red'}>
+            {' '}CHECKS  {results.results.filter((r) => r.ok).length}/{results.results.length}
+            {Number.isFinite(results.durationMs) ? `   ·   ${results.durationMs} ms` : ''}
+          </Text>
+          {(results.notes || []).map((n, i) => (
+            <Text key={i} color={n.kind === 'warn' ? 'yellow' : n.kind === 'honesty' ? 'cyan' : 'gray'}>
+              {' '}· {n.text}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
       <Text color={busy ? 'yellow' : status ? 'cyan' : 'gray'}>
-        {' '}{status
-          || (lastCommand ? `last: ${lastCommand}` : 'Ctrl+S check · Ctrl+H hint · Ctrl+G solution · Esc back')}
+        {' '}{(status || (lastCommand ? `last: ${lastCommand}` : 'Ctrl+S check · Ctrl+F format · Ctrl+H hint · Ctrl+G solution · Esc back')).split('\n')[0]}
       </Text>
+      {status && status.includes('\n')
+        ? status.split('\n').slice(1).map((line, i) => (
+          <Text key={i} color="red"> {line}</Text>
+        ))
+        : null}
     </Box>
   );
 }
