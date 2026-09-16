@@ -31,6 +31,8 @@ export function createDriver({ columns = 80, rows = 24 } = {}) {
   stdin.setRawMode = () => {};
   stdin.resume = () => {};
   stdin.pause = () => {};
+  stdin.ref = () => {};
+  stdin.unref = () => {};
   feedFn = (text) => stdin.emit('data', Buffer.from(text));
 
   const events = [];

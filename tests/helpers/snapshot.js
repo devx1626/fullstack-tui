@@ -13,16 +13,27 @@
 import { Writable, Readable } from 'node:stream';
 import assert from 'node:assert/strict';
 
-/** A fake stdin so ink's useInput never touches the real terminal. */
-function fakeStdin() {
+/**
+ * A fake stdin so ink's useInput never touches the real terminal.
+ *
+ * `ref`/`unref` matter: ink calls `stdin.ref()` when raw mode engages, and a
+ * plain Readable lacks them — locally the event loop survives, but on CI the
+ * missing method threw inside ink's raw-mode setup and the frame never
+ * rendered (`stdin.ref is not a function`).
+ */
+export function fakeStdin() {
   const s = new Readable({ read() {} });
   s.isTTY = true;
   s.setRawMode = () => {};
   s.resume = () => {};
   s.pause = () => {};
+  s.ref = () => {};
+  s.unref = () => {};
   return s;
 }
 
+/** A fake stdin so ink's useInput never touches the real terminal. Exported
+ * for tests that call the bundle's `render` directly (they must pass it). */
 /** A fake stdout with ink's required shape. */
 export function fakeStdout(columns = 80, rows = 24) {
   const chunks = [];

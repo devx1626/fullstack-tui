@@ -114,7 +114,9 @@ test('next-UI routes + command host', async (t) => {
       );
     }
     const out = helper.fakeStdout(120, 40);
-    const inst = harness.render(harness.el(App, {}), { stdout: out, exitOnCtrlC: false, patchConsole: false });
+    // Ink still binds stdin for useInput (ChallengeScreen's vim cursor path);
+    // without a fake the CI runner's non-TTY stdin breaks raw-mode setup.
+    const inst = harness.render(harness.el(App, {}), { stdout: out, stdin: helper.fakeStdin(), exitOnCtrlC: false, patchConsole: false });
     return {
       inst,
       host: () => box.host,
