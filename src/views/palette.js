@@ -5,6 +5,7 @@ import { allLessons } from '../content/index.js';
 export default function renderPalette(app, w, h) {
   const t = app.theme;
   const query = app.state.paletteQuery || '';
+  const history = app.state.paletteMode === 'history';
   
   // 1. Collect all searchable items
   const items = [];
@@ -51,10 +52,11 @@ export default function renderPalette(app, w, h) {
   // 2. Filter items based on query
   const filtered = items.filter(item => item.search.includes(query.toLowerCase()));
   
-  // 3. Build the search bar row
+  // 3. Build the header row: a search box in jump mode, a fixed prompt in
+  //    history mode (Q9 — checkpoints are a short list, not a search problem).
   const searchBar = fit([
-    seg(' 🔍 ', { fg: t.accent, bg: t.panel }),
-    seg(query || 'Type to search...', { fg: t.text, bg: t.panel }),
+    seg(history ? ' ⟲ ' : ' 🔍 ', { fg: t.accent, bg: t.panel }),
+    seg(history ? 'Restore a checkpoint - Enter applies it' : (query || 'Type to search...'), { fg: t.text, bg: t.panel }),
     seg(' ', { bg: t.panel }),
     seg(' (ESC to close)', { fg: t.muted, bg: t.panel })
   ], w);
@@ -71,7 +73,7 @@ export default function renderPalette(app, w, h) {
 
   const rows = [
     searchBar,
-    ...box(t, w, body, { title: 'Quick Jump', focused: true, minHeight: listH })
+    ...box(t, w, body, { title: history ? 'Checkpoints' : 'Quick Jump', focused: true, minHeight: listH })
   ];
 
   return rows;

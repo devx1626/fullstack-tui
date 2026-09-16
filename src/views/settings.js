@@ -40,9 +40,11 @@ export default function renderSettings(app, w, h) {
   
   const home = process.env.HOME || '';
   const sound = (app.settings?.data?.sound ?? 'bell') === 'off' ? 'Off' : 'Bell';
+  const wrap = (app.settings?.data?.editor?.wrap ?? false) ? 'On' : 'Off';
   const settings = [
     { label: 'Theme', value: 'Auto-detected', key: 'theme' },
     { label: 'Sound', value: `${sound}  (Space to toggle)`, key: 'sound' },
+    { label: 'Soft wrap', value: `${wrap}  (Space to toggle)`, key: 'wrap' },
     { label: 'Workspace', value: WORKSPACE.replace(home, '~'), key: 'workspace' },
     { label: 'Editor', value: process.env.EDITOR || process.env.VISUAL || 'vi', key: 'editor' },
   ];

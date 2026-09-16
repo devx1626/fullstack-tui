@@ -14,6 +14,7 @@
  * are restored on stop() so the shell is never left in a weird mode.
  */
 import { MouseParser, PasteBuffer, EscapeCoalescer, mouseSeq, pasteSeq } from './index.js';
+import { hasOverlays, routeToOverlays } from './overlayStack.js';
 
 export class InputDispatcher {
   /**
@@ -82,25 +83,42 @@ export class InputDispatcher {
     for (const ev of this.coalescer.feed(rest2.join(''))) this.route(ev);
   }
 
+  /**
+   * Route one event; returns true when a handler CONSUMED it, false when it
+   * was dropped (overlay declined it, or nothing handled it). Purely
+   * informational — callers may ignore it.
+   */
   route(ev) {
-    if (this.stopped) return;
+    if (this.stopped) return false;
 
     // Ctrl+C is ours in raw mode (E4): arrive as byte 0x03 → key 'ctrl-c'.
+    // Deliberately FIRST — quit is never consumable by an overlay or screen
+    // (task 0.8 acceptance: "Ctrl+C always quits").
     if (ev.type === 'key' && ev.name === 'ctrl-c') {
       this.stop();
       this.onQuit('ctrl-c');
-      return;
+      return true;
+    }
+
+    // Overlays (modal dialogs) outrank the screen: while one is open the top
+    // overlay gets every key, and anything it declines is DROPPED — never
+    // forwarded to the screen underneath (a modal must not leak `j`/`k` into
+    // the learner's editor).
+    if (hasOverlays()) {
+      // Declined events are dropped here — never forwarded to the screen.
+      return routeToOverlays(ev);
     }
 
     // Mode wins: focused screen first, then global (palette/quit/help).
     const route = this.getRoute ? this.getRoute() : null;
     if (route) {
-      if (ev.type === 'key' && typeof route.onKey === 'function' && route.onKey(ev)) return;
-      if (ev.type === 'mouse' && typeof route.onMouse === 'function' && route.onMouse(ev)) return;
-      if (ev.type === 'paste' && typeof route.onPaste === 'function' && route.onPaste(ev)) return;
+      if (ev.type === 'key' && typeof route.onKey === 'function' && route.onKey(ev)) return true;
+      if (ev.type === 'mouse' && typeof route.onMouse === 'function' && route.onMouse(ev)) return true;
+      if (ev.type === 'paste' && typeof route.onPaste === 'function' && route.onPaste(ev)) return true;
     }
-    if (this.globalHandler && this.globalHandler(ev)) return;
+    if (this.globalHandler && this.globalHandler(ev)) return true;
     // Unconsumed events are dropped by design (spec: registry logs unknowns).
+    return false;
   }
 
   enableModes() {

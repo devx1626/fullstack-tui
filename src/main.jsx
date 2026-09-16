@@ -1,10 +1,11 @@
 /**
  * FULLSTACK_UI=next entry point.
  *
- * Phase 0 complete: providers mount, alt-screen engages on a TTY, the chrome
- * frame renders, and the input pipeline (task 0.4) routes keys/mouse/paste
- * through the dispatcher. Screens arrive in Phase 1; the classic UI remains
- * the default entry until the Phase 4 cut-over.
+ * Phase 1: the shell is real — providers mount, alt-screen engages on a TTY,
+ * the input pipeline routes keys/mouse/paste through the dispatcher, and the
+ * home + module + challenge screens render from the classic app's singletons
+ * (store, curriculum, settings). The classic UI remains the default entry
+ * until the Phase 4 cut-over.
  */
 import React from 'react';
 import { render, Text, Box } from 'ink';
@@ -14,15 +15,23 @@ import { AltScreen } from './ui/altScreen.jsx';
 import { InputDispatcher } from './ui/input/dispatcher.js';
 import { getCurrentRoute } from './ui/useKeymap.js';
 import { AppRoot } from './ui/AppRoot.jsx';
+import { ServicesProvider, createServices } from './ui/services.jsx';
+import { dispatchGlobal } from './ui/host.jsx';
+import { HomeRoute, ModuleRoute, ChallengeRoute } from './ui/routes.jsx';
+import { Store } from './core/store.js';
+import { Settings } from './ui/settings.js';
+import { curriculum, totals, allLessons } from './content/index.js';
 
-/** Phase 0 placeholder screen registry; Phase 1 ports fill this in. */
+/**
+ * Screen registry: the router maps route names to components (no imports
+ * inside router.jsx). Routes — not screens — own behavior: they resolve the
+ * route params against services, keep the list cursor, and hand command ids
+ * to the CommandHost (host.jsx).
+ */
 const SCREENS = {
-  home: () => (
-    <Box flexDirection="column">
-      <Text>  ◈ fullstack-tui — next UI</Text>
-      <Text color="gray">  screens port in Phase 1 — classic UI is still the default</Text>
-    </Box>
-  ),
+  home: HomeRoute,
+  module: ModuleRoute,
+  challenge: ChallengeRoute,
 };
 
 function ChromeFrame({ theme, tier, input }) {
@@ -31,9 +40,9 @@ function ChromeFrame({ theme, tier, input }) {
   return (
     <Box flexDirection="column">
       <Text color={theme.accent}>╭{line}╮</Text>
-      <Text color={theme.text}>  ◈ fullstack-tui — next UI (Phase 0)</Text>
+      <Text color={theme.text}>  ◈ fullstack-tui — next UI (Phase 1)</Text>
       <Text color={theme.muted}>  theme: {theme.name} · tier: {tier}</Text>
-      <Text color={theme.muted}>  screens land in Phase 1 — classic UI is still the default</Text>
+      <Text color={theme.muted}>  screens: home · module · challenge — classic UI is still the default</Text>
       <Text color={theme.accent}>╰{line}╯</Text>
       <Text color={theme.faint}>  ctrl+c quit · input: {input}</Text>
     </Box>
@@ -50,11 +59,23 @@ export function main() {
     return;
   }
 
+  // Singletons shared with the classic app (same files, same schema).
+  const store = new Store();
+  const settings = new Settings();
+  const services = createServices({
+    store,
+    curriculum,
+    settings,
+    overall: totals(),
+    lessonIndex: allLessons(),
+  });
+
   // Ctrl+C is ours (E4 fix): exitOnCtrlC would unmount Ink's tree but leave
   // our stdin hold alive, so the process lingered after ^C on a real TTY.
-  const { unmount } = render(
-    <AltScreen>
-      <AppRoot screens={SCREENS} />
+  const { unmount } = render(      <AltScreen>
+      <ServicesProvider services={services}>
+        <AppRoot screens={SCREENS} onQuit={() => quit()} />
+      </ServicesProvider>
     </AltScreen>,
     { exitOnCtrlC: false, patchConsole: true },
   );
@@ -83,7 +104,9 @@ export function main() {
     // Screens register their handlers via useKeymap(); the hook's route
     // registry is the single source of truth for "who is focused".
     getRoute: () => getCurrentRoute(),
-    globalHandler: () => false, // palette/quit/help land in Phase 1
+    // Keys no screen claims fall through to the CommandHost's global table
+    // (quit/palette/help/resume/next-up) instead of vanishing silently.
+    globalHandler: (ev) => dispatchGlobal(ev, getCurrentRoute().screen),
     onQuit: quit,
   });
   dispatcher.start();

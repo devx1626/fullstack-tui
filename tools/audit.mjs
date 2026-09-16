@@ -6,6 +6,10 @@
  * a broken check is caught before a learner ever sees it. `npm run check` does
  * the same thing as part of the self-check; this script exists to give a
  * per-challenge breakdown with timings and failure messages while authoring.
+ *
+ * Its outputs (tools/audit-report.{json,txt}) are local scratch files and are
+ * gitignored — they go stale the moment content changes, and a committed stale
+ * report reads like a live verdict.
  */
 
 import fs from 'node:fs';

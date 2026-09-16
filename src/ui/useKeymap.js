@@ -13,8 +13,9 @@
  *   useKeymap('challenge', cmd)  ──►   getRoute() → getCurrentRoute()
  *                                        └─ onKey(ev) → resolveKey → cmd(id)
  */
-import { useEffect } from 'react';
-import { resolveKey, mergeKeymap } from './commands.js';
+import { useEffect, useRef } from 'react';
+import { resolveKey } from './commands.js';
+import { effectiveKeymap } from './keymap.js';
 
 /** The one focused-screen route (module-level: one app per process). */
 const route = { screen: null, onKey: null, onMouse: null, onPaste: null };
@@ -46,19 +47,30 @@ export function clearRoute() {
  * identity change, which is fine but churns.
  */
 export function useKeymap(screen, onCommand, { enabled = true, keymap } = {}) {
+  // The registered handler reads the LATEST callback through a ref, so a
+  // re-render never leaves a stale closure registered. Without this, handlers
+  // that close over state (a list cursor, a code buffer) would be one frame
+  // behind: press `j` then Enter within the same tick and Enter would act on
+  // the pre-`j` value. It also stops the effect churning on every keystroke.
+  const handlerRef = useRef(onCommand);
+  handlerRef.current = onCommand;
+
   useEffect(() => {
     if (!enabled) return undefined;
-    const map = keymap ?? mergeKeymap().keymap;
+    // Defaults merged with the user's `.data/keymap.json` (QoL/overhaul: a
+    // rebind must actually take effect, not just lint clean).
+    const map = keymap ?? effectiveKeymap();
     setCurrentRoute({
       screen,
       onKey: (ev) => {
-        if (typeof onCommand !== 'function') return false;
+        const handler = handlerRef.current;
+        if (typeof handler !== 'function') return false;
         const id = resolveKey(ev, screen, map);
         if (!id) return false;
-        onCommand(id, ev);
+        handler(id, ev);
         return true;
       },
     });
     return () => clearRoute();
-  }, [screen, enabled, onCommand, keymap]);
+  }, [screen, enabled, keymap]);
 }

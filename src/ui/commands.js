@@ -6,9 +6,11 @@
  *   - footer/help keys can be linted against real bindings (E2/S3),
  *   - the Phase 1 dispatcher resolves keys without re-plumbing handlers.
  *
- * In the classic UI handlers stay hardcoded; `run` names the App method that
- * implements the command today. `screen`/`when` mirror today's availability,
- * which is exactly what the keymap lint enforces.
+ * `screen`/`when` mirror today's availability, which is exactly what the
+ * keymap lint enforces. `run` is a plain descriptor of what the command does
+ * in the classic UI (a method name, or an expression such as
+ * `switchEditorTab(1)`); commands with `keys.default: []` are palette-only
+ * until a key is bound — nothing dispatches `run` itself.
  */
 
 // ---------------------------------------------------------------------------
@@ -73,6 +75,7 @@ export const COMMANDS = [
   { id: 'home.openModule', title: 'Open module', screen: 'home', keys: { default: ['<CR>'] }, run: 'openModule' },
   { id: 'home.openProjects', title: 'Projects', screen: 'home', keys: { default: ['p'] }, run: "push('projects')" },
   { id: 'home.openSettings', title: 'Settings', screen: 'home', keys: { default: ['s'] }, run: "push('settings')" },
+  { id: 'home.dismissBanner', title: 'Dismiss the streak banner', screen: 'home', keys: { default: ['x'] }, run: 'dismissBanner' },
   { id: 'nav.resume', title: 'Resume where you left off', screen: 'home', keys: { default: ['r'] }, run: 'resume' },
 
   // Module & lesson
@@ -101,6 +104,7 @@ export const COMMANDS = [
   { id: 'editor.completionTrigger', title: 'Show completions', screen: 'challenge', keys: { default: ['<C-space>'] }, run: 'refreshCompletion' },
   { id: 'history.restore', title: 'Restore a checkpoint', screen: 'challenge', keys: { default: [] }, run: 'history.restore' },
   { id: 'editor.format', title: 'Format code (Prettier-style; CSS formats the enclosing rule)', screen: 'challenge', keys: { default: ['<C-f>'] }, run: 'formatEditor' },
+  { id: 'editor.jumpToLine', title: 'Jump to the failing check\'s line (Q4)', screen: 'challenge', keys: { default: ['<C-j>'] }, run: 'jumpToFailedCheck' },
 
   // Browser
   { id: 'browser.close', title: 'Back to editor', screen: 'browser', keys: { default: ['<C-b>'] }, run: 'pop' }, // Esc is app.back
@@ -118,7 +122,17 @@ export const COMMANDS = [
 // Keymap merge + conflict lint + resolution
 // ---------------------------------------------------------------------------
 
-/** Merge user `.data/keymap.json` over defaults; unknown ids are reported. */
+/**
+ * Merge user `.data/keymap.json` over defaults; unknown ids are reported.
+ *
+ * Returns both views of the same data:
+ *   `keymap`   id → PRIMARY binding (display, footer hints, conflict lint)
+ *   `bindings` id → every binding that triggers the command. A command's
+ *              default list holds alternates (`<down>` AND `j`, `<C-c>` AND
+ *              `q`); resolution must honour all of them, otherwise half the
+ *              documented keys are dead — `j`/`k`/`q` were exactly that.
+ * A user override replaces the whole list for that command.
+ */
 export function mergeKeymap(userMap = {}) {
   const overrides = {};
   const unknown = [];
@@ -131,10 +145,31 @@ export function mergeKeymap(userMap = {}) {
     overrides[id] = binding;
   }
   const keymap = new Map();
+  const bindings = new Map();
   for (const cmd of COMMANDS) {
-    keymap.set(cmd.id, overrides[cmd.id] ?? (cmd.keys.default[0] || null));
+    const list = overrides[cmd.id] ? [overrides[cmd.id]] : cmd.keys.default.slice();
+    keymap.set(cmd.id, list[0] || null);
+    bindings.set(cmd.id, list);
   }
-  return { keymap, unknown };
+  return { keymap, bindings, unknown };
+}
+
+/**
+ * id → binding list, accepting either a merged keymap object or a plain
+ * Map/object of id → binding (the shape callers passed before `bindings`
+ * existed). Keeps every existing call site working.
+ */
+function bindingsOf(keymapLike) {
+  if (keymapLike && keymapLike.bindings instanceof Map) return keymapLike.bindings;
+  const entries = keymapLike instanceof Map
+    ? keymapLike.entries()
+    : Object.entries(keymapLike instanceof Object ? keymapLike : {});
+  const out = new Map();
+  for (const [id, b] of entries) {
+    if (b == null) continue;
+    out.set(id, Array.isArray(b) ? b : [b]);
+  }
+  return out;
 }
 
 /**
@@ -142,17 +177,18 @@ export function mergeKeymap(userMap = {}) {
  * Overlap = same screen (or either is global) — the same rule the dispatcher
  * will use in Phase 1.
  */
-export function findConflicts(keymap = mergeKeymap().keymap) {
+export function findConflicts(keymapLike = mergeKeymap()) {
+  const bindings = bindingsOf(keymapLike);
   const byBinding = new Map();
   const conflicts = [];
   for (const cmd of COMMANDS) {
-    const b = keymap.get(cmd.id);
-    if (!b) continue;
-    const p = parseBinding(b);
-    if (!p) continue;
-    const token = `${p.ctrl ? 'C+' : ''}${p.alt ? 'A+' : ''}${p.shift ? 'S+' : ''}${p.key}`;
-    if (!byBinding.has(token)) byBinding.set(token, []);
-    byBinding.get(token).push(cmd);
+    for (const b of bindings.get(cmd.id) || []) {
+      const p = parseBinding(b);
+      if (!p) continue;
+      const token = `${p.ctrl ? 'C+' : ''}${p.alt ? 'A+' : ''}${p.shift ? 'S+' : ''}${p.key}`;
+      if (!byBinding.has(token)) byBinding.set(token, []);
+      byBinding.get(token).push(cmd);
+    }
   }
   for (const [token, cmds] of byBinding) {
     if (cmds.length < 2) continue;
@@ -189,10 +225,12 @@ function conflictKey(binding, ids) {
  * defaults-only lint checks the repo's shipped bindings.
  */
 export function lintKeymap(keymapArg = null) {
-  const merged = keymapArg ? { keymap: keymapArg, unknown: [] } : mergeKeymap();
+  const merged = keymapArg
+    ? (keymapArg.bindings instanceof Map ? keymapArg : { keymap: keymapArg, bindings: bindingsOf(keymapArg), unknown: [] })
+    : mergeKeymap();
   const problems = [];
   for (const id of merged.unknown) problems.push(`keymap: unknown command id "${id}"`);
-  for (const c of findConflicts(merged.keymap)) {
+  for (const c of findConflicts(merged)) {
     const key = conflictKey(c.binding, c.commands);
     const sameScreen = c.commands.every((id) => COMMANDS.find((x) => x.id === id)?.screen !== null)
       && new Set(c.commands.map((id) => COMMANDS.find((x) => x.id === id)?.screen)).size === 1;
@@ -213,23 +251,24 @@ export function commandsForScreen(screen) {
  * Resolve one App key event (term.js parseChunk shape: `{ name, char? }`,
  * ctrl keys named `ctrl-x`) to a command id on `screen`, or null.
  */
-export function resolveKey(keyEvent, screen, keymap = mergeKeymap().keymap) {
+export function resolveKey(keyEvent, screen, keymapLike = mergeKeymap()) {
   const isChar = keyEvent.name === 'char';
   const ctrlMod = keyEvent.name.startsWith('ctrl-');
   // Letter case matters (vim g/G): compare chars exactly as typed.
   const rawName = isChar ? keyEvent.char : keyEvent.name.replace(/^ctrl-/, '');
   const NAME_NORM = { escape: 'esc', enter: 'cr', backspace: 'bs', delete: 'del' };
   const key = isChar ? rawName : (NAME_NORM[rawName] || rawName);
+  const bindings = bindingsOf(keymapLike);
 
   for (const cmd of COMMANDS) {
     if (cmd.screen !== null && cmd.screen !== screen) continue;
-    const b = keymap.get(cmd.id);
-    if (!b) continue;
-    const p = parseBinding(b);
-    if (!p || p.alt || p.shift) continue;
-    if (p.ctrl !== ctrlMod) continue;
-    if (p.key !== key) continue;
-    return cmd.id;
+    for (const b of bindings.get(cmd.id) || []) {
+      const p = parseBinding(b);
+      if (!p || p.alt || p.shift) continue;
+      if (p.ctrl !== ctrlMod) continue;
+      if (p.key !== key) continue;
+      return cmd.id;
+    }
   }
   return null;
 }

@@ -1,6 +1,7 @@
 import { seg, fit, clip, width } from '../tui/canvas.js';
 import { box, clampRows, sectionLabel, prose, codeBlock, split, highlightTokens, diffCode } from '../tui/widgets.js';
 import { ensureVisible, editorText, editorTexts } from './editor.js';
+import { buildWrapDoc, caretScreenRow, firstVisibleRow } from '../core/softwrap.js';
 
 const KIND = {
   debug: { label: 'DEBUG', color: 'warn', blurb: 'Find and fix the bugs in this code.' },
@@ -130,6 +131,13 @@ function resultsBlock(app, w) {
       for (const line of prose(t, w - 10, r.message, { fg: t.warn })) {
         rows.push(fit([seg('        ', {}), ...line], w, { bg: t.bg }));
       }
+    }
+    if (!r.ok && r.line) {
+      rows.push(fit([
+        seg('        → line ', { fg: t.accent, bold: true }),
+        seg(String(r.line), { fg: t.accent, bold: true }),
+        seg('  (Ctrl+J jumps there)', { fg: t.faint }),
+      ], w, { bg: t.bg }));
     }
     if (!r.ok && r.hint) {
       rows.push(fit([seg('        hint: ', { fg: t.faint }), seg(r.hint, { fg: t.faint, italic: true })], w, { bg: t.bg }));
@@ -265,6 +273,27 @@ function editorPanel(app, w, h) {
   const gutterW = digits + 2;
   const textW = Math.max(8, insideW - gutterW);
 
+  // Soft-wrap model (Q11): built when settings.editor.wrap is on so that
+  // editorVertical() navigates by SCREEN rows and the loop below draws
+  // segments instead of logical lines.
+  const wrapOn = app.settings?.data?.editor?.wrap === true;
+  app.state.editorPaneWidth = w;
+  let wrapDoc = null;
+  let firstVisibleScreen = 0;
+  if (wrapOn) {
+    wrapDoc = buildWrapDoc(ed.lines, textW);
+    app.state.wrapDoc = wrapDoc;
+    const screenRow = caretScreenRow(wrapDoc, ed.row, ed.col);
+    const viewRows = Math.max(1, innerH);
+    ed.wrappedScrollTop = firstVisibleRow(screenRow, viewRows, ed.wrappedScrollTop || 0);
+    firstVisibleScreen = Math.min(ed.wrappedScrollTop, Math.max(0, wrapDoc.totalRows - viewRows));
+    app.state.editorScreenRow = screenRow - firstVisibleScreen;
+  } else {
+    ed.wrappedScrollTop = 0;
+    app.state.editorScreenRow = null;
+    app.state.wrapDoc = null;
+  }
+
   const { usable } = ensureVisible(ed, innerH, insideW, gutterW);
   const cols = Math.min(textW, usable);
 
@@ -281,35 +310,88 @@ function editorPanel(app, w, h) {
   let cursorRowInPanel = -1;
   let cursorColInPanel = -1;
 
+  // Tokens are cached per logical line: in wrap mode several screen rows draw
+  // from the same line, and the highlight state machine must see each line
+  // exactly once, in order (rows ascend → lines ascend).
+  const tokenCache = new Map();
+  const tokensFor = (li, line) => {
+    let entry = tokenCache.get(li);
+    if (!entry) {
+      entry = highlightTokens(line, lang, t, state);
+      tokenCache.set(li, entry);
+    }
+    return entry;
+  };
+
+  // Panel row → content. Classic mode: one logical line per row.
+  // Wrap mode (Q11): one SEGMENT per row; the gutter number shows only on a
+  // line's first segment, continuation rows get a blank gutter.
+  let scanHint = 0; // screen rows ascend → the owning line index ascends too
   for (let i = 0; i < innerH; i += 1) {
-    const li = ed.scrollTop + i;
-    const isCursorLine = li === ed.row;
     const bg = t.codeBg;
-    const line = ed.lines[li];
-    if (line === undefined) {
-      rows.push(fit([
-        seg('│', { fg: t.border, bg }),
-        seg(' '.repeat(insideW), { bg }),
-        seg('│', { fg: t.border, bg }),
-      ], w, { bg: t.bg }));
-      continue;
+    let li;
+    let line;
+    let segStart = 0;
+    let segWidth = 0;
+    let firstOfLine = true;
+    let caretHere = false;
+
+    if (wrapDoc) {
+      const screenIdx = firstVisibleScreen + i;
+      let lineIdx = -1;
+      for (let k = scanHint; k < wrapDoc.lines.length; k += 1) {
+        const l = wrapDoc.lines[k];
+        if (screenIdx >= l.startRow && screenIdx < l.startRow + l.rows) { lineIdx = k; break; }
+      }
+      if (lineIdx === -1) {
+        // Past the end of the document: blank row.
+        rows.push(fit([
+          seg('│', { fg: t.border, bg }),
+          seg(' '.repeat(insideW), { bg }),
+          seg('│', { fg: t.border, bg }),
+        ], w, { bg: t.bg }));
+        continue;
+      }
+      scanHint = lineIdx;
+      li = lineIdx;
+      line = ed.lines[li] ?? '';
+      const owner = wrapDoc.lines[li];
+      const segInfo = owner.segs[screenIdx - owner.startRow];
+      segStart = segInfo.start;
+      segWidth = segInfo.width;
+      firstOfLine = segInfo.start === 0;
+      caretHere = li === ed.row && caretScreenRow(wrapDoc, ed.row, ed.col) === screenIdx;
+    } else {
+      li = ed.scrollTop + i;
+      line = ed.lines[li];
+      if (line === undefined) {
+        rows.push(fit([
+          seg('│', { fg: t.border, bg }),
+          seg(' '.repeat(insideW), { bg }),
+          seg('│', { fg: t.border, bg }),
+        ], w, { bg: t.bg }));
+        continue;
+      }
+      segStart = ed.scrollX;
+      segWidth = cols;
+      caretHere = li === ed.row;
     }
 
-    const tokens = highlightTokens(line, lang, t, state);
+    const tokens = tokensFor(li, line);
     const styled = tokens.map((tk) => ({ text: tk.text, s: { fg: tk.fg ?? t.codeText, bg, bold: tk.bold, italic: tk.italic } }));
-    const windowed = sliceSegs(styled, ed.scrollX, cols);
-    const cursorIndex = ed.col - ed.scrollX;
-    const withCare = isCursorLine && cursorIndex >= 0 && cursorIndex <= cols ? withCursor(windowed, cursorIndex, t) : windowed;
+    const windowed = sliceSegs(styled, segStart, segWidth);
+    const cursorIndex = ed.col - segStart;
+    const withCare = caretHere && cursorIndex >= 0 && cursorIndex <= segWidth ? withCursor(windowed, cursorIndex, t) : windowed;
 
-    if (isCursorLine) {
+    if (caretHere) {
       cursorRowInPanel = rows.length;
-      cursorColInPanel = 1 + gutterW + Math.max(0, Math.min(cursorIndex, cols));
+      cursorColInPanel = 1 + gutterW + Math.max(0, Math.min(cursorIndex, segWidth));
     }
 
-    const gutter = String(li + 1).padStart(digits) + ' ';
+    const gutter = firstOfLine ? String(li + 1).padStart(digits) + ' ' : ' '.repeat(digits + 1);
     rows.push(fit([
       seg('│', { fg: t.border, bg }),
-      seg(gutter, { fg: isCursorLine ? t.muted : t.faint, bg }),
+      seg(gutter, { fg: caretHere ? t.muted : t.faint, bg }),
       seg(' ', { bg }),
       ...withCare,
       seg('│', { fg: t.border, bg }),

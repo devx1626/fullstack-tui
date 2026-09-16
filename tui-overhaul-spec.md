@@ -795,7 +795,7 @@ Sizes: **S** ≤ half day, **M** ≤ 2 days, **L** ≤ 1 week (focused solo work
 | 0.8 | Dispatcher + `useKeymap` | `src/ui/dispatcher.jsx` | M | Priority-table unit tests (overlays > vim > screen > global); Ctrl+C always quits | ✅ done — `InputDispatcher` pty-verified; `useKeymap` hook + route registry wired into main.jsx (dispatcher stays sole stdin owner); overlay priority arrives with overlays in Phase 1 |
 | 0.9 | App skeleton: providers, router, alt-screen wrapper, resize, noTTY static entry | `src/main.jsx`, `src/ui/{AppRoot,altScreen,staticRender}.jsx`, `src/ui/router.jsx` | M | `FULLSTACK_UI=next` shows a chrome frame on tiers A–D; piped stdout renders once and exits | ✅ done — `AppRoot` (ThemeProvider → RouterProvider → ScreenFrame/RouterView) mounted in main.jsx; pty-verified with clean ^C; noTTY static path unchanged |
 | 0.10 | Test scaffolding: fake stdout/stdin driver, snapshot util, replay runner; check-tool hooks | `tests/harness/{fakeStdout,driver,snapshot,replay}.js`, `tests/unit/*`, `tools/check.js` (+keymap lint, tier smoke) | M | Snapshot of hello-frame stable across runs; replay drives a scripted key sequence | ✅ done — fake streams + golden snapshots (+poison guard), QoL replays (classic UI), and `tests/helpers/driver.js` (scripted bytes → real InputDispatcher, fake streams; caught the parallel-parse phantom-key bug) |
-| 0.11 | Docs stubs | `README.md` (v2 banner), `CONTRIBUTING.md` skeleton | S | Build/test instructions accurate | ☐ pending |
+| 0.11 | Docs stubs | `README.md` (v2 banner), `CONTRIBUTING.md` skeleton | S | Build/test instructions accurate | ✅ done — `README.md` + `CONTRIBUTING.md` written (layer map, command/screen/theme how-tos, testing guide) |
 
 **Phase 0 exit:** old app byte-identical in behavior; next-UI hello-frame green on all tiers; `npm run build && npm test && npm run check` green.
 
@@ -816,6 +816,10 @@ Sizes: **S** ≤ half day, **M** ≤ 2 days, **L** ≤ 1 week (focused solo work
 | 1.7 | Challenge placeholder in next-UI ("editor lands next phase") so no dead route | `src/screens/challenge.jsx` (stub) | S | Route resolves without crash |
 | 1.8 | Keymap docs generator + check-tool screen×tier snapshot smoke | `tools/gen-keymap-docs.js`, `tools/check.js` | S | Keymap reference auto-generated matches registry; all screens render on tiers A–D |
 | 1.9 | Docs refresh for nav layer | `README.md`, `CONTRIBUTING.md` | S | Screenshots + keymap table current |
+
+> **Progress note (2026-09-16):** the next UI is *interactive* now. `src/ui/host.jsx` (`CommandHost`) owns the per-screen list cursor, navigation and the global command table; `src/ui/routes.jsx` gives home/module/challenge real behavior (j/k/g/G, Enter opens, Esc pops, Ctrl+S runs the real grader, Ctrl+H/Ctrl+G hint + solution), and main.jsx's dispatcher global pass now reaches the same table instead of returning `false`.
+>
+> Three wiring defects surfaced and were fixed on the way: `mergeKeymap` honoured only a command's FIRST default binding, so `j`/`k`/`q` were dead in the Ink app (resolution now walks every binding of `keys.default`); `useKeymap` registered a handler that closed over render-time state, so `j` then Enter in the same tick acted on the pre-`j` cursor (the route handler now reads the latest callback through a ref); and `AppRoot` read `size.width`/`size.height` from a hook that returns `{ w, h }`, pinning the frame to 80×24 and ignoring every resize. Routes are covered by `tests/unit/routes.test.js` (real router + real grader). Remaining Phase 1 work: 1.2, 1.4 (screen ports: lesson, projects, stats, help, resources, workspace, settings), 1.5 palette screen, 1.6 tour, 1.8 keymap-docs generator.
 
 **Phase 1 exit:** `FULLSTACK_UI=next` navigates the whole curriculum, palette + tour work, old UI untouched as default; all suites green. Phase 2 (editor) then starts from the Appendix E plan.
 

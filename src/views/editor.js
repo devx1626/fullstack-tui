@@ -79,6 +79,7 @@ export function insertChar(ed, ch) {
   const line = ed.lines[ed.row];
   ed.lines[ed.row] = line.slice(0, ed.col) + ch + line.slice(ed.col);
   ed.col += ch.length;
+  ed.goalCol = null; // soft-wrap: any edit cancels the vertical goal column
   clamp(ed);
 }
 
@@ -99,10 +100,12 @@ export function insertNewline(ed) {
   ed.lines.splice(ed.row, 1, before, indent + after);
   ed.row += 1;
   ed.col = indent.length;
+  ed.goalCol = null;
   clamp(ed);
 }
 
 export function backspace(ed) {
+  ed.goalCol = null;
   if (ed.col > 0) {
     const line = ed.lines[ed.row];
     // Delete a whole indent level when sitting on clean indentation.
@@ -122,6 +125,7 @@ export function backspace(ed) {
 }
 
 export function del(ed) {
+  ed.goalCol = null;
   const line = ed.lines[ed.row];
   if (ed.col < line.length) {
     ed.lines[ed.row] = line.slice(0, ed.col) + line.slice(ed.col + 1);
@@ -133,12 +137,14 @@ export function del(ed) {
 
 export function move(ed, dir) {
   if (dir === 'left') {
+    ed.goalCol = null;
     if (ed.col > 0) ed.col -= 1;
     else if (ed.row > 0) {
       ed.row -= 1;
       ed.col = ed.lines[ed.row].length;
     }
   } else if (dir === 'right') {
+    ed.goalCol = null;
     if (ed.col < ed.lines[ed.row].length) ed.col += 1;
     else if (ed.row < ed.lines.length - 1) {
       ed.row += 1;

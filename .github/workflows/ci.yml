@@ -1,0 +1,43 @@
+name: CI
+
+# The merge bar from tui-overhaul-spec.md §13: build + tests green. Two stages
+# because they fail for different reasons — `test:unit` is fast feedback on the
+# code, `check` grades every reference solution against the curriculum (and
+# takes minutes because the Python checks spawn real interpreters).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: build + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The classic UI runs from source; the Ink tree needs a bundle, and the
+      # render tests need the harness bundle (they skip without it).
+      - run: npm run build
+      - run: npm run build -- --spike
+      - run: npm run test:unit
+
+  self-check:
+    name: curriculum + editor self-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Python reference checks run live when python3 exists (ubuntu runners
+      # ship it) and are skipped gracefully when it does not.
+      - run: npm run check

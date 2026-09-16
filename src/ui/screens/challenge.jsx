@@ -7,7 +7,9 @@
  *   - vim-mode affordance via DECSCUSR cursor shape (M0 multimedia)
  *
  * The editor itself is a static viewer in this slice; the Phase 2 editor
- * (Appendix E) replaces it without changing the wiring shown here.
+ * (Appendix E) replaces it without changing the wiring shown here. Until it
+ * lands, `status` carries the outcome of the commands the host ran for us
+ * (check result, hint text, solution toggle), so keys are never silent.
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
@@ -22,6 +24,8 @@ export function ChallengeScreen({
   code = '',
   mode = 'normal', // 'normal' | 'insert' — vim state arrives in Phase 2
   width = 80,
+  status = null,
+  busy = false,
   onCommand,
   onModeChange,
 }) {
@@ -45,27 +49,34 @@ export function ChallengeScreen({
   useKeymap('challenge', handle);
 
   const clamped = clampSplit(width, leftWidth, 20, 24);
+  const lines = code ? code.split('\n') : ['(empty buffer — the Phase 2 editor types here)'];
 
   return (
-    <SplitPane
-      totalWidth={width}
-      leftWidth={clamped}
-      left={(
-        <Box flexDirection="column">
-          <Text bold color="cyan"> {title}</Text>
-          <Text> </Text>
-          {brief.split('\n').map((line, i) => (
-            <Text key={i} color="gray"> {line}</Text>
-          ))}
-        </Box>
-      )}
-      right={(
-        <Box flexDirection="column">
-          {code.split('\n').slice(0, 20).map((line, i) => (
-            <Text key={i}> {line}</Text>
-          ))}
-        </Box>
-      )}
-    />
+    <Box flexDirection="column">
+      <SplitPane
+        totalWidth={width}
+        leftWidth={clamped}
+        left={(
+          <Box flexDirection="column">
+            <Text bold color="cyan"> {title}</Text>
+            <Text> </Text>
+            {brief.split('\n').map((line, i) => (
+              <Text key={i} color="gray"> {line}</Text>
+            ))}
+          </Box>
+        )}
+        right={(
+          <Box flexDirection="column">
+            {lines.slice(0, 20).map((line, i) => (
+              <Text key={i} color={code ? undefined : 'gray'}> {line}</Text>
+            ))}
+          </Box>
+        )}
+      />
+      <Text color={busy ? 'yellow' : status ? 'cyan' : 'gray'}>
+        {' '}{status
+          || (lastCommand ? `last: ${lastCommand}` : 'Ctrl+S check · Ctrl+H hint · Ctrl+G solution · Esc back')}
+      </Text>
+    </Box>
   );
 }

@@ -260,6 +260,66 @@ try {
     delete app.state.editors['styles.css'];
     app.state.editors.html = ed;
 
+    // Soft-wrap (Q11): with editor.wrap on, down/up move by SCREEN rows —
+    // from a wrapped line's start, down lands on its continuation segment.
+    // render() republishes state.editorPaneWidth from the live layout, and this
+    // block runs per terminal size, so pin the wrap width before every
+    // keypress: the replay must never depend on the size this iteration uses.
+    const wrapKey = (name) => {
+      app.state.editorPaneWidth = 26; // → wrap column 20
+      app.onKey({ name });
+    };
+    app.settings.data.editor.wrap = true;
+    ed.lines = ['aaaa bbbb cccc dddd eeee ffff', 'second'];
+    ed.row = 0;
+    ed.col = 0;
+    ed.goalCol = null;
+    app.state.wrapDoc = null;
+    wrapKey('down');
+    if (ed.row !== 0 || ed.col !== 20) fail(`soft-wrap down did not land on the continuation segment: row=${ed.row} col=${ed.col}`);
+    // The goal column is SCREEN-column relative (segment offset), so crossing
+    // into the next logical line from a continuation's start lands on col 0.
+    wrapKey('down');
+    if (ed.row !== 1 || ed.col !== 0) fail(`soft-wrap down did not reach the next line: row=${ed.row} col=${ed.col}`);
+    wrapKey('up');
+    if (ed.row !== 0 || ed.col !== 20) fail(`soft-wrap up did not restore the goal column: row=${ed.row} col=${ed.col}`);
+    if (ed.goalCol !== 0) fail(`soft-wrap lost the goal column: ${ed.goalCol}`);
+    // Rendering with wrap on must not crash and must publish a screen-line model
+    // with MORE screen rows than logical lines.
+    ed.lines = ['word '.repeat(60).trim(), 'tail'];
+    ed.row = 0;
+    ed.col = 0;
+    app.state.pane = 'code';
+    app.render();
+    if (!app.state.wrapDoc) fail('wrap render did not publish the screen-line model');
+    else if (app.state.wrapDoc.totalRows <= ed.lines.length) {
+      fail(`wrap render produced ${app.state.wrapDoc.totalRows} rows for ${ed.lines.length} logical lines`);
+    }
+    app.settings.data.editor.wrap = false;
+    app.state.wrapDoc = null;
+    // Classic semantics restored: down from (0,20) clamps to line 2's length.
+    ed.lines = ['aaaa bbbb cccc dddd eeee ffff', 'second'];
+    ed.row = 0;
+    ed.col = 20;
+    app.onKey({ name: 'down' });
+    if (ed.row !== 1 || ed.col !== 6) fail(`classic down after wrap-off produced row=${ed.row} col=${ed.col}`);
+
+    // Q4 caret jump: a failing check annotated with a line number; Ctrl+J
+    // moves the caret there and surfaces the editor.
+    app.state.pane = 'brief';
+    app.state.results = { results: [{ label: 'shape', ok: false, message: 'boom', line: 3 }], logs: [] };
+    ed.lines = ['one', 'two', 'three', 'four'];
+    ed.row = 0;
+    ed.col = 0;
+    app.onKey({ name: 'ctrl-j' });
+    if (ed.row !== 2 || ed.col !== 0) fail(`Ctrl+J did not jump to line 3: row=${ed.row} col=${ed.col}`);
+    if (app.state.pane === 'brief') fail('Ctrl+J left the editor hidden behind the brief pane');
+    // Without an annotated line it is a graceful no-op.
+    app.state.results = { results: [{ label: 'shape', ok: false, message: 'boom' }], logs: [] };
+    app.onKey({ name: 'ctrl-j' });
+    if (!/No failing check/.test(app.state.notice?.text || '')) fail(`no no-jump notice: ${JSON.stringify(app.state.notice)}`);
+    app.state.results = null;
+
     // The built-in browser + dev tools, on every pane.
     app.openBrowser();
     for (const tab of ['render', 'elements', 'styles', 'console', 'issues']) {
@@ -510,6 +570,142 @@ try {
   const rec = q5.data.palette.recent;
   if (rec[0] !== 'a.b.c' || rec.length !== 2) fail(`Q2 recents MRU broken: ${JSON.stringify(rec)}`);
   else process.stdout.write('   ok  Q2 palette recents keep MRU order (max 5)\n');
+
+  // Replay Q3 (list endpoints): `g`/`G` jump to the first/last row of the
+  // home and module lists (registry ids nav.first/nav.last).
+  {
+    const navStore = new Store(path.join(ROOT, '.data', 'check-qol.json'));
+    const navApp = new App({ theme: pickTheme(), store: navStore });
+    navApp.w = 120;
+    navApp.h = 34;
+    navApp.screen.out = { write() {} };
+    navApp.goHome();
+    navApp.state.cursor = 1;
+    navApp.onKey({ name: 'char', char: 'g' });
+    if (navApp.state.cursor !== 0) fail(`Q3: g on home left the cursor at ${navApp.state.cursor}`);
+    else {
+      navApp.onKey({ name: 'char', char: 'G' });
+      if (navApp.state.cursor !== navApp.curriculum.length - 1) {
+        fail(`Q3: G on home went to ${navApp.state.cursor}, expected ${navApp.curriculum.length - 1}`);
+      } else {
+        navApp.openModule(0);
+        const rows = navApp.curriculum[0].lessons.length + (navApp.curriculum[0].project ? 1 : 0);
+        navApp.state.cursor = 1;
+        navApp.onKey({ name: 'char', char: 'G' });
+        if (navApp.state.cursor !== rows - 1) fail(`Q3: G on module went to ${navApp.state.cursor}, expected ${rows - 1}`);
+        else {
+          navApp.onKey({ name: 'char', char: 'g' });
+          if (navApp.state.cursor !== 0) fail(`Q3: g on module left the cursor at ${navApp.state.cursor}`);
+          else process.stdout.write('   ok  Q3 g/G jump to the first/last row (home + module lists)\n');
+        }
+      }
+    }
+  }
+
+  // Replay Q2 (next-up): the palette-only command opens the first unpassed
+  // challenge, and the palette offers it (registry id, no key of its own).
+  {
+    const dir = path.join(ROOT, '.data', 'check-qol-nav');
+    fs.rmSync(dir, { recursive: true, force: true });
+    const navStore = new Store(path.join(dir, 'progress.json'));
+    const navApp = new App({ theme: pickTheme(), store: navStore, settings: new Settings(path.join(dir, 'settings.json')) });
+    navApp.w = 120;
+    navApp.h = 34;
+    navApp.screen.out = { write() {} };
+    navApp.goHome();
+    const first = navApp.resumeTarget();
+    // Pass it, so "next unpassed" must move on rather than re-open it.
+    navStore.recordAttempt(`${first.lessonId}.${first.challengeId}`, 'reference', true);
+    navApp.goHome();
+    navApp.push('palette');
+    const offered = navApp.getPaletteItems().filter((i) => i.type === 'command').map((i) => i.id);
+    navApp.pop();
+    if (!offered.includes('nav.nextUp')) fail(`Q2: the palette did not offer nav.nextUp (${JSON.stringify(offered)})`);
+    else {
+      navApp.nextUp();
+      const second = navApp.resumeTarget();
+      const landed = navApp.state.challenge && navApp.state.challenge.id;
+      const expected = `${second.lessonId}.${second.challengeId}`;
+      if (navApp.current.name !== 'challenge' || landed !== expected) {
+        fail(`Q2: nextUp landed on ${landed}, expected ${expected}`);
+      } else if (landed === `${first.lessonId}.${first.challengeId}`) {
+        fail('Q2: nextUp re-opened the passed challenge');
+      } else {
+        process.stdout.write('   ok  Q2 nav.nextUp opens the first unpassed challenge from the palette\n');
+      }
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  // Replay Q9 (checkpoints): every check run snapshots the pre-check buffers
+  // into the challenge sidecar; the ring keeps 10 + one daily best; restore
+  // puts the buffers back and never touches attempts/streak.
+  {
+    const dir = path.join(ROOT, '.data', 'check-qol-history');
+    fs.rmSync(dir, { recursive: true, force: true });
+    const cpStore = new Store(path.join(dir, 'progress.json'));
+    const cpSettings = new Settings(path.join(dir, 'settings.json'));
+    cpSettings.data.sound = 'off'; // keep the self-check output clean
+    const cpApp = new App({ theme: pickTheme(), store: cpStore, settings: cpSettings });
+    cpApp.w = 120;
+    cpApp.h = 34;
+    cpApp.screen.out = { write() {} };
+    cpApp.goHome();
+    cpApp.nextUp();
+    const cpId = cpApp.state.challenge.id;
+    const cpEd = cpApp.getActiveEditor();
+    const solution = cpApp.state.challenge.challenge.solution;
+
+    for (let i = 0; i < 11; i += 1) {
+      cpEd.lines = [`<!-- attempt ${i} -->`];
+      await cpApp.checkChallenge();
+    }
+    // A passing run: the pre-check snapshot of the passing buffer is promoted.
+    cpEd.lines = String(solution).split('\n');
+    await cpApp.checkChallenge();
+
+    const list = cpStore.checkpoints(cpId);
+    const ring = list.filter((s) => s.kind === 'check');
+    const best = list.find((s) => s.kind === 'daily-best');
+    // 12 runs → the 10 most recent pre-check states are retained; the passing
+    // one is re-kinded to daily-best, so check + daily-best must total 10.
+    const retained = list.filter((s) => s.kind === 'check' || s.kind === 'daily-best');
+    if (ring.length > 10) fail(`Q9: the ring holds ${ring.length} check snapshots, expected at most 10`);
+    else if (retained.length !== 10) fail(`Q9: ${retained.length} pre-check snapshots retained, expected 10`);
+    else if (!best) fail('Q9: a passing run did not promote a daily-best snapshot');
+    else if (best.passed !== true) fail(`Q9: the daily best is not marked passing (${best.passed})`);
+    else if (!(best.meta && best.meta.checksPassed === best.meta.checksTotal)) {
+      fail(`Q9: the daily best has no passing check counts (${JSON.stringify(best.meta)})`);
+    } else {
+      process.stdout.write(`   ok  Q9 checkpoints ring holds 10 + a daily best (${cpStore.checkpoints(cpId).length} listed)\n`);
+    }
+
+    // The palette offers the restore command inside a challenge, and selecting
+    // it lists the snapshots; Enter on a row restores that state.
+    cpApp.push('palette');
+    const actions = cpApp.getPaletteItems().filter((i) => i.type === 'command').map((i) => i.id);
+    cpApp.pop();
+    if (!actions.includes('history.restore')) fail(`Q9: the palette did not offer history.restore (${JSON.stringify(actions)})`);
+    else {
+      cpApp.runPaletteAction('history.restore');
+      const rows = cpApp.getPaletteItems();
+      if (cpApp.state.paletteMode !== 'history' || !rows.length || rows[0].type !== 'snapshot') {
+        fail(`Q9: the restore list did not open (${cpApp.state.paletteMode}, ${rows.length} rows)`);
+      } else {
+        const target = rows[rows.length - 1].snapshot;
+        const attemptsBefore = cpStore.challengeRecord(cpId).attempts;
+        cpApp.state.cursor = rows.length - 1;
+        cpApp.paletteKey({ name: 'enter' });
+        const restored = cpApp.getActiveEditor().lines.join('\n');
+        const expected = Object.values(target.files)[0];
+        if (cpApp.state.paletteMode !== 'jump') fail('Q9: the palette stayed in history mode after restoring');
+        else if (restored !== expected) fail(`Q9: restore produced ${JSON.stringify(restored.slice(0, 40))}, expected ${JSON.stringify(String(expected).slice(0, 40))}`);
+        else if (cpStore.challengeRecord(cpId).attempts !== attemptsBefore) fail('Q9: restoring changed the attempt count');
+        else process.stdout.write('   ok  Q9 history.restore applies a checkpoint without touching attempts\n');
+      }
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 
   // Corrupted settings file recovers to defaults.
   fs.writeFileSync(path.join(ROOT, '.data', 'check-qol-settings.json'), '{oops');

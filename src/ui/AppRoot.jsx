@@ -5,27 +5,27 @@
  *
  *   <ThemeProvider>            tier + theme from capabilities (task 0.5)
  *     <RouterProvider>         screen stack (router.jsx)
- *       <AppRoot>              window size, dispatcher lifecycle, chrome
- *         <RouterView/>        the focused screen (registers its useKeymap)
+ *       <AppRoot>              window size, chrome
+ *         <CommandHost>        cursor, navigation, command table (host.jsx)
+ *           <RouterView/>      the focused screen (registers its useKeymap)
  *
  * The InputDispatcher (main.jsx) stays the stdin owner; AppRoot only mounts
- * the React tree. Ctrl+C quit semantics are main.jsx's (E4-verified).
+ * the React tree. Ctrl+C quit semantics are main.jsx's (E4-verified); `q`
+ * reaches it through CommandHost → onQuit.
  */
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Box, Text } from 'ink';
 import { useWindowSize } from './useWindowSize.js';
 import { RouterProvider, RouterView, useRouter } from './router.jsx';
+import { CommandHost } from './host.jsx';
 import { themeForCapabilities } from './theme/index.js';
 import { detectCapabilities } from './capabilities.js';
 
-/** Window size with a SIGWINCH-driven re-render (first-party hook). */
-function useSize() {
-  return useWindowSize();
-}
-
 function ScreenFrame({ children, theme, size }) {
-  const w = Math.max(20, Math.min(size.width || 80, 400));
-  const h = Math.max(10, Math.min(size.height || 24, 200));
+  // useWindowSize returns { w, h } — reading `width`/`height` here pinned the
+  // next UI to a hard-coded 80×24 and ignored every resize.
+  const w = Math.max(20, Math.min(size.w || 80, 400));
+  const h = Math.max(10, Math.min(size.h || 24, 200));
   return (
     <Box flexDirection="column" width={w} height={h}>
       {children}
@@ -34,15 +34,17 @@ function ScreenFrame({ children, theme, size }) {
   );
 }
 
-export function AppRoot({ screens }) {
-  const size = useSize();
+export function AppRoot({ screens, onQuit }) {
+  const size = useWindowSize();
   const caps = detectCapabilities();
   const theme = themeForCapabilities(caps, process.env.FULLSTACK_THEME);
 
   return (
     <RouterProvider screens={screens}>
       <ScreenFrame theme={theme} size={size}>
-        <RouterView />
+        <CommandHost onQuit={onQuit}>
+          <RouterView />
+        </CommandHost>
       </ScreenFrame>
     </RouterProvider>
   );

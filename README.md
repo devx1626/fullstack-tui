@@ -1,0 +1,100 @@
+# fullstack-tui
+
+An interactive terminal curriculum for learning fullstack web development:
+12 modules from HTML to deployment, lessons, hands-on code challenges, debug
+hunts, and capstone projects — all in your terminal, with a real code editor,
+built-in browser preview, and live grading.
+
+```
+$ npm start
+
+  Let's build. 12 modules from HTML to deployment, 125 graded challenges
+  - most of them are bugs to hunt.
+```
+
+## Highlights
+
+- **A curriculum that grades you for real.** Every challenge ships reference
+  solutions that the test suite runs — the checks you face are the checks the
+  maintainers verify. HTML/CSS/DOM via a real parser, JavaScript via sandboxed
+  evaluation, SQL against SQLite, Git against a live scratch repo, Python via
+  a `python3 -I -B` sandbox runner (used only if Python is installed).
+- **A built-in environment.** Multi-file editor with completions, Emmet
+  abbreviations (`Tab` expands, `;` completes CSS shorthands), Prettier-style
+  formatting (`Ctrl+F`), a DOM/Styles/Console inspector for HTML work, and a
+  browser preview (`Ctrl+P`) — no leaving the terminal.
+- **Progress that persists.** Drafts, streaks, time tracking, hints-used
+  accounting, and per-lesson scroll positions live in `.data/`, which also
+  holds your UI settings (`settings.json`) and keymap overrides
+  (`keymap.json`).
+
+## Quick start
+
+```bash
+npm install
+npm start          # classic UI (default)
+npm run ui:next    # experimental Ink-based UI (FULLSTACK_UI=next)
+```
+
+| Key | Action |
+| --- | --- |
+| `j` / `k`, arrows | Move · `Enter` open · `Esc` back |
+| `Ctrl+S` | Check my code (challenge screen) |
+| `Ctrl+H` | Reveal a hint |
+| `Ctrl+P` | Preview in browser / command palette |
+| `?` | Help manual · `q` or `Ctrl+C` quit |
+
+## Requirements
+
+- Node.js **≥ 20.9** (Node 22 recommended; the `ui:next` bundle targets 20).
+- Optional: `python3` on `$PATH` for the Python module's live checks — the
+  module degrades gracefully (checks report "python3 is not installed") when
+  it is missing.
+
+## Scripts
+
+| Script | What it does |
+| --- | --- |
+| `npm start` | Launch the app |
+| `npm run ui:next` | Launch the experimental Ink UI |
+| `npm run build` | Bundle the next UI (`-- --watch` to watch) |
+| `npm test` / `npm run check` | Deep curriculum validation + reference-solution verification + editor/sandbox unit checks |
+| `npm run test:unit` | node:test unit suite (`tests/unit/*.test.js`) |
+| `npm run verify` | Reference-solution + buggy-starter assertions across all 12 modules |
+| `npm run list` | Print the curriculum as plain text |
+| `npm run reset` | Clear local progress (`.data/progress.json`) |
+
+## Where things live
+
+```
+src/
+  app.js            classic UI: the App class, key routing, screen plumbing
+  views/            one renderer per screen (canvas-drawn)
+  core/             engines: grading, editor, completions, emmet, format,
+                    SQL/git/python sandboxes, progress store
+  content/          the curriculum (01-html … 12-deploy-and-devops)
+  tui/              canvas + widgets (boxes, meters, code blocks)
+  ui/               the next (Ink) UI: dispatcher, router, screens, theme
+tests/
+  unit/             node:test suite
+  helpers/          snapshot + keystroke-replay drivers
+tools/check.js      the integration test runner behind npm test
+docs/               features.md (tour), multimedia.md, ink-spike.md
+```
+
+Progress, settings, and drafts are stored under `.data/` (git-ignored except
+for `.gitkeep`-style placeholders). Deleting `.data/progress.json` resets
+progress; `.data/settings.json` and `.data/keymap.json` are optional and
+recover to defaults if corrupt.
+
+## Status
+
+The classic UI is the stable, default experience. The Ink-based UI
+(`npm run ui:next`) is under active development — Phase 0 (shell, input
+pipeline, router) is complete; screen ports are landing in Phase 1. See
+`tui-overhaul-spec.md` and `errors-and-qol-spec.md` for the plan and progress
+tables.
+
+## License
+
+MIT

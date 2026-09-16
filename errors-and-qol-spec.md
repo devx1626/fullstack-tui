@@ -165,8 +165,8 @@ New section after the existing ones:
 |---|---|---|---|
 | **0. Stabilization** | E1–E4 + S1–S4 (§3), with tests/repro notes | `npm run build && npm test && npm run check` green; E4 pty repro resolved | ✅ done — E1–E4 fixed (E4 regression-covered by `tools/repro-e4.sh`), S1/S3/S4 cleared, S2 fixed |
 | **Phase 0 (+0.7a)** | Registry skeleton + QoL command registration; Q3 endpoints live | Registry smoke replays green | ✅ done — 46 ids + conflict lint; Q1/Q5/Q6/Q8/Q14 replays green; settings store shipped |
-| **Phase 1 (+QoL)** | Q1, Q2, Q4 (text), Q5, Q6, Q7, Q8, Q9, Q10 (classic), Q13, Q14; palette consumes registry | Full QoL contract green on classic | ◐ well underway — Q5/Q6/Q8/Q14 shipped on classic; palette component + fuzzy filter built; sound toggle in settings (M0); remaining: Q2/Q4/Q7/Q9/Q10/Q13 |
-| **Phase 2 (+QoL)** | Q4 (caret jump), Q11 soft-wrap (Appendix E 2.8 addendum), Q12 | Phase 2 gate + soft-wrap unit/replay | ☐ pending |
+| **Phase 1 (+QoL)** | Q1, Q2, Q4 (text), Q5, Q6, Q7, Q8, Q9, Q10 (classic), Q13, Q14; palette consumes registry | Full QoL contract green on classic | ◐ Q1/Q2/Q3/Q4/Q5/Q6/Q8/Q9/Q14 shipped on classic, each with a replay or unit test (check §6): recents MRU, `nav.nextUp`, `g`/`G` endpoints, `→ line N` + caret jump, milestones, banner, autosave, checkpoints + `history.restore`, goal bar. Palette now lists registry commands that have no key of their own. Remaining: Q7 (richer check output), Q10 (suggest-only format note), Q13 (on-quit recap), plus the palette/tour screens in the Ink UI |
+| **Phase 2 (+QoL)** | Q4 (caret jump), Q11 soft-wrap (Appendix E 2.8 addendum), Q12 | Phase 2 gate + soft-wrap unit/replay | ◐ Q4 caret jump (`Ctrl+J`) and Q11 soft-wrap shipped on the **classic** editor with unit + replay coverage (`src/core/softwrap.js`, `tests/unit/softwrap.test.js`, check §3 replay, Settings → Wrap); Q12 still open (`%` bracket jump, tab-size setting honoured, visible bell) — it wants the new editor engine |
 | **Phase 4** | Recap & toasts reproduced on the Ink UI at cut-over; flourishes (decoration tier) for Q5 | Cut-over checklist includes QoL parity | ☐ pending — see also docs/multimedia.md for M0–M2 flourishes (OSC 8 links, bell, cursor shapes, notifications, optional inline screenshots) |
 
 ---
@@ -193,8 +193,8 @@ New section after the existing ones:
 - [ ] Default build contains no spike artifacts.
 - [ ] Ctrl+C from the next UI exits cleanly on a real pty (no lingering process) — regression-checked by `tools/repro-e4.sh`.
 - [ ] Every §4 feature has a green replay assertion in the QoL contract section.
-- [ ] `progress.json` remains schema-identical after exercising every QoL feature (compat guard).
-- [ ] Checkpoint sidecars never exceed 10 + 1 entries per challenge; restore round-trips byte-exact.
+- [x] `progress.json` remains schema-identical after exercising every QoL feature (compat guard).
+- [x] Checkpoint sidecars never exceed 10 + 1 entries per challenge; restore round-trips byte-exact (check §6 Q9 replay + `tests/unit/history.test.js`).
 - [ ] Dashboard shows resume row, goal bar, and streak state; banner and milestones each fire at most once per their rules.
 - [ ] Recap prints on quit with correct session data; quitting stays instant.
 

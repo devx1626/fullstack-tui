@@ -76,10 +76,14 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 
 - Multi-line buffer model: line array + cursor; whole-document edit chokepoints for smart operations (`setTextAt`).
 - Typing aids: **auto-pairing** (brackets/quotes close themselves), **HTML auto-close tags** on `>`, **pair-backspace** (empty pair deleted both halves), **smart indent** on Enter (continues indentation; extra indent after `{`/`[`/`(`), **indent-step backspace**.
-- **Completions** (IDE-style popup): per-language triggers — `<` in HTML (tags + attributes), `:`/`@`/`-` in CSS (properties/values), JS keywords/APIs/snippets, SQL keywords, shell commands — plus words already in the buffer. Auto-opens on 2+ char prefixes or construct starters; `Ctrl+Space` forces; `↑↓` navigate, `Tab`/`Enter` accept, `Esc` dismiss.
-- **Syntax highlighting** for 10+ languages (js/ts/jsx, html, css, sql, sh, docker, yaml, json, md) with block-comment state carried across lines; code blocks get line-number gutters.
+- **Emmet** (VS Code-style): `Tab` expands markup abbreviations (`div.card*2>p` → nested elements, indent-aware, prose-safe, requires a structural operator); `;` completes CSS shorthand (`m10` → `margin: 10px;`).
+- **Formatter** (`Ctrl+F`): Prettier-style normaliser for html/css/js — 2-space indent, spacing normalisation, collapsed blank-line runs, `<pre>` preserved, no reflow; refuses (with a notice) rather than mangle broken code, and is idempotent.
+- **Completions** (IDE-style popup): per-language triggers — `<` in HTML (tags + attributes), `:`/`@`/`-` in CSS (properties/values), JS keywords/APIs/snippets, Python keywords/builtins, SQL keywords, shell commands — plus words already in the buffer. Auto-opens on 2+ char prefixes or construct starters; `Ctrl+Space` forces; `↑↓` navigate, `Tab`/`Enter` accept, `Esc` dismiss.
+- **Syntax highlighting** for 10+ languages (js/ts/jsx, html, css, python, sql, sh, docker, yaml, json, md) with block-comment state carried across lines; code blocks get line-number gutters.
 - **Multi-file** (synthesis): file **tab strip**, per-file language detection, `Ctrl+Q`/`Ctrl+W` switch tabs; reset affects only the focused file; save writes every file; per-file cursor/scroll.
 - Navigation: arrows, Home/End, PgUp/PgDn (10-line pages), with viewport scrolling (`scrollTop`/`scrollX`).
+- **Soft wrap** (Settings → Wrap): long logical lines render across several screen rows, gutter numbers stay on the line's first row, and `↑`/`↓` move by screen row with the goal column preserved (`src/core/softwrap.js`).
+- **Jump to a failing line** (`Ctrl+J`): when a failed check carries a line range the results pane shows `→ line N` and the key puts the caret there and reveals the editor.
 
 ## 5. The challenge workflow
 
@@ -90,13 +94,24 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 | `Ctrl+H` | Reveal next hint | Ordered; usage recorded per challenge |
 | `Ctrl+G` | Show/hide worked solution | Scrollable; `y` copies it into the editor; second `Ctrl+G` toggles a **diff view** (current vs solution, line-aligned, bad/good colored) |
 | `Ctrl+B` | Open the embedded browser | See §6 |
-| `Ctrl+P` | Preview — write `.preview.html` and open in the real browser | Uses the same parts-assembly as the embedded browser |
+| `Ctrl+P` | Preview — write `.preview.html` and open in the real browser | Uses the same parts-assembly as the embedded browser; **off-challenge it opens the command palette** |
 | `Ctrl+O` | Save artifact to `.workspace/` | Multi-file: whole folder |
 | `Ctrl+E` | Open the file in `$EDITOR`/`VISUAL` | Terminal released (alt screen off) and restored; file reloaded into the buffer |
+| `Ctrl+F` | **Format** the focused buffer | Prettier-style; never reflows; aborts on broken code (see §4) |
+| `Ctrl+J` | Jump to the line of a failed check | Only when the check carries a line range |
 | `Ctrl+T` | Toggle console output panel | Shows captured logs |
 | `Tab` | Pane toggle on narrow terminals | brief ↔ code |
 
 **Grading pipeline:** code (optionally TS-stripped) → `node:vm` sandbox (fake console, no fs, mocked `fetch`, DOM shim from a fixture when relevant) → async code on a **worker thread** that can be terminated (infinite-loop protection; sync loops hit the vm timeout) → per-check pass/fail with readable errors (`Timed out — looks like an infinite loop…`), review notes, and captured logs. Progress records: `attempts`, `lastCode`, `bestCode`, `passed`, `solvedAt`, `hintsUsed`, `solutionSeen`.
+
+**Palette actions** (`Ctrl+P` off-challenge) — the palette lists the curriculum plus registry commands that have no key of their own:
+
+- `nav.nextUp` — jump straight to the first unpassed challenge ("Go to next unpassed challenge").
+- `history.restore` (offered inside a challenge) — pick a **checkpoint** and put its buffers back.
+
+**Checkpoints (Q9):** before every `Ctrl+S` run the pre-check buffers are written to a per-challenge sidecar (`.data/history/<lesson>.<challenge>.json`) — every tab byte-exact. Retention: the 10 most recent runs plus the **first passing state of each day** (★, never evicted; snapshots older than 30 days drop). Restoring never touches attempts, streaks or `lastCode`, and files the challenge no longer has are reported rather than invented.
+
+**List endpoints (Q3):** `g`/`G` jump to the first/last row on the home, module and projects lists, and `g` returns to the top of a scrolled lesson/stats/help view.
 
 ## 6. The embedded browser (dev tools)
 
@@ -116,6 +131,7 @@ Follow mode: element selection follows the caret position in markup challenges (
 - Study time flushed every 30 s of active session (`unref`'d timer, headless-safe).
 - Resume: home resume row targets the first unpassed challenge.
 - Artifacts: `.workspace/<module>/<lesson>/<challenge>.<ext>` (or `/` + file names for synthesis; `.preview.html` for previews).
+- `.data/history/<lessonId>.<challengeId>.json` — checkpoint sidecars (Q9: pre-check snapshots, 10-run ring + daily best). Deleting the directory loses only checkpoints.
 - `.data/smoke.json` — self-check scratch (headless App render smoke).
 
 ## 8. Terminal handling
@@ -129,10 +145,13 @@ Follow mode: element selection follows the caret position in markup challenges (
 ## 9. Quality tooling
 
 - `npm run check` / `test` (`tools/check.js`): curriculum deep-validation (shape, langs, check/solution presence, starter-fails-for-debug) + headless render smoke of screens + reference-solution verification (every check passes) + a battery of editor/sandbox unit checks (auto-pairing, completions, grader semantics).
+- `npm run test:unit` — the `node:test` suites (`tests/unit/`, incl. `tests/unit/history.test.js` for the checkpoint model and the pure nav/target helpers).
+- `.github/workflows/ci.yml` — build + `test:unit` + `check` on every push and PR (Node 22).
 - `npm run verify` — the reference-solution + buggy-starter assertions across all 12 modules (Python reference checks run live when `python3` is available, and are skipped gracefully when it is not).
 - `FULLSTACK_UI=next` pipeline: esbuild bundle (Node 20 target), capability detection, tier-mapped themes, alt-screen wrapper, Ctrl+C lifecycle — verified on a real pty (`tools/repro-e4.sh`).
 
 ## 10. Planned (spec'd, not yet built)
 
 Overhaul (`tui-overhaul-spec.md`): Ink 6 rewrite in 5 phases, vim-first editor (undo/selection/search/multi-cursor/snippets/signature help), mouse everywhere, Nerd-Font visual system with degrade tiers, 5 themes, command registry + rebindable keymap, welcome tour, resizable panes, network tab + click-to-inspect + live re-render, perf budget, replay/snapshot test suites.
-Errors & QoL (`errors-and-qol-spec.md`): stabilization pass (E1–E4, S1–S4), resume row v2, palette recents/next-up, jump-to-line failures, milestones, at-risk banner, autosave + checkpoints, suggest-only format, soft wrap, on-quit recap, daily challenges goal.
+Errors & QoL (`errors-and-qol-spec.md`): suggest-only format note (`Ctrl+F` formats on demand today), on-quit recap (Q13), richer check output (Q7), small editor QoL (Q12: `%` bracket jump, tab-size setting, visible bell), and reproducing the QoL set on the Ink UI at cut-over.
+Next UI (`FULLSTACK_UI=next`): the remaining screen ports, the palette screen + welcome tour, and the Phase 2 editor (vim, undo, selection, search, multi-cursor, snippets).

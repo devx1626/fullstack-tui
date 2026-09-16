@@ -17,7 +17,15 @@ export { Palette } from './components/palette.jsx';
 export { SplitPane } from './components/splitPane.jsx';
 export { Modal, Toast } from './components/overlays.jsx';
 export { RouterProvider, RouterView, useRouter } from './router.jsx';
+export { AppRoot } from './AppRoot.jsx';
+export { CommandHost, useHost, dispatchGlobal, setGlobalCommandSink, getGlobalCommandSink } from './host.jsx';
+export { HomeRoute, ModuleRoute, ChallengeRoute } from './routes.jsx';
+export { ServicesProvider, createServices, useServices } from './services.jsx';
+export { nextIndex, isListMove } from './nav.js';
 export { ChallengeScreen } from './screens/challenge.jsx';
+export { HomeScreen } from './screens/home.jsx';
+export { ModuleScreen } from './screens/module.jsx';
+export { homeViewModel, moduleViewModel, meterCells } from './screens/screenModel.js';
 export { cursorShape } from './multimedia.js';
 export { Text, Box } from 'ink';
 

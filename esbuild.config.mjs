@@ -28,9 +28,11 @@ const base = {
   // devtools machinery we never enable.
   alias: { 'react-devtools-core': './src/ui/emptyDevtools.js' },
   // Ink deps (signal-exit etc.) still call require() for node builtins;
-  // give the ESM bundle a working require via createRequire.
+  // give the ESM bundle a working require via createRequire. The binding is
+  // renamed so bundled sources that import `createRequire` themselves (e.g.
+  // src/core/sqlrun.js) don't collide with the banner's top-level declaration.
   banner: {
-    js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    js: "import { createRequire as __bundle_createRequire } from 'node:module'; const require = __bundle_createRequire(import.meta.url);",
   },
 };
 

@@ -346,6 +346,13 @@ function assemble(ctx) {
   }
 
   const passed = results.length > 0 && results.every((r) => r.ok);
+  // Q4 seam (additive, overhaul §5.4 item 2): a check may carry `line` (1-based)
+  // — the failure result then points at the source line, so the UI can offer
+  // "jump to line". Graders without ranges are unchanged (no `line` field).
+  results.forEach((r, i) => {
+    const ln = checks[i] && checks[i].line;
+    if (Number.isFinite(ln) && ln >= 1) r.line = ln;
+  });
   return {
     passed,
     results,

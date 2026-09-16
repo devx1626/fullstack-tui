@@ -10,7 +10,7 @@ import { Screen, seg, fit } from './tui/canvas.js';
 import { header, footer } from './tui/widgets.js';
 import { seq } from './tui/ansi.js';
 import { startTerminal, stopTerminal, dimensions, withTerminalReleased } from './tui/term.js';
-import { curriculum, nextLesson, allLessons, totals } from './content/index.js';
+import { curriculum, nextLesson, totals } from './content/index.js';
 import { Store } from './core/store.js';
 import { evaluate, review } from './core/grade.js';
 import { saveArtifact, writePreview, openExternally, artifactPath } from './core/workspace.js';
@@ -18,7 +18,10 @@ import { completionsFor, smartInsert, pairBackspace, normaliseLang } from './cor
 import { expandAt } from './core/emmet.js';
 import { formatCodeAt, formatCode } from './core/format.js';
 import { emptyEditor, emptyEditors, editorText, editorTexts, insertChar, insertNewline, backspace, del, move, moveToLineEnd, moveToLineStart, setText, offsetOf, setTextAt } from './views/editor.js';
-
+import { buildWrapDoc, moveVertical } from './core/softwrap.js';
+import { firstUnpassed } from './core/targets.js';
+import { snapshotLabel } from './core/history.js';
+import { commandsForScreen } from './ui/commands.js';
 import renderHome from './views/home.js';
 import renderModule from './views/module.js';
 import renderLesson from './views/lesson.js';
@@ -52,6 +55,9 @@ const VIEWS = {
 };
 
 const isChar = (key, ch) => key.name === 'char' && key.char === ch;
+
+/** Palette-only registry commands the classic app implements (Q2, Q9). */
+const PALETTE_ACTIONS = ['nav.nextUp', 'history.restore'];
 
 /** How many element rows the Elements pane will show for the current code. */
 const elementCount = (app) => {
@@ -125,6 +131,9 @@ export class App {
       completion: null,
       browser: null,
       paletteQuery: '',
+      paletteMode: 'jump', // 'jump' (curriculum + actions) | 'history' (Q9 restore)
+      paletteSnapshots: [],
+      wrapDoc: null, // soft-wrap screen-line model (built at render; Q11)
       paletteScroll: 0,
     };
     this.quitRequested = false;
@@ -264,16 +273,53 @@ export class App {
     this.push('challenge', { challengeId: id });
   }
 
-  /** Resume wherever the learner left off. */
+  /**
+   * Resume wherever the learner left off (Q1) — the first unpassed challenge,
+   * resolved by the same pure helper the next UI uses (core/targets.js).
+   */
   resumeTarget() {
-    for (const { module: mod, lesson } of allLessons()) {
-      for (const ch of lesson.challenges) {
-        if (!this.store.isPassed(`${lesson.id}.${ch.id}`)) {
-          return { lessonId: lesson.id, moduleId: mod.id };
-        }
-      }
+    return firstUnpassed(this.curriculum, (id) => this.store.isPassed(id));
+  }
+
+  /**
+   * Q2 `nav.nextUp` (palette-only): jump straight to the first unpassed
+   * challenge, or celebrate when the curriculum is finished.
+   */
+  nextUp() {
+    const target = this.resumeTarget();
+    if (!target) {
+      this.note('Every challenge is passed - the capstone projects are next.', 'good', true);
+      this.render();
+      return;
     }
-    return null;
+    this.openChallenge(target.moduleIndex, target.lessonIndex, target.challengeIndex);
+  }
+
+  /**
+   * Q3 list endpoints: `g`/`G` jump to the first/last row of the focused list.
+   * Returns true when the key was one of them.
+   */
+  listJump(key, length, cursorKey = 'cursor') {
+    if (length <= 0) return false;
+    if (isChar(key, 'g')) {
+      this.state[cursorKey] = 0;
+      this.render();
+      return true;
+    }
+    if (isChar(key, 'G')) {
+      this.state[cursorKey] = length - 1;
+      this.render();
+      return true;
+    }
+    return false;
+  }
+
+  /** `g` on a scrolling screen: back to the top (Q3, the 'first' half). */
+  scrollTop(key, cursorKey = 'cursor') {
+    if (!isChar(key, 'g')) return false;
+    this.state[cursorKey] = 0;
+    this.render();
+    return true;
   }
 
   // -- input ----------------------------------------------------------------
@@ -360,6 +406,17 @@ export class App {
           this.render();
           return;
         }
+        // Soft-wrap toggle (Q11): Space on the Soft wrap row.
+        if (isChar(key, ' ') && this.state.cursor === 2) {
+          this.settings.data.editor = this.settings.data.editor || {};
+          this.settings.data.editor.wrap = !(this.settings.data.editor.wrap === true);
+          this.settings.save();
+          this.note(this.settings.data.editor.wrap
+            ? 'Soft wrap on — long lines fold to the editor width.'
+            : 'Soft wrap off — long lines scroll horizontally.', 'good');
+          this.render();
+          return;
+        }
         if (['up', 'down', 'pageup', 'pagedown'].includes(key.name)) {
           const step = key.name === 'pagedown' ? 10 : key.name === 'pageup' ? -10 : key.name === 'up' ? -1 : 1;
           this.state.cursor = Math.max(0, this.state.cursor + step);
@@ -370,6 +427,8 @@ export class App {
       case 'help':
       case 'resources':
       case 'workspace':
+        // Scroll screens have no known length, so only `g` (top) applies (Q3).
+        if (this.scrollTop(key)) return;
         if (['up', 'down', 'pageup', 'pagedown'].includes(key.name)) {
           const step = key.name === 'pagedown' ? 10 : key.name === 'pageup' ? -10 : key.name === 'up' ? -1 : 1;
           this.state.cursor = Math.max(0, this.state.cursor + step);
@@ -383,6 +442,9 @@ export class App {
 
   paletteKey(key) {
     if (key.name === 'escape') {
+      // Leaving the palette always returns it to its default mode.
+      this.state.paletteMode = 'jump';
+      this.state.paletteSnapshots = [];
       this.pop();
       return;
     }
@@ -392,7 +454,11 @@ export class App {
       if (!selected) return;
       // Close the palette first so the target screen replaces it on the stack.
       this.pop();
-      if (selected.type === 'module') this.openModule(selected.index);
+      this.state.paletteMode = 'jump';
+      this.state.paletteSnapshots = [];
+      if (selected.type === 'command') this.runPaletteAction(selected.id);
+      else if (selected.type === 'snapshot') this.restoreSnapshot(selected.snapshot);
+      else if (selected.type === 'module') this.openModule(selected.index);
       else if (selected.type === 'lesson') this.openLesson(selected.moduleIndex, selected.lessonIndex);
       else if (selected.type === 'challenge') this.openChallenge(selected.moduleIndex, selected.lessonIndex, selected.challengeIndex);
       return;
@@ -408,6 +474,10 @@ export class App {
       this.state.cursor = Math.min(items.length - 1, this.state.cursor + 1);
       this.scrollPalette();
       this.render();
+      return;
+    }
+    if (key.name === 'char' && this.state.paletteMode === 'history') {
+      // The checkpoint list is a picker, not a search: ignore printable keys.
       return;
     }
     if (key.name === 'char') {
@@ -448,7 +518,29 @@ export class App {
 
   getPaletteItems() {
     const query = (this.state.paletteQuery || '').toLowerCase();
-    const items = [];
+
+    // Q9 restore list: the sidecar's snapshots for the challenge underneath.
+    if (this.state.paletteMode === 'history') {
+      return (this.state.paletteSnapshots || []).map((snap) => ({
+        label: snapshotLabel(snap),
+        type: 'snapshot',
+        snapshot: snap,
+        marker: snap.kind === 'daily-best' ? '★' : '·',
+        markerColor: snap.kind === 'daily-best' ? 'star' : 'faint',
+        right: snap.id,
+      }));
+    }
+
+    // Palette-only registry commands (no key of their own): Q2 next-up and the
+    // Q9 restore entry point. Availability mirrors the keymap lint's rule: the
+    // screen UNDER the palette decides what is offered.
+    const under = this.stack.length > 1 ? this.stack[this.stack.length - 2].name : 'home';
+    const actions = commandsForScreen(under)
+      .filter((c) => PALETTE_ACTIONS.includes(c.id) && !c.keys.default.length)
+      .filter((c) => `${c.title} ${c.id}`.toLowerCase().includes(query))
+      .map((c) => ({ label: c.title, type: 'command', id: c.id, marker: '⌘', markerColor: 'accent', right: 'palette' }));
+
+    const items = [...actions];
     this.curriculum.forEach((mod, i) => {
       const modSearch = `${mod.title} ${mod.id}`.toLowerCase();
       if (modSearch.includes(query)) {
@@ -470,6 +562,79 @@ export class App {
     return items;
   }
 
+  /**
+   * Registry commands with no key of their own (Appendix B: `keys: []`) are
+   * reachable from the palette. Only implemented ones are advertised.
+   */
+  runPaletteAction(id) {
+    if (id === 'nav.nextUp') {
+      this.nextUp();
+      return;
+    }
+    if (id === 'history.restore') {
+      this.openHistoryPalette();
+      return;
+    }
+    this.note(`"${id}" has no palette handler yet.`, 'warn', true);
+    this.render();
+  }
+
+  /**
+   * Q9: open the checkpoint list for the challenge underneath the palette.
+   * Sidecars are per challenge, so this only makes sense inside one.
+   */
+  openHistoryPalette() {
+    const ctx = this.state.challenge;
+    if (!ctx) {
+      this.note('Open a challenge first - checkpoints belong to a challenge.', 'warn', true);
+      this.render();
+      return;
+    }
+    const snapshots = this.store.checkpoints(`${ctx.lesson.id}.${ctx.challenge.id}`);
+    if (!snapshots.length) {
+      this.note('No checkpoints yet - one is taken every time you run a check (Ctrl+S).', 'muted', true);
+      this.render();
+      return;
+    }
+    this.state.paletteMode = 'history';
+    this.state.paletteSnapshots = snapshots;
+    this.state.paletteQuery = '';
+    this.state.cursor = 0;
+    this.state.paletteScroll = 0;
+    this.push('palette');
+    this.render();
+  }
+
+  /**
+   * Q9 restore: put a snapshot's buffers back, tab by tab. Restoring never
+   * touches attempts, streaks or lastCode (Appendix A), and files the current
+   * challenge no longer has are reported instead of invented.
+   */
+  restoreSnapshot(snapshot) {
+    const ctx = this.state.challenge;
+    if (!ctx || !snapshot || !this.state.editors) return;
+    const files = snapshot.files || {};
+    let restored = 0;
+    const absent = [];
+    for (const [name, text] of Object.entries(files)) {
+      const ed = this.state.editors[name];
+      if (ed) {
+        setText(ed, text);
+        restored += 1;
+      } else {
+        absent.push(name);
+      }
+    }
+    if (!restored) {
+      this.note('That checkpoint only holds files this challenge no longer has.', 'warn', true);
+      this.render();
+      return;
+    }
+    const extra = absent.length ? ` (${absent.join(', ')} skipped - not in this challenge)` : '';
+    this.note(`Restored ${snapshotLabel(snapshot)}${extra}`, 'good', true);
+    this.render();
+  }
+
   /** Q6: dismiss today's at-risk banner ('x' on home). */
   dismissBanner() {
     this.settings.dismissBanner();
@@ -479,6 +644,7 @@ export class App {
 
   menuKey(key, length, onEnter) {
     if (length <= 0) return;
+    if (this.listJump(key, length)) return;
     if (isUp(key)) {
       this.state.cursor = (this.state.cursor - 1 + length) % length;
       this.render();
@@ -513,6 +679,7 @@ export class App {
     const mod = list[Math.min(this.state.cursor, list.length - 1)];
     const checks = mod.project.checks || [];
     const inChecks = this.state.focus === 'checks';
+    if (this.listJump(key, inChecks ? checks.length : list.length, inChecks ? 'projectCheckCursor' : 'cursor')) return;
 
     if (key.name === 'tab') {
       this.state.focus = inChecks ? 'menu' : 'checks';
@@ -654,19 +821,19 @@ export class App {
   footerHints() {
     switch (this.current.name) {
       case 'home':
-        return [['j/k', 'move'], ['Enter', 'open'], ['p', 'projects'], ['s', 'settings'], ['?', 'help'], ['q', 'quit']];
+        return [['j/k', 'move'], ['g/G', 'first/last'], ['Enter', 'open'], ['p', 'projects'], ['s', 'settings'], ['^P', 'palette'], ['?', 'help'], ['q', 'quit']];
       case 'module':
-        return [['j/k', 'move'], ['Enter', 'open'], ['Esc', 'back'], ['?', 'help'], ['q', 'quit']];
+        return [['j/k', 'move'], ['g/G', 'first/last'], ['Enter', 'open'], ['Esc', 'back'], ['?', 'help'], ['q', 'quit']];
       case 'lesson':
         return [['j/k', 'scroll'], ['Tab', 'challenges'], ['m', 'mark read'], ['Esc', 'back'], ['q', 'quit']];
       case 'challenge':
-        return [['^S', 'check'], ['^F', 'format'], ['^Space', 'suggest'], ['^B', 'browser'], ['^R', 'reset'], ['^H', 'hint'], ['^G', 'solution'], ['^P', 'preview'], ['Esc', 'back']];
+        return [['^S', 'check'], ['^F', 'format'], ['^J', 'jump'], ['^Space', 'suggest'], ['^B', 'browser'], ['^R', 'reset'], ['^H', 'hint'], ['^G', 'solution'], ['^P', 'preview'], ['Esc', 'back']];
       case 'projects':
         return [['j/k', 'move'], ['Space', 'tick'], ['Esc', 'back'], ['q', 'quit']];
       case 'stats':
         return [['Esc', 'back'], ['?', 'help'], ['q', 'quit']];
       case 'settings':
-        return [['j/k', 'move'], ['Space', 'toggle sound'], ['Esc', 'back'], ['q', 'quit']];
+        return [['j/k', 'move'], ['Space', 'toggle setting'], ['Esc', 'back'], ['q', 'quit']];
       case 'browser':
         return [['Tab', 'pane'], ['1-5', 'jump'], ['j/k', 'move'], ['Ctrl+B', 'editor'], ['Esc', 'back']];
       case 'workspace':
@@ -684,6 +851,7 @@ export class App {
     const mod = this.moduleAt(this.state.moduleIndex);
     if (!mod) return;
     const entries = mod.lessons.length + (mod.project ? 1 : 0);
+    if (this.listJump(key, entries)) return;
     if (isUp(key)) {
       this.state.cursor = (this.state.cursor - 1 + entries) % entries;
       this.render();
@@ -756,6 +924,13 @@ export class App {
       this.render();
       return;
     }
+    if (isChar(key, 'g')) {
+      // Q3: `g` returns to the top of the lesson prose.
+      this.state.lessonScroll = 0;
+      this.store.setLessonScroll(lesson.id, 0);
+      this.render();
+      return;
+    }
     if (isDown(key)) {
       this.state.lessonScroll += 1;
       this.store.setLessonScroll(lesson.id, this.state.lessonScroll);
@@ -824,6 +999,7 @@ export class App {
     if (key.name === 'ctrl-f') return this.formatEditor();
     if (key.name === 'ctrl-r') return this.resetChallenge();
     if (key.name === 'ctrl-h') return this.revealHint();
+    if (key.name === 'ctrl-j') return this.jumpToFailedCheck();
     if (key.name === 'ctrl-g') {
       if (this.state.showSolution) {
         this.state.showDiff = !this.state.showDiff;
@@ -939,11 +1115,11 @@ export class App {
         break;
       case 'up':
         this.state.completion = null;
-        move(ed, 'up');
+        this.editorVertical(ed, -1);
         break;
       case 'down':
         this.state.completion = null;
-        move(ed, 'down');
+        this.editorVertical(ed, 1);
         break;
       case 'pageup':
         for (let i = 0; i < 10; i += 1) move(ed, 'up');
@@ -1346,19 +1522,49 @@ export class App {
     return links;
   }
 
+  /**
+   * Q9: capture the pre-check state into the challenge's sidecar. Both single
+   * and multi-file challenges go through the editor map, so a checkpoint holds
+   * every tab byte-exact.
+   */
+  snapshotCheckpoint() {
+    const ctx = this.state.challenge;
+    if (!ctx || !this.state.editors) return null;
+    const id = `${ctx.lesson.id}.${ctx.challenge.id}`;
+    const attempts = this.store.challengeRecord(id).attempts || 0;
+    return this.store.saveCheckpoint(id, editorTexts(this.state.editors), {
+      kind: 'check',
+      passed: null,
+      meta: { attemptNo: attempts + 1, checksTotal: (ctx.challenge.checks || []).length },
+    });
+  }
+
   async checkChallenge() {
     const { challenge, lesson } = this.state.challenge;
+    const challengeId = `${lesson.id}.${challenge.id}`;
     const code = this.state.editors 
       ? editorTexts(this.state.editors) 
       : editorText(this.getActiveEditor());
     const activeEd = this.getActiveEditor();
+    // Q9: snapshot BEFORE the run — this is the state the learner would want
+    // back, and it is what the outcome below annotates.
+    const checkpoint = this.snapshotCheckpoint();
     this.note('Running your code...', 'muted');
     this.render();
     const result = await evaluate(challenge, code);
     if (this.current.name !== 'challenge' || !this.state.challenge) return;
     result.review = review(code, challenge.lang || 'js');
     this.state.results = result;
-    this.store.recordAttempt(`${lesson.id}.${challenge.id}`, code, result.passed);
+    this.store.recordAttempt(challengeId, code, result.passed);
+    if (checkpoint) {
+      const checksPassed = result.results.filter((r) => r.ok).length;
+      this.store.updateSnapshot(challengeId, checkpoint.id, {
+        passed: result.passed,
+        meta: { checksPassed, checksTotal: result.results.length },
+      });
+      // First passing state of the day becomes the sidecar's ★ entry.
+      if (result.passed) this.store.promoteDailyBest(challengeId, checkpoint);
+    }
     if (result.passed) {
       // Q5: celebrate streak milestones exactly once (7/30/100 days, new best).
       const milestones = this.settings.takeMilestones(this.stats);
@@ -1381,6 +1587,31 @@ export class App {
     this.render();
   }
 
+  /**
+   * Vertical caret movement with soft-wrap support (Q11).
+   * When settings.editor.wrap is on, up/down move by SCREEN rows (a long
+   * logical line occupies several) and the goal column is preserved; the
+   * wrap doc comes from the last render. Off = classic line-wise move.
+   */
+  editorVertical(ed, delta) {
+    const wrapOn = this.settings?.data?.editor?.wrap === true;
+    // Rebuild from the live buffer every move: the model is derived state and
+    // the buffer may have changed since the last render (small files, so the
+    // O(n) rebuild is cheaper than staleness bugs).
+    const fresh = buildWrapDoc(ed.lines, this.editorWrapWidth());
+    if (wrapOn && fresh.totalRows !== fresh.lines.length) {
+      moveVertical(ed, fresh, delta);
+      this.state.wrapDoc = fresh;
+      return;
+    }
+    move(ed, delta > 0 ? 'down' : 'up');
+  }
+
+  /** Wrap column: the editor pane's text width from the last render. */
+  editorWrapWidth() {
+    return Math.max(20, Math.min(this.state.editorPaneWidth || 80, 120) - 6);
+  }
+
   resetChallenge() {
     const { challenge } = this.state.challenge;
     const ed = this.getActiveEditor();
@@ -1396,6 +1627,31 @@ export class App {
     }
     this.state.results = null;
     this.state.pane = this.w >= 104 ? 'both' : 'code';
+    this.render();
+  }
+
+  /**
+   * Q4 caret jump: move the caret to the first failing check's annotated line
+   * (results carry `line` via the grade.js seam) and switch to the editor pane.
+   * Ctrl+J — a no-op when there is nothing to jump to.
+   */
+  jumpToFailedCheck() {
+    if (this.current?.name !== 'challenge') return;
+    const res = this.state.results;
+    if (!res || !Array.isArray(res.results)) return;
+    const failed = res.results.find((r) => !r.ok && Number.isFinite(r.line) && r.line >= 1);
+    if (!failed) {
+      this.note('No failing check points at a line.', 'muted');
+      this.render();
+      return;
+    }
+    const ed = this.getActiveEditor();
+    const row = Math.max(0, Math.min(failed.line - 1, ed.lines.length - 1));
+    ed.row = row;
+    ed.col = 0;
+    ed.goalCol = null;
+    if (this.state.pane === 'brief') this.state.pane = this.w >= 104 ? 'both' : 'code';
+    this.note(`Jumped to line ${failed.line}.`, 'good');
     this.render();
   }
 

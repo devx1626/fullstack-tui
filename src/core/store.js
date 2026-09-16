@@ -8,6 +8,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  addSnapshot,
+  emptyHistory,
+  findSnapshot,
+  historyList,
+  promoteDailyBest as promoteDailyBestIn,
+  snapshotId,
+} from './history.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, '..', '..');
@@ -33,8 +41,14 @@ function emptyState() {
 }
 
 export class Store {
-  constructor(file = PROGRESS_FILE) {
+  /**
+   * @param {string} file progress.json path
+   * @param {{historyDir?: string}} opts checkpoint sidecar directory
+   *   (defaults to `<progress dir>/history`, per Appendix A)
+   */
+  constructor(file = PROGRESS_FILE, { historyDir } = {}) {
     this.file = file;
+    this.historyDir = historyDir || path.join(path.dirname(file), 'history');
     this.data = this.load();
   }
 
@@ -181,6 +195,90 @@ export class Store {
     rec.solutionSeen = true;
     this.data.challenges[id] = rec;
     this.save();
+  }
+
+  // -- checkpoints (Q9, errors-and-qol-spec Appendix A) ----------------------
+  //
+  // Sidecars live beside progress.json, never inside it: a learner can delete
+  // the directory and lose only checkpoints. Reads degrade to an empty history
+  // (a corrupt sidecar must not stop a check run).
+
+  historyFile(id) {
+    return path.join(this.historyDir, `${id}.json`);
+  }
+
+  readHistory(id) {
+    try {
+      const raw = fs.readFileSync(this.historyFile(id), 'utf8');
+      const parsed = JSON.parse(raw);
+      const base = emptyHistory(id);
+      return {
+        ...base,
+        ...parsed,
+        snapshots: Array.isArray(parsed.snapshots) ? parsed.snapshots : [],
+      };
+    } catch {
+      return emptyHistory(id);
+    }
+  }
+
+  writeHistory(id, history) {
+    try {
+      fs.mkdirSync(this.historyDir, { recursive: true });
+      const file = this.historyFile(id);
+      const tmp = `${file}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(history, null, 2));
+      fs.renameSync(tmp, file);
+    } catch (err) {
+      // A checkpoint is a convenience: never crash the TUI over it.
+      process.stderr.write(`\nCould not save a checkpoint: ${err.message}\n`);
+    }
+  }
+
+  /**
+   * Snapshot a challenge's buffers. `files` is the editor tab map, so a
+   * multi-file challenge captures every tab byte-exact.
+   */
+  saveCheckpoint(id, files, { kind = 'check', passed = null, meta = null, now = new Date() } = {}) {
+    const history = this.readHistory(id);
+    const snapshot = {
+      id: snapshotId(now),
+      at: now.toISOString(),
+      kind,
+      passed,
+      files: { ...files },
+      meta,
+    };
+    addSnapshot(history, snapshot, now);
+    this.writeHistory(id, history);
+    return snapshot;
+  }
+
+  /** Patch a snapshot in place (check outcome, checksPassed meta). */
+  updateSnapshot(id, snapshotIdToPatch, patch = {}) {
+    const history = this.readHistory(id);
+    const entry = findSnapshot(history, snapshotIdToPatch);
+    if (!entry) return null;
+    Object.assign(entry, patch, { meta: { ...(entry.meta || {}), ...(patch.meta || {}) } });
+    this.writeHistory(id, history);
+    return entry;
+  }
+
+  /** First passing snapshot of the day becomes the sidecar's daily best. */
+  promoteDailyBest(id, snapshot, now = new Date()) {
+    const history = this.readHistory(id);
+    const promoted = promoteDailyBestIn(history, snapshot, now);
+    if (promoted) this.writeHistory(id, history);
+    return promoted;
+  }
+
+  /** Restore list: daily best first, then the ring, newest first. */
+  checkpoints(id) {
+    return historyList(this.readHistory(id));
+  }
+
+  findCheckpoint(id, snapshotIdToFind) {
+    return findSnapshot(this.readHistory(id), snapshotIdToFind);
   }
 
   // -- projects -------------------------------------------------------------
