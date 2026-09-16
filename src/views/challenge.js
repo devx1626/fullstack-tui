@@ -2,6 +2,7 @@ import { seg, fit, clip, width } from '../tui/canvas.js';
 import { box, clampRows, sectionLabel, prose, codeBlock, split, highlightTokens, diffCode } from '../tui/widgets.js';
 import { ensureVisible, editorText, editorTexts } from './editor.js';
 import { buildWrapDoc, caretScreenRow, firstVisibleRow } from '../core/softwrap.js';
+import { formatDuration } from '../core/checkNotes.js';
 
 const KIND = {
   debug: { label: 'DEBUG', color: 'warn', blurb: 'Find and fix the bugs in this code.' },
@@ -108,11 +109,29 @@ function resultsBlock(app, w) {
   }
 
   const passed = res.results.filter((r) => r.ok).length;
+  const duration = formatDuration(res.durationMs);
   rows.push(fit([
     seg('  CHECKS  ', { fg: t.accent, bold: true }),
     seg(`${passed}/${res.results.length}`, { fg: passed === res.results.length ? t.good : t.bad, bold: true }),
     seg(passed === res.results.length ? '   everything passes.' : '   keep going.', { fg: passed === res.results.length ? t.good : t.muted }),
+    // Q7: how long the run took (sandbox spawns are the slow part).
+    seg(duration ? `   ·   ${duration}` : '', { fg: t.faint }),
   ], w, { bg: t.bg }));
+
+  // Q7 micro-notes: the mentor sentences behind the pass/fail marks.
+  for (const note of res.notes || []) {
+    const color = note.kind === 'warn' ? t.warn : note.kind === 'honesty' ? t.accent : t.muted;
+    for (const line of prose(t, w - 6, note.text, { fg: color })) {
+      rows.push(fit([seg('    · ', { fg: t.faint }), ...line], w, { bg: t.bg }));
+    }
+  }
+
+  // Q10: suggest-only formatting — never touch the buffer, just say so.
+  if (app.state.formatHint) {
+    for (const line of prose(t, w - 6, app.state.formatHint, { fg: t.faint })) {
+      rows.push(fit([seg('    ⌥ ', { fg: t.faint }), ...line], w, { bg: t.bg }));
+    }
+  }
 
   if (res.error) {
     rows.push(fit([

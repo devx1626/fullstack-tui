@@ -17,9 +17,12 @@ import { saveArtifact, writePreview, openExternally, artifactPath } from './core
 import { completionsFor, smartInsert, pairBackspace, normaliseLang } from './core/complete.js';
 import { expandAt } from './core/emmet.js';
 import { formatCodeAt, formatCode } from './core/format.js';
-import { emptyEditor, emptyEditors, editorText, editorTexts, insertChar, insertNewline, backspace, del, move, moveToLineEnd, moveToLineStart, setText, offsetOf, setTextAt } from './views/editor.js';
+import { emptyEditor, emptyEditors, editorText, editorTexts, insertChar, insertNewline, backspace, del, move, moveToLineEnd, moveToLineStart, setText, offsetOf, rowColOf, setTextAt } from './views/editor.js';
 import { buildWrapDoc, moveVertical } from './core/softwrap.js';
 import { firstUnpassed } from './core/targets.js';
+import { checkNotes } from './core/checkNotes.js';
+import { buildRecap } from './core/recap.js';
+import { matchBracket } from './core/brackets.js';
 import { snapshotLabel } from './core/history.js';
 import { commandsForScreen } from './ui/commands.js';
 import renderHome from './views/home.js';
@@ -33,7 +36,7 @@ import renderResources from './views/resources.js';
 import renderWorkspace from './views/workspace.js';
 import renderBrowser, { BROWSER_TABS } from './views/browser.js';
 import renderPalette from './views/palette.js';
-import renderSettings from './views/settings.js';
+import renderSettings, { settingsRows } from './views/settings.js';
 import { Settings } from './ui/settings.js';
 import { notify, BEL } from './ui/multimedia.js';
 import { runJs, stringify } from './core/runner.js';
@@ -56,8 +59,8 @@ const VIEWS = {
 
 const isChar = (key, ch) => key.name === 'char' && key.char === ch;
 
-/** Palette-only registry commands the classic app implements (Q2, Q9). */
-const PALETTE_ACTIONS = ['nav.nextUp', 'history.restore'];
+/** Palette-only registry commands the classic app implements (Q2, Q9, Q12). */
+const PALETTE_ACTIONS = ['nav.nextUp', 'history.restore', 'editor.bracketMatch'];
 
 /** How many element rows the Elements pane will show for the current code. */
 const elementCount = (app) => {
@@ -135,8 +138,15 @@ export class App {
       paletteSnapshots: [],
       wrapDoc: null, // soft-wrap screen-line model (built at render; Q11)
       paletteScroll: 0,
+      formatHint: null, // Q10 suggest-only format note for the last run
     };
     this.quitRequested = false;
+
+    // Q13 session accounting — the recap reads these, nothing else does.
+    this.sessionSeconds = 0;
+    this.sessionPassed = new Set();
+    this.sessionFailures = 0;
+    this.recapPrinted = false;
 
     this.store.touch();
     this.store.save();
@@ -164,12 +174,56 @@ export class App {
     this.render();
   }
 
+  /**
+   * Bank the time since the last flush. The same elapsed value feeds the
+   * lifetime study timer and the Q13 session recap, so the two can never
+   * disagree.
+   */
   flushSession() {
     const elapsed = Math.round((Date.now() - this.sessionStart) / 1000);
     if (elapsed < 5) return;
     this.sessionStart = Date.now();
+    this.sessionSeconds += elapsed;
     this.store.addTime(elapsed);
     this.store.save();
+  }
+
+  /**
+   * Q13 session recap. Pure data in, plain lines out, so tests and the
+   * self-check can read it without quitting anything.
+   */
+  recapLines() {
+    const stats = this.store.stats(this.curriculum);
+    const target = this.resumeTarget();
+    const nextUp = target ? `${target.lesson.id} · ${target.challenge.id}` : null;
+    return buildRecap({
+      seconds: this.sessionSeconds,
+      passed: [...this.sessionPassed],
+      failures: this.sessionFailures,
+      totalPassed: stats.totals.challengesPassed,
+      totalChallenges: stats.totals.challenges,
+      streak: stats.streak || 0,
+      todayCount: this.store.passedToday(),
+      dailyGoal: this.settings?.data?.goal?.daily || 0,
+      nextUp,
+    });
+  }
+
+  /**
+   * Print the recap after the alt screen is gone: on the normal screen these
+   * lines scroll away like ordinary output, which is the whole point of
+   * putting them on quit rather than in a frame nobody sees.
+   */
+  printRecap(out = process.stdout) {
+    if (this.recapPrinted || !this.isTTY) return;
+    this.recapPrinted = true;
+    // `seq.dim` is the bare SGR prefix, so it is wrapped rather than called.
+    const dim = (s) => `${seq.dim}${s}${seq.reset}`;
+    try {
+      out.write(`\n${dim('Session recap')}\n${this.recapLines().map(dim).join('\n')}\n\n`);
+    } catch {
+      /* a closed stdout must never break quitting */
+    }
   }
 
   quit() {
@@ -178,11 +232,62 @@ export class App {
     clearInterval(this.timer);
     stopTerminal();
     this.quitRequested = true;
+    this.printRecap();
     process.exit(0);
   }
 
   note(text, kind = 'muted', bold = false) {
     this.state.notice = { text, kind, bold };
+  }
+
+  /**
+   * Q12 visible bell: some keys are genuinely ignored on a screen, and a BEL
+   * is both inaudible with sound off and invisible on most terminals while
+   * the alt screen is up. So the rejection also shows up as a notice — the
+   * same reason `x`/`g` give feedback when they do not apply.
+   */
+  visibleBell(text) {
+    this.note(text, 'warn');
+    this.render();
+  }
+
+  /**
+   * Space in the settings screen: act on the focused row's key. Unknown rows
+   * (Theme, Workspace, Editor) are informational, so they say how to change
+   * instead of doing nothing silently.
+   */
+  toggleSetting(key) {
+    switch (key) {
+      case 'sound': {
+        this.settings.data.sound = (this.settings.data.sound ?? 'bell') === 'off' ? 'bell' : 'off';
+        this.settings.save();
+        this.note(this.settings.data.sound === 'off'
+          ? 'Sound notifications off.'
+          : 'Sound notifications on (bell + desktop notify).', 'good');
+        break;
+      }
+      case 'wrap': {
+        this.settings.data.editor = this.settings.data.editor || {};
+        this.settings.data.editor.wrap = !(this.settings.data.editor.wrap === true);
+        this.settings.save();
+        this.note(this.settings.data.editor.wrap
+          ? 'Soft wrap on — long lines fold to the editor width.'
+          : 'Soft wrap off — long lines scroll horizontally.', 'good');
+        break;
+      }
+      case 'tabSize': {
+        const next = { 2: 4, 4: 8, 8: 2 }[this.tabSize()] || 2;
+        this.settings.data.editor = this.settings.data.editor || {};
+        this.settings.data.editor.tabSize = next;
+        this.settings.save();
+        this.note(`Indent is now ${next} spaces.`, 'good');
+        break;
+      }
+      default:
+        this.note('This row is set by the environment, not by a toggle - see ? for the key list.', 'muted');
+        break;
+    }
+    this.render();
   }
 
   // -- routing --------------------------------------------------------------
@@ -262,6 +367,7 @@ export class App {
     }
     
     this.state.results = null;
+    this.state.formatHint = null;
     this.state.hintsShown = 0;
     this.state.showSolution = false;
     this.state.pane = this.w >= 104 ? 'both' : 'code';
@@ -395,34 +501,22 @@ export class App {
       case 'projects':
         this.projectsKey(key);
         break;
-      case 'settings':
+      case 'settings': {
         // Sound toggle (M0, docs/multimedia.md §5): Space on the Sound row.
-        if (isChar(key, ' ') && this.state.cursor === 1) {
-          this.settings.data.sound = (this.settings.data.sound ?? 'bell') === 'off' ? 'bell' : 'off';
-          this.settings.save();
-          this.note(this.settings.data.sound === 'off'
-            ? 'Sound notifications off.'
-            : 'Sound notifications on (bell + desktop notify).', 'good');
-          this.render();
-          return;
-        }
-        // Soft-wrap toggle (Q11): Space on the Soft wrap row.
-        if (isChar(key, ' ') && this.state.cursor === 2) {
-          this.settings.data.editor = this.settings.data.editor || {};
-          this.settings.data.editor.wrap = !(this.settings.data.editor.wrap === true);
-          this.settings.save();
-          this.note(this.settings.data.editor.wrap
-            ? 'Soft wrap on — long lines fold to the editor width.'
-            : 'Soft wrap off — long lines scroll horizontally.', 'good');
-          this.render();
+        // Space acts on the focused row's KEY (settingsRows), not a magic
+        // index, so inserting rows can never rewire the toggles.
+        const settingsRow = settingsRows(this)[this.state.cursor];
+        if (isChar(key, ' ') && settingsRow) {
+          this.toggleSetting(settingsRow.key);
           return;
         }
         if (['up', 'down', 'pageup', 'pagedown'].includes(key.name)) {
           const step = key.name === 'pagedown' ? 10 : key.name === 'pageup' ? -10 : key.name === 'up' ? -1 : 1;
-          this.state.cursor = Math.max(0, this.state.cursor + step);
+          this.state.cursor = Math.max(0, Math.min(settingsRows(this).length - 1, this.state.cursor + step));
           this.render();
         }
         break;
+      }
       case 'stats':
       case 'help':
       case 'resources':
@@ -433,6 +527,10 @@ export class App {
           const step = key.name === 'pagedown' ? 10 : key.name === 'pageup' ? -10 : key.name === 'up' ? -1 : 1;
           this.state.cursor = Math.max(0, this.state.cursor + step);
           this.render();
+        } else if (key.name === 'char') {
+          // Q12 visible bell: the key is genuinely ignored here, so say so
+          // instead of redrawing an identical frame.
+          this.visibleBell(`'${key.char}' does nothing on this screen - 'q' goes back, '?' lists the keys.`);
         }
         break;
       default:
@@ -540,21 +638,25 @@ export class App {
       .filter((c) => `${c.title} ${c.id}`.toLowerCase().includes(query))
       .map((c) => ({ label: c.title, type: 'command', id: c.id, marker: '⌘', markerColor: 'accent', right: 'palette' }));
 
+    // One source of truth for what the palette offers: the VIEW renders this
+    // exact array, so the highlighted row and the executed row can never
+    // drift apart (they did: the view built its own list without the action
+    // commands, so Enter ran the wrong row whenever one was on screen).
     const items = [...actions];
     this.curriculum.forEach((mod, i) => {
       const modSearch = `${mod.title} ${mod.id}`.toLowerCase();
       if (modSearch.includes(query)) {
-        items.push({ label: mod.title, type: 'module', index: i });
+        items.push({ label: mod.title, type: 'module', index: i, marker: 'M', markerColor: 'secondary' });
       }
       mod.lessons.forEach((lesson, li) => {
         const lessonSearch = `${mod.title} ${lesson.title} ${lesson.id}`.toLowerCase();
         if (lessonSearch.includes(query)) {
-          items.push({ label: lesson.title, type: 'lesson', moduleIndex: i, lessonIndex: li });
+          items.push({ label: lesson.title, type: 'lesson', moduleIndex: i, lessonIndex: li, marker: 'L', markerColor: 'accent' });
         }
         (lesson.challenges || []).forEach((ch, ci) => {
           const chSearch = `${mod.title} ${lesson.title} ${ch.id}`.toLowerCase();
           if (chSearch.includes(query)) {
-            items.push({ label: `${lesson.title} > ${ch.id}`, type: 'challenge', moduleIndex: i, lessonIndex: li, challengeIndex: ci });
+            items.push({ label: `${lesson.title} > ${ch.id}`, type: 'challenge', moduleIndex: i, lessonIndex: li, challengeIndex: ci, marker: 'C', markerColor: 'star' });
           }
         });
       });
@@ -573,6 +675,10 @@ export class App {
     }
     if (id === 'history.restore') {
       this.openHistoryPalette();
+      return;
+    }
+    if (id === 'editor.bracketMatch') {
+      this.jumpToMatchingBracket();
       return;
     }
     this.note(`"${id}" has no palette handler yet.`, 'warn', true);
@@ -1087,16 +1193,17 @@ export class App {
         this.typeChar(ed, ' ');
         break;
       case 'enter':
-        insertNewline(ed);
+        insertNewline(ed, this.tabSize());
         this.state.completion = null;
         break;
-      case 'tab':
-        // Emmet first: `div.card*2` + Tab expands; plain Tab keeps
-        // inserting the two-space indent.
+      case 'tab': {
+        // Emmet first: `div.card*2` + Tab expands; plain Tab inserts one
+        // indent, whose width is the Q12 setting (2 by default).
         if (this.tryEmmetExpand(ed, {})) break;
-        insertChar(ed, ' ');
-        insertChar(ed, ' ');
+        const width = this.tabSize();
+        for (let i = 0; i < width; i += 1) insertChar(ed, ' ');
         break;
+      }
       case 'backspace':
         this.smartBackspace(ed);
         break;
@@ -1156,13 +1263,24 @@ export class App {
     const lang = this.activeLang();
     const text = editorText(ed);
     const offset = offsetOf(ed);
-    const res = formatCodeAt(lang, text, offset);
+    // `formatCodeAt` is the CSS-enclosing-rule path and answers null for every
+    // other language, so the documented whole-buffer behaviour needs the
+    // fallback: without it Ctrl+F said "couldn't format safely" on valid JS
+    // and markup, which is the bug the feature is supposed to fix.
+    let res = formatCodeAt(lang, text, offset);
+    if (!res) {
+      const whole = formatCode(lang, text);
+      if (whole) res = { text: whole.text, offset: Math.min(offset, whole.text.length) };
+    }
     if (!res) {
       this.note("Couldn't format safely - fix the syntax first.", 'bad');
       this.render();
       return;
     }
     setTextAt(ed, res.text, res.offset);
+    // Q10: the suggest-only note has served its purpose once the buffer is
+    // formatted, so it goes away with the reformat.
+    if (!formatCode(lang, editorText(ed))?.changed) this.state.formatHint = null;
     this.note(res.text !== text ? 'Formatted.' : 'Already formatted.', 'muted');
     this.render();
   }
@@ -1205,8 +1323,17 @@ export class App {
     const text = editorText(ed);
     const paired = pairBackspace(text, offsetOf(ed));
     if (paired) setTextAt(ed, paired.text, paired.offset);
-    else backspace(ed);
+    else backspace(ed, this.tabSize());
     this.refreshCompletion(false);
+  }
+
+  /**
+   * Q12 indent width from settings, clamped to a sane range so a hand-edited
+   * `.data/settings.json` can't wedge the editor.
+   */
+  tabSize() {
+    const n = Number(this.settings?.data?.editor?.tabSize);
+    return Number.isFinite(n) ? Math.max(2, Math.min(8, Math.round(n))) : 2;
   }
 
   /** Recompute the suggestion popup. `force` is Ctrl+Space. */
@@ -1545,15 +1672,35 @@ export class App {
     const code = this.state.editors 
       ? editorTexts(this.state.editors) 
       : editorText(this.getActiveEditor());
+    // `code` is per-file ({ name: text }) for graded runs; the Q7/Q10 helpers
+    // work on text, so flatten it once here.
+    const codeText = typeof code === 'string' ? code : Object.values(code).join('\n');
     const activeEd = this.getActiveEditor();
     // Q9: snapshot BEFORE the run — this is the state the learner would want
     // back, and it is what the outcome below annotates.
     const checkpoint = this.snapshotCheckpoint();
     this.note('Running your code...', 'muted');
     this.render();
+    const started = Date.now();
     const result = await evaluate(challenge, code);
+    result.durationMs = Date.now() - started;
     if (this.current.name !== 'challenge' || !this.state.challenge) return;
     result.review = review(code, challenge.lang || 'js');
+    // Q7: mentor-style micro-notes derived from this run (pure helper).
+    result.notes = checkNotes({
+      results: result.results,
+      logs: result.logs,
+      code: codeText,
+      starter: this.isMultiFile() ? null : challenge.starter,
+      hintsShown: this.state.hintsShown,
+      solutionShown: this.state.showSolution,
+    });
+    // Q10 suggest-only formatting: the buffer is left exactly as typed; this
+    // note just tells the learner the formatter has work to do.
+    const formatted = formatCode(this.activeLang(), codeText);
+    this.state.formatHint = formatted && formatted.changed
+      ? 'The formatter would rewrite this file - Ctrl+F reformats it in place.'
+      : null;
     this.state.results = result;
     this.store.recordAttempt(challengeId, code, result.passed);
     if (checkpoint) {
@@ -1577,9 +1724,11 @@ export class App {
         : '';
       this.saveToWorkspace(false);
       this.notifyDone(`Passed: ${challenge.title}`);
+      this.sessionPassed.add(challengeId); // Q13
       this.note(`All checks passed. Saved to your workspace - press Ctrl+P to see it.${milestoneText}`, 'good', true);
     } else {
       const failed = result.results.filter((r) => !r.ok).length;
+      this.sessionFailures += failed; // Q13
       this.notifyDone(`${failed} check(s) failing in ${challenge.title}`);
       this.note(`${failed} check(s) still failing - read the messages on the left.`, 'bad', true);
     }
@@ -1626,6 +1775,7 @@ export class App {
       this.note('Editor reset to the starting code.', 'warn');
     }
     this.state.results = null;
+    this.state.formatHint = null;
     this.state.pane = this.w >= 104 ? 'both' : 'code';
     this.render();
   }
@@ -1652,6 +1802,41 @@ export class App {
     ed.goalCol = null;
     if (this.state.pane === 'brief') this.state.pane = this.w >= 104 ? 'both' : 'code';
     this.note(`Jumped to line ${failed.line}.`, 'good');
+    this.render();
+  }
+
+  /**
+   * Q12 bracket match (`editor.bracketMatch`, palette-only for now).
+   *
+   * `%` itself stays unbound in the classic editor because the editor is
+   * modeless: `width: 50%` has to keep typing a percent sign. The vim
+   * binding arrives with the Phase 2 editor; the command is here, tested and
+   * reachable from the palette in the meantime.
+   */
+  jumpToMatchingBracket() {
+    if (this.current?.name !== 'challenge') {
+      this.visibleBell('Bracket matching works inside a challenge.');
+      return;
+    }
+    const ed = this.getActiveEditor();
+    if (!ed) return;
+    const res = matchBracket(editorText(ed), offsetOf(ed));
+    if (!res) {
+      this.note('The caret is not on a bracket - put it on or just after one.', 'muted');
+      this.render();
+      return;
+    }
+    if (res.unmatched) {
+      this.note(`No matching '${res.partner}' for this '${res.char}'.`, 'warn');
+      this.render();
+      return;
+    }
+    const { row, col } = rowColOf(ed, res.index);
+    ed.row = row;
+    ed.col = col;
+    ed.goalCol = null;
+    if (this.state.pane === 'brief') this.state.pane = this.w >= 104 ? 'both' : 'code';
+    this.note(`Matched '${res.char}' with '${res.partner}' on line ${row + 1}.`, 'good');
     this.render();
   }
 

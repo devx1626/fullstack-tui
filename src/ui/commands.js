@@ -105,6 +105,9 @@ export const COMMANDS = [
   { id: 'history.restore', title: 'Restore a checkpoint', screen: 'challenge', keys: { default: [] }, run: 'history.restore' },
   { id: 'editor.format', title: 'Format code (Prettier-style; CSS formats the enclosing rule)', screen: 'challenge', keys: { default: ['<C-f>'] }, run: 'formatEditor' },
   { id: 'editor.jumpToLine', title: 'Jump to the failing check\'s line (Q4)', screen: 'challenge', keys: { default: ['<C-j>'] }, run: 'jumpToFailedCheck' },
+  // Q12: palette-only in the classic modeless editor (`%` must stay typable in
+  // `width: 50%`); the vim binding lands with the Phase 2 editor.
+  { id: 'editor.bracketMatch', title: 'Jump to the matching bracket', screen: 'challenge', keys: { default: [] }, run: 'jumpToMatchingBracket' },
 
   // Browser
   { id: 'browser.close', title: 'Back to editor', screen: 'browser', keys: { default: ['<C-b>'] }, run: 'pop' }, // Esc is app.back

@@ -34,6 +34,14 @@ const fail = (msg) => {
   }
 };
 
+/** Q13 helper: pass one challenge so the recap has something to report. */
+async function q8EdPass(app, entry, ed) {
+  ed.lines = String(entry.challenge.solution || '').split('\n');
+  ed.row = 0;
+  ed.col = 0;
+  await app.checkChallenge();
+}
+
 function listJs(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name === '.data' || entry.name === '.workspace') continue;
@@ -741,6 +749,159 @@ try {
   }
 } catch (err) {
   fail(`registry: ${err && err.message ? err.message : err}`);
+}
+
+// 8. The remaining QoL contract items: richer check output (Q7), suggest-only
+// formatting (Q10), editor QoL (Q12) and the on-quit recap (Q13).
+process.stdout.write('\n8. remaining QoL (Q7, Q10, Q12, Q13)\n');
+try {
+  const { eachChallenge } = await import('../src/core/targets.js');
+  const { curriculum } = await import('../src/content/index.js');
+  const { formatDuration } = await import('../src/core/checkNotes.js');
+  const { Settings } = await import('../src/ui/settings.js');
+  const { settingsRows } = await import('../src/views/settings.js');
+  const renderChallenge = (await import('../src/views/challenge.js')).default;
+  const renderPalette = (await import('../src/views/palette.js')).default;
+
+  const dir = path.join(ROOT, '.data', 'check-qol8');
+  fs.rmSync(dir, { recursive: true, force: true });
+  const q8store = new Store(path.join(dir, 'progress.json'));
+  const q8settings = new Settings(path.join(dir, 'settings.json'));
+  q8settings.data.sound = 'off';
+  const q8 = new App({ theme: pickTheme(), store: q8store, settings: q8settings });
+  q8.w = 120;
+  q8.h = 34;
+  q8.screen.out = { write() {} };
+  q8.goHome();
+
+  // A single-file markup challenge, chosen by shape rather than by position so
+  // a curriculum reshuffle cannot silently change what this section tests.
+  const entry = eachChallenge(curriculum).find((e) => (e.challenge.lang || 'js') === 'html' && !e.challenge.files);
+  if (!entry) throw new Error('no single-file html challenge in the curriculum');
+  q8.openChallenge(entry.moduleIndex, entry.lessonIndex, entry.challengeIndex);
+  const q8ed = q8.getActiveEditor();
+
+  // Q10: a check run never rewrites the buffer; it only suggests formatting.
+  q8ed.lines = ['<section><h1>hi</h1></section>'];
+  q8ed.row = 0;
+  q8ed.col = 0;
+  const beforeRun = q8ed.lines.join('\n');
+  await q8.checkChallenge();
+  const run = q8.state.results;
+  if (!q8.state.formatHint) fail('Q10: an unformatted buffer produced no format hint');
+  else if (q8ed.lines.join('\n') !== beforeRun) fail('Q10: the check run rewrote the buffer');
+  else process.stdout.write('   ok  Q10 checking suggests formatting without touching the buffer\n');
+
+  // Q7: the run is timed and annotated, and the duration reaches the panel.
+  if (!Number.isFinite(run.durationMs) || run.durationMs < 0) fail(`Q7: no run duration (${run.durationMs})`);
+  else if (!Array.isArray(run.notes)) fail('Q7: the run carries no micro-notes array');
+  else {
+    const frameText = (rows) => rows.map((r) => r.map((s) => (s && s.text) || '').join('')).join('\n');
+    q8.state.briefScroll = 9999; // show the tail of the brief, where CHECKS lives
+    const text = frameText(renderChallenge(q8, 120, 34));
+    const shown = formatDuration(run.durationMs);
+    if (shown && !text.includes(shown)) fail(`Q7: the results panel does not show the run duration (${shown})`);
+    else if (!text.includes('CHECKS')) fail('Q7: the results panel lost its CHECKS header');
+    else process.stdout.write(`   ok  Q7 run timed (${shown}) and annotated (${run.notes.length} micro-notes)\n`);
+  }
+
+  // Q10 (second half): formatting clears the hint and really normalises.
+  q8.formatEditor();
+  if (q8.state.formatHint) fail('Q10: the format hint survived a successful format');
+  else if (q8ed.lines.join('\n') === beforeRun) fail('Q10: Ctrl+F did not change an unformatted buffer');
+  else process.stdout.write('   ok  Q10 Ctrl+F formats markup (not just CSS) and clears the hint\n');
+
+  // Q12: the indent width setting is honoured by Tab and by auto-indent.
+  q8settings.data.editor.tabSize = 4;
+  q8.state.pane = 'both';
+  q8ed.lines = [''];
+  q8ed.row = 0;
+  q8ed.col = 0;
+  q8.onKey({ name: 'tab' });
+  if (q8ed.lines[0] !== '    ') fail(`Q12: tab size 4 produced ${JSON.stringify(q8ed.lines[0])}`);
+  else {
+    q8.onKey({ name: 'backspace' });
+    if (q8ed.lines[0] !== '') fail(`Q12: backspace did not remove the whole indent level (${JSON.stringify(q8ed.lines[0])})`);
+    else {
+      q8ed.lines = ['div {'];
+      q8ed.row = 0;
+      q8ed.col = 5;
+      q8.onKey({ name: 'enter' });
+      if (q8ed.lines[1] !== '    ') fail(`Q12: auto-indent used ${JSON.stringify(q8ed.lines[1])}, expected 4 spaces`);
+      else process.stdout.write('   ok  Q12 tab size 4 drives Tab, auto-indent and backspace\n');
+    }
+  }
+
+  // Q12: bracket matching (palette-only in the modeless editor).
+  q8ed.lines = ['div {', '  color: red;', '}'];
+  q8ed.row = 0;
+  q8ed.col = 5;
+  q8.jumpToMatchingBracket();
+  if (q8ed.row !== 2 || q8ed.col !== 0) fail(`Q12: bracket match landed at ${q8ed.row}:${q8ed.col}, expected 2:0`);
+  else {
+    q8ed.lines = ['div {'];
+    q8ed.row = 0;
+    q8ed.col = 5;
+    q8.jumpToMatchingBracket();
+    if (!/No matching/.test(q8.state.notice?.text || '')) fail('Q12: an unmatched bracket was not reported');
+    else process.stdout.write('   ok  Q12 bracket match jumps to the partner and reports an unmatched bracket\n');
+  }
+
+  // Q12: settings rows are addressed by key, and the cursor stays in range.
+  q8.push('settings');
+  const rows = settingsRows(q8);
+  const tabRow = rows.findIndex((r) => r.key === 'tabSize');
+  q8settings.data.editor.tabSize = 2;
+  q8.state.cursor = tabRow;
+  q8.onKey({ name: 'char', char: ' ' });
+  if (q8settings.data.editor.tabSize !== 4) fail(`Q12: Space on the tab-size row set ${q8settings.data.editor.tabSize}`);
+  else {
+    for (let i = 0; i < rows.length + 5; i += 1) q8.onKey({ name: 'down' });
+    if (q8.state.cursor !== rows.length - 1) fail(`Q12: the settings cursor reached ${q8.state.cursor}, expected ${rows.length - 1}`);
+    else process.stdout.write('   ok  Q12 settings toggles act on row keys and the cursor is clamped\n');
+  }
+  // Q12: an ignored key on a scroll screen gives visible feedback.
+  q8.pop();
+  q8.push('stats');
+  q8.onKey({ name: 'char', char: 'z' });
+  if (!/does nothing/.test(q8.state.notice?.text || '')) fail('Q12: an ignored key on a scroll screen gave no feedback');
+  else process.stdout.write('   ok  Q12 visible bell answers an ignored key\n');
+  q8.pop();
+
+  // Q13: the recap reflects the session and prints exactly once on quit.
+  await q8EdPass(q8, entry, q8ed);
+  const recap = q8.recapLines().join('\n');
+  if (!/passed/.test(recap)) fail(`Q13: the recap does not report the session pass (${JSON.stringify(recap)})`);
+  else if (!/failed checks/.test(recap)) fail('Q13: the recap dropped the failure count');
+  else if (!/next up/.test(recap)) fail('Q13: the recap omitted the next-up target');
+  else {
+    let printed = '';
+    q8.isTTY = true;
+    q8.printRecap({ write: (s) => { printed += s; } });
+    let twice = '';
+    q8.printRecap({ write: (s) => { twice += s; } });
+    if (!/Session recap/.test(printed)) fail('Q13: printRecap printed nothing');
+    else if (twice !== '') fail('Q13: the recap printed twice for one session');
+    else process.stdout.write('   ok  Q13 recap reports the session once, with next-up\n');
+  }
+
+  // Palette: the view renders the list the cursor selects from.
+  q8.goHome();
+  q8.push('palette');
+  const items = q8.getPaletteItems();
+  const firstAction = items.find((i) => i.type === 'command');
+  const paletteText = (() => {
+    const r = renderPalette(q8, 100, 30);
+    return r.map((row) => row.map((s) => (s && s.text) || '').join('')).join('\n');
+  })();
+  if (!firstAction) fail('palette: no palette-only action offered on home');
+  else if (items[0].id !== firstAction.id) fail('palette: actions are not listed first');
+  else if (!paletteText.includes(firstAction.label)) fail(`palette: the view does not render the row the cursor selects (${firstAction.label})`);
+  else process.stdout.write('   ok  palette view and command list agree (one source of truth)\n');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+} catch (err) {
+  fail(`remaining QoL: ${err && err.stack ? err.stack.split('\n')[0] : err}`);
 }
 
 process.stdout.write('\n');

@@ -77,13 +77,16 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 - Multi-line buffer model: line array + cursor; whole-document edit chokepoints for smart operations (`setTextAt`).
 - Typing aids: **auto-pairing** (brackets/quotes close themselves), **HTML auto-close tags** on `>`, **pair-backspace** (empty pair deleted both halves), **smart indent** on Enter (continues indentation; extra indent after `{`/`[`/`(`), **indent-step backspace**.
 - **Emmet** (VS Code-style): `Tab` expands markup abbreviations (`div.card*2>p` → nested elements, indent-aware, prose-safe, requires a structural operator); `;` completes CSS shorthand (`m10` → `margin: 10px;`).
-- **Formatter** (`Ctrl+F`): Prettier-style normaliser for html/css/js — 2-space indent, spacing normalisation, collapsed blank-line runs, `<pre>` preserved, no reflow; refuses (with a notice) rather than mangle broken code, and is idempotent.
+- **Formatter** (`Ctrl+F`): Prettier-style normaliser for html/css/js/json — spacing normalisation, collapsed blank-line runs, `<pre>` preserved, no reflow; CSS formats the enclosing rule, every other language the whole buffer; aborts (with a notice) rather than mangle broken code, and is idempotent. A check run never formats for you: it only notes that the formatter would rewrite the buffer (`Ctrl+F` to apply).
 - **Completions** (IDE-style popup): per-language triggers — `<` in HTML (tags + attributes), `:`/`@`/`-` in CSS (properties/values), JS keywords/APIs/snippets, Python keywords/builtins, SQL keywords, shell commands — plus words already in the buffer. Auto-opens on 2+ char prefixes or construct starters; `Ctrl+Space` forces; `↑↓` navigate, `Tab`/`Enter` accept, `Esc` dismiss.
 - **Syntax highlighting** for 10+ languages (js/ts/jsx, html, css, python, sql, sh, docker, yaml, json, md) with block-comment state carried across lines; code blocks get line-number gutters.
 - **Multi-file** (synthesis): file **tab strip**, per-file language detection, `Ctrl+Q`/`Ctrl+W` switch tabs; reset affects only the focused file; save writes every file; per-file cursor/scroll.
 - Navigation: arrows, Home/End, PgUp/PgDn (10-line pages), with viewport scrolling (`scrollTop`/`scrollX`).
 - **Soft wrap** (Settings → Wrap): long logical lines render across several screen rows, gutter numbers stay on the line's first row, and `↑`/`↓` move by screen row with the goal column preserved (`src/core/softwrap.js`).
+- **Tab size** (Settings → Tab size, cycles 2/4/8): drives `Tab`, auto-indent on Enter and indent-step backspace (`tests/unit/editor.test.js`).
+- **Visible bell**: a key a screen does not use answers with a one-line notice instead of redrawing an identical frame.
 - **Jump to a failing line** (`Ctrl+J`): when a failed check carries a line range the results pane shows `→ line N` and the key puts the caret there and reveals the editor.
+- **Bracket match** (`editor.bracketMatch`, palette): put the caret on (or right after) `(`/`[`/`{` and jump to its partner — strings and comments are masked first, and an unmatched bracket is reported instead of guessed. Palette-only in the modeless editor so `width: 50%` keeps typing a percent sign; `%` arrives with the vim engine.
 
 ## 5. The challenge workflow
 
@@ -99,6 +102,7 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 | `Ctrl+E` | Open the file in `$EDITOR`/`VISUAL` | Terminal released (alt screen off) and restored; file reloaded into the buffer |
 | `Ctrl+F` | **Format** the focused buffer | Prettier-style; never reflows; aborts on broken code (see §4) |
 | `Ctrl+J` | Jump to the line of a failed check | Only when the check carries a line range |
+| `Ctrl+F` | Format the focused buffer (or the enclosing CSS rule) | Suggest-only: checks note unformatted code, they never rewrite it |
 | `Ctrl+T` | Toggle console output panel | Shows captured logs |
 | `Tab` | Pane toggle on narrow terminals | brief ↔ code |
 
@@ -112,6 +116,10 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 **Checkpoints (Q9):** before every `Ctrl+S` run the pre-check buffers are written to a per-challenge sidecar (`.data/history/<lesson>.<challenge>.json`) — every tab byte-exact. Retention: the 10 most recent runs plus the **first passing state of each day** (★, never evicted; snapshots older than 30 days drop). Restoring never touches attempts, streaks or `lastCode`, and files the challenge no longer has are reported rather than invented.
 
 **List endpoints (Q3):** `g`/`G` jump to the first/last row on the home, module and projects lists, and `g` returns to the top of a scrolled lesson/stats/help view.
+
+**Results panel (Q7):** the header shows `passed/total` plus how long the run took (sandbox spawns dominate), followed by mentor-style micro-notes derived from the run: a thrown exception first, identifiers a failing message names that are missing from the buffer (a `class="card"` satisfies a check about `.card`), an untouched starter, and an honesty note when hints or the solution were used (`src/core/checkNotes.js`).
+
+**Session recap (Q13):** quitting (`q`/`Ctrl+C`) prints, after the alt screen is gone, the time spent this session, challenges passed (with overall progress), failed checks, the streak with today's goal, and the next-up challenge (`src/core/recap.js`). It prints once, only on a TTY, and an idle session gets a single friendly line.
 
 ## 6. The embedded browser (dev tools)
 
@@ -145,7 +153,7 @@ Follow mode: element selection follows the caret position in markup challenges (
 ## 9. Quality tooling
 
 - `npm run check` / `test` (`tools/check.js`): curriculum deep-validation (shape, langs, check/solution presence, starter-fails-for-debug) + headless render smoke of screens + reference-solution verification (every check passes) + a battery of editor/sandbox unit checks (auto-pairing, completions, grader semantics).
-- `npm run test:unit` — the `node:test` suites (`tests/unit/`, incl. `tests/unit/history.test.js` for the checkpoint model and the pure nav/target helpers).
+- `npm run test:unit` — the `node:test` suites (`tests/unit/`: checkpoints, the pure nav/target helpers, and the newer pure modules — `checkNotes`, `recap`, `brackets`, the editor model, soft wrap).
 - `.github/workflows/ci.yml` — build + `test:unit` + `check` on every push and PR (Node 22).
 - `npm run verify` — the reference-solution + buggy-starter assertions across all 12 modules (Python reference checks run live when `python3` is available, and are skipped gracefully when it is not).
 - `FULLSTACK_UI=next` pipeline: esbuild bundle (Node 20 target), capability detection, tier-mapped themes, alt-screen wrapper, Ctrl+C lifecycle — verified on a real pty (`tools/repro-e4.sh`).
@@ -153,5 +161,5 @@ Follow mode: element selection follows the caret position in markup challenges (
 ## 10. Planned (spec'd, not yet built)
 
 Overhaul (`tui-overhaul-spec.md`): Ink 6 rewrite in 5 phases, vim-first editor (undo/selection/search/multi-cursor/snippets/signature help), mouse everywhere, Nerd-Font visual system with degrade tiers, 5 themes, command registry + rebindable keymap, welcome tour, resizable panes, network tab + click-to-inspect + live re-render, perf budget, replay/snapshot test suites.
-Errors & QoL (`errors-and-qol-spec.md`): suggest-only format note (`Ctrl+F` formats on demand today), on-quit recap (Q13), richer check output (Q7), small editor QoL (Q12: `%` bracket jump, tab-size setting, visible bell), and reproducing the QoL set on the Ink UI at cut-over.
+Errors & QoL (`errors-and-qol-spec.md`): the classic scope is complete (Q1–Q10, Q13, Q14 shipped with replays in `tools/check.js` §6/§8); what remains is reproducing that QoL set on the Ink UI at cut-over, plus Q12's `%` binding, which needs the Phase 2 vim engine.
 Next UI (`FULLSTACK_UI=next`): the remaining screen ports, the palette screen + welcome tour, and the Phase 2 editor (vim, undo, selection, search, multi-cursor, snippets).

@@ -151,6 +151,11 @@ export class Store {
     return !!(this.data.challenges[id] && this.data.challenges[id].passed);
   }
 
+  /** Challenges passed today (local day) — the day-goal counter. */
+  passedToday() {
+    return this.data.days[today()]?.challenges || 0;
+  }
+
   recordAttempt(id, code, passed) {
     const day = today();
     const rec = this.challengeRecord(id);

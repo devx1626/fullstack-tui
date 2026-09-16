@@ -51,6 +51,18 @@ export function offsetOf(ed) {
 }
 
 /**
+ * Inverse of offsetOf: an absolute offset → `{ row, col }`, clamped to the
+ * document. Used by features that think in text offsets (bracket matching,
+ * formatter results) but must move a row/column caret.
+ */
+export function rowColOf(ed, offset) {
+  const text = editorText(ed);
+  const pos = Math.max(0, Math.min(Number(offset) || 0, text.length));
+  const before = text.slice(0, pos);
+  return { row: (before.match(/\n/g) || []).length, col: pos - (before.lastIndexOf('\n') + 1) };
+}
+
+/**
  * Replace the whole document while leaving the caret at `offset`.
  *
  * "Smart" edits (auto-paired brackets, auto-closed tags, accepting a
@@ -90,13 +102,13 @@ export function insertText(ed, text) {
   }
 }
 
-export function insertNewline(ed) {
+export function insertNewline(ed, indentSize = 2) {
   const line = ed.lines[ed.row];
   const before = line.slice(0, ed.col);
   const after = line.slice(ed.col);
   const indentMatch = before.match(/^[ \t]*/);
   let indent = indentMatch ? indentMatch[0] : '';
-  if (/[{[(]\s*$/.test(before)) indent += '  ';
+  if (/[{[(]\s*$/.test(before)) indent += ' '.repeat(Math.max(1, indentSize));
   ed.lines.splice(ed.row, 1, before, indent + after);
   ed.row += 1;
   ed.col = indent.length;
@@ -104,14 +116,15 @@ export function insertNewline(ed) {
   clamp(ed);
 }
 
-export function backspace(ed) {
+export function backspace(ed, indentSize = 2) {
   ed.goalCol = null;
   if (ed.col > 0) {
     const line = ed.lines[ed.row];
     // Delete a whole indent level when sitting on clean indentation.
+    const size = Math.max(1, indentSize);
     const head = line.slice(0, ed.col);
     const spaces = head.match(/ +$/);
-    const step = spaces && spaces[0].length % 2 === 0 && spaces[0].length > 1 ? 2 : 1;
+    const step = spaces && size > 1 && spaces[0].length % size === 0 && spaces[0].length > 1 ? size : 1;
     ed.lines[ed.row] = line.slice(0, ed.col - step) + line.slice(ed.col);
     ed.col -= step;
   } else if (ed.row > 0) {
