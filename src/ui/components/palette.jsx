@@ -17,6 +17,18 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { filterCommands, clampSelected } from '../fuzzy.js';
 
+/**
+ * Recents-first ordering + fuzzy filter. Exported so the owner of `selected`
+ * (the CommandHost) computes the SAME list this component renders — otherwise
+ * the highlighted row and the executed row can disagree.
+ */
+export function paletteMatches(commands = [], recents = [], query = '') {
+  const ordered = query
+    ? commands
+    : [...recents, ...commands.filter((c) => !recents.some((r) => r.id === c.id))];
+  return filterCommands(ordered, query);
+}
+
 export function Palette({
   title = 'Palette',
   query = '',
@@ -30,10 +42,7 @@ export function Palette({
   onCancel, // () => void
 }) {
   // Recents float to the top on an empty query (QoL: palette-first navigation).
-  const ordered = query
-    ? commands
-    : [...recents, ...commands.filter((c) => !recents.some((r) => r.id === c.id))];
-  const matches = filterCommands(ordered, query);
+  const matches = paletteMatches(commands, recents, query);
   const sel = clampSelected(selected, matches.length);
 
   return (

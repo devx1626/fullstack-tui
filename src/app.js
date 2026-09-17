@@ -431,10 +431,12 @@ export class App {
   // -- input ----------------------------------------------------------------
 
   onKey(key) {
-    if (key.name === 'ctrl-p') {
-      // Inside a challenge Ctrl+P is the documented preview key; everywhere
-      // else it opens the command palette.
-      if (this.current.name === 'challenge') {
+    // Ctrl+P: inside a challenge it is the documented preview key, everywhere
+    // else it opens the command palette. Ctrl+K opens the palette from ANY
+    // screen — the next UI's registry binding (`app.palette`), accepted here so
+    // the shared help text (core/help.js) is true in both UIs.
+    if (key.name === 'ctrl-p' || key.name === 'ctrl-k') {
+      if (key.name === 'ctrl-p' && this.current.name === 'challenge') {
         this.challengeKey(key);
         return;
       }

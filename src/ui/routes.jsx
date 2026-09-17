@@ -17,6 +17,10 @@ import { findChallenge, firstUnpassedIn } from '../core/targets.js';
 import { HomeScreen } from './screens/home.jsx';
 import { ModuleScreen } from './screens/module.jsx';
 import { ChallengeScreen } from './screens/challenge.jsx';
+import { HelpScreen } from './screens/help.jsx';
+import { ResourcesScreen } from './screens/resources.jsx';
+import { WorkspaceScreen } from './screens/workspace.jsx';
+import { StatsScreen } from './screens/stats.jsx';
 
 /** Solution → displayable text (string challenges or a files map). */
 function solutionText(challenge) {
@@ -239,6 +243,87 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       status={status}
       busy={busy}
       results={results}
+      onCommand={onCommand}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Read-only scroll screens (Phase 1): help, resources, workspace, stats
+// ---------------------------------------------------------------------------
+
+/**
+ * Scroll cursor for the read-only screens: nav.* moves the top visible row.
+ * `count` is deliberately huge — `clampScroll` knows the real line count at
+ * render time, so `G` lands on the last page either way and the route never
+ * has to measure content.
+ */
+const SCROLL_COUNT = 1e6;
+
+function useScrollCommand() {
+  const host = useHost();
+  const [cursor, setCursor] = useState(0);
+  const onCommand = useCallback((id) => {
+    const next = nextIndex(cursor, id, SCROLL_COUNT);
+    if (next !== null) {
+      setCursor(next);
+      return;
+    }
+    host.run(id);
+  }, [cursor, host]);
+  return [cursor, onCommand];
+}
+
+export function HelpRoute() {
+  const host = useHost();
+  const [cursor, onCommand] = useScrollCommand();
+  return <HelpScreen cursor={cursor} width={host.width} height={host.height} onCommand={onCommand} />;
+}
+
+export function ResourcesRoute() {
+  const host = useHost();
+  const services = useServices();
+  const [cursor, onCommand] = useScrollCommand();
+  return (
+    <ResourcesScreen
+      curriculum={(services && services.curriculum) || []}
+      overall={(services && services.overall) || {}}
+      cursor={cursor}
+      width={host.width}
+      height={host.height}
+      onCommand={onCommand}
+    />
+  );
+}
+
+export function WorkspaceRoute({ files, root }) {
+  const host = useHost();
+  const [cursor, onCommand] = useScrollCommand();
+  return (
+    <WorkspaceScreen
+      files={files}
+      root={root}
+      cursor={cursor}
+      width={host.width}
+      height={host.height}
+      onCommand={onCommand}
+    />
+  );
+}
+
+export function StatsRoute() {
+  const host = useHost();
+  const services = useServices();
+  const [cursor, onCommand] = useScrollCommand();
+  const stats = services && services.store ? services.store.stats(services.curriculum) : {};
+  return (
+    <StatsScreen
+      stats={stats}
+      overall={(services && services.overall) || {}}
+      store={services && services.store}
+      curriculum={(services && services.curriculum) || []}
+      cursor={cursor}
+      height={host.height}
       onCommand={onCommand}
     />
   );

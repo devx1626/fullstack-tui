@@ -61,7 +61,10 @@ export const COMMANDS = [
   { id: 'app.back', title: 'Go back', screen: null, keys: { default: ['<Esc>'] }, run: 'pop' },
   { id: 'app.help', title: 'Help manual', screen: null, keys: { default: ['?'] }, run: "push('help')" },
   { id: 'app.repaint', title: 'Repaint screen', screen: null, keys: { default: ['<C-l>'] }, run: 'repaint' },
-  { id: 'app.palette', title: 'Command palette', screen: null, keys: { default: ['<C-p>'] }, run: 'palette' },
+  // Palette moved to Ctrl+K in Phase 1 (overhaul §10.4): Ctrl+P is reserved for
+  // the preview binding on screens that have one, and the old shared binding
+  // made the palette shadow `challenge.preview` in the next UI's resolver.
+  { id: 'app.palette', title: 'Command palette', screen: null, keys: { default: ['<C-k>'] }, run: 'palette' },
 
   // Navigation & home
   { id: 'nav.up', title: 'Move up', screen: null, keys: { default: ['<up>', 'k'] }, run: 'nav.up' },
@@ -212,8 +215,6 @@ export function findConflicts(keymapLike = mergeKeymap()) {
  * Keys are `<mods+key>:<id1>|<id2>` with ids in alphabetical order.
  */
 const ALLOWED_CONFLICTS = new Set([
-  // <C-p>: palette (global) vs preview (challenge) — "mode wins" (overhaul §10.3).
-  'C+p:app.palette|challenge.preview',
   // <C-b>: browser open (challenge) vs close (browser) — different screens.
   'C+b:browser.close|challenge.browser',
 ]);

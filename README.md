@@ -41,7 +41,8 @@ npm run ui:next    # experimental Ink-based UI (FULLSTACK_UI=next)
 | `j` / `k`, arrows | Move · `Enter` open · `Esc` back |
 | `Ctrl+S` | Check my code (challenge screen) |
 | `Ctrl+H` | Reveal a hint |
-| `Ctrl+P` | Preview in browser / command palette |
+| `Ctrl+P` | Preview in browser (classic: also the palette off-challenge) |
+| `Ctrl+K` | Command palette (next UI; classic accepts it too) |
 | `?` | Help manual · `q` or `Ctrl+C` quit |
 
 ## Requirements
@@ -94,9 +95,10 @@ recover to defaults if corrupt.
 The classic UI is the stable, default experience. The Ink-based UI
 (`npm run ui:next`) is under active development — Phase 0 (shell, input
 pipeline, router) is complete and Phase 1 is in progress: the dashboard,
-module and challenge routes are interactive, while the remaining screen ports
-(lesson, projects, stats, help, resources, workspace, settings), the command
-palette and the welcome tour are still landing. See `tui-overhaul-spec.md` and
+module and challenge routes are interactive, the help, resources, workspace
+and progress screens are ported, and the command palette runs on `Ctrl+K`.
+Still landing: the lesson, projects and settings screens, split-pane
+persistence and the welcome tour. See `tui-overhaul-spec.md` and
 `errors-and-qol-spec.md` for the plan and progress tables.
 
 ## License

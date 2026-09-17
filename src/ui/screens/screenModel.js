@@ -6,6 +6,46 @@
  * unit tests and reused by the next-UI components.
  */
 
+/**
+ * Clamp a scroll offset so `total` rows fit a `height`-row window: the offset
+ * never exceeds `total - height` (and never goes negative). The read-only
+ * screens (help, resources, workspace, stats) share this one rule so their
+ * scroll behaviour is identical and unit-testable without a terminal.
+ */
+export function clampScroll(offset, total, height) {
+  const rows = Math.max(0, total | 0);
+  const view = Math.max(1, height | 0);
+  const max = Math.max(0, rows - view);
+  return Math.max(0, Math.min(offset | 0, max));
+}
+
+/**
+ * Hard-wrap one logical line to `width` cells at whitespace where possible.
+ * Words longer than the width are broken (like every editor's soft wrap).
+ * Used by the prose blocks the classic widgets rendered via `prose()`, so the
+ * Ink screens wrap text the same way at the same widths.
+ */
+export function wrapText(text, width, indent = '') {
+  const limit = Math.max(1, width | 0);
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    if (line && line.length + 1 + word.length > limit) {
+      lines.push(line);
+      line = '';
+    }
+    let rest = word;
+    while (rest.length > limit) {
+      lines.push(rest.slice(0, limit));
+      rest = rest.slice(limit);
+    }
+    line = line ? `${line} ${rest}` : rest;
+  }
+  if (line) lines.push(line);
+  return (lines.length ? lines : ['']).map((l) => `${indent}${l}`);
+}
+
 /** Text progress meter cells shared by home and module rows. */
 export function meterCells(done, total, width = 14) {
   const filled = total > 0 ? Math.round((Math.min(done, total) / total) * width) : 0;

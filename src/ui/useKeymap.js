@@ -18,7 +18,7 @@ import { resolveKey } from './commands.js';
 import { effectiveKeymap } from './keymap.js';
 
 /** The one focused-screen route (module-level: one app per process). */
-const route = { screen: null, onKey: null, onMouse: null, onPaste: null };
+const route = { screen: null, onKey: null, onCommand: null, onMouse: null, onPaste: null };
 
 export function getCurrentRoute() {
   return route;
@@ -31,8 +31,22 @@ export function setCurrentRoute(next) {
 export function clearRoute() {
   route.screen = null;
   route.onKey = null;
+  route.onCommand = null;
   route.onMouse = null;
   route.onPaste = null;
+}
+
+/**
+ * Run one command id on the focused screen — how the palette dispatches.
+ *
+ * The screen's own handler decides what an id means, so a palette entry
+ * behaves exactly like pressing the key (including ids only that screen
+ * implements, e.g. `challenge.check`). Returns false when nothing is focused.
+ */
+export function dispatchToScreen(id, ev = { type: 'command', source: 'palette' }) {
+  if (typeof route.onCommand !== 'function') return false;
+  route.onCommand(id, ev);
+  return true;
 }
 
 /**
@@ -62,6 +76,14 @@ export function useKeymap(screen, onCommand, { enabled = true, keymap } = {}) {
     const map = keymap ?? effectiveKeymap();
     setCurrentRoute({
       screen,
+      // Same handler, addressed by command id: the palette cannot synthesize
+      // a key event, so screens are reachable both ways.
+      onCommand: (id, ev) => {
+        const handler = handlerRef.current;
+        if (typeof handler !== 'function') return false;
+        handler(id, ev);
+        return true;
+      },
       onKey: (ev) => {
         const handler = handlerRef.current;
         if (typeof handler !== 'function') return false;

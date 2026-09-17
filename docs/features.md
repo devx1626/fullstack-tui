@@ -15,7 +15,9 @@
 - **Shell:** `AppRoot` = ThemeProvider → RouterProvider (push/pop/replace/reset stack) → ScreenFrame with window-size tracking; alt-screen on TTY, one-shot static render when piped.
 - **Commands:** registry of 49 ids with `.data/keymap.json` user overrides (unknown ids/bad bindings reported, never fatal); `useKeymap(screen, onCommand)` resolves keys to command ids — components never handle raw keys, and `CommandHost` (`src/ui/host.jsx`) owns the per-screen cursor plus the global command table.
 - **Components:** Header/TabBar, Footer, Panel, List, ScrollPane, Badge, Meter, SplitPane (drag-ready, clamp math shared with keyboard nudge), command Palette with fuzzy filter + recents-first ordering.
-- **Screens ported:** dashboard, module and challenge routes are real (`src/ui/routes.jsx`: `j/k/g/G`, Enter opens, Esc pops, Ctrl+S runs the real grader, Ctrl+H/Ctrl+G hint + solution, record-backed buffer/reset) on top of the challenge slice (SplitPane brief|editor, registry commands, vim cursor). The lesson, projects, stats, help, resources, workspace and settings ports, the command palette screen and the welcome tour follow (named in `UNPORTED_SCREENS`).
+- **Screens ported:** dashboard, module and challenge routes are real (`src/ui/routes.jsx`: `j/k/g/G`, Enter opens, Esc pops, Ctrl+S runs the real grader, Ctrl+H/Ctrl+G hint + solution, record-backed buffer/reset) plus the read-only scroll screens **Help** (`?`), **Resources**, **Workspace** and **Progress** (`j/k` scroll, `g`/`G` ends). Help renders `src/core/help.js`, the same content the classic view lays out.
+- **Command palette (`Ctrl+K`):** hosted by `CommandHost` as an overlay, not a router screen — pushing it would unmount the screen underneath and lose its cursor state and command handler. It lists every registry command available on the current screen plus "Go to" targets (screens, modules, lessons), fuzzy-filters with recents-first ordering, and runs a pick by command id through `dispatchToScreen` (so a screen-scoped command like `challenge.check` behaves exactly like its key). `screenTargets.js` is the list of ported screens the palette offers; the classic UI also accepts `Ctrl+K` now, so the shared help text is true in both.
+- **Still to port:** the lesson, projects and settings screens, resizable-split persistence (1.2) and the welcome tour (1.6) — named in `UNPORTED_SCREENS`.
 
 ---
 
@@ -98,7 +100,7 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 | `Ctrl+H` | Reveal next hint | Ordered; usage recorded per challenge |
 | `Ctrl+G` | Show/hide worked solution | Scrollable; `y` copies it into the editor; second `Ctrl+G` toggles a **diff view** (current vs solution, line-aligned, bad/good colored) |
 | `Ctrl+B` | Open the embedded browser | See §6 |
-| `Ctrl+P` | Preview — write `.preview.html` and open in the real browser | Uses the same parts-assembly as the embedded browser; **off-challenge it opens the command palette** |
+| `Ctrl+P` | Preview — write `.preview.html` and open in the real browser | Uses the same parts-assembly as the embedded browser; **off-challenge it opens the palette** (the next UI binds the palette to `Ctrl+K`; the classic app accepts both) |
 | `Ctrl+O` | Save artifact to `.workspace/` | Multi-file: whole folder |
 | `Ctrl+E` | Open the file in `$EDITOR`/`VISUAL` | Terminal released (alt screen off) and restored; file reloaded into the buffer |
 | `Ctrl+F` | **Format** the focused buffer (or the enclosing CSS rule) | Prettier-style; never reflows; aborts on broken code (see §4). Suggest-only: checks note unformatted code, they never rewrite it |

@@ -7,25 +7,36 @@
  * from node_modules in a test file while rendering bundled components mixes
  * two React copies and crashes with the useContext null-dispatcher error.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { render, useInput, useApp } from 'ink';
 import { useKeymap, getCurrentRoute, setCurrentRoute, clearRoute } from './useKeymap.js';
 
-export { render, useInput, useApp, useState, useKeymap, getCurrentRoute, setCurrentRoute, clearRoute };
+export { render, useInput, useApp, useState, useEffect, useRef, useKeymap, getCurrentRoute, setCurrentRoute, clearRoute };
+export { dispatchToScreen } from './useKeymap.js';
+export { SCREEN_TARGETS } from './screenTargets.js';
+export { openOverlay, closeOverlay, clearOverlays, hasOverlays, routeToOverlays, _resetOverlays } from './input/overlayStack.js';
 export { Header, Panel, List, ScrollPane, Footer, Badge, Meter } from './components/chrome.jsx';
-export { Palette } from './components/palette.jsx';
+export { Palette, paletteMatches } from './components/palette.jsx';
 export { SplitPane } from './components/splitPane.jsx';
 export { Modal, Toast } from './components/overlays.jsx';
 export { RouterProvider, RouterView, useRouter } from './router.jsx';
 export { AppRoot } from './AppRoot.jsx';
 export { CommandHost, useHost, dispatchGlobal, setGlobalCommandSink, getGlobalCommandSink } from './host.jsx';
-export { HomeRoute, ModuleRoute, ChallengeRoute } from './routes.jsx';
+export {
+  HomeRoute, ModuleRoute, ChallengeRoute,
+  HelpRoute, ResourcesRoute, WorkspaceRoute, StatsRoute,
+} from './routes.jsx';
 export { ServicesProvider, createServices, useServices } from './services.jsx';
 export { nextIndex, isListMove } from './nav.js';
 export { ChallengeScreen } from './screens/challenge.jsx';
 export { HomeScreen } from './screens/home.jsx';
 export { ModuleScreen } from './screens/module.jsx';
-export { homeViewModel, moduleViewModel, meterCells } from './screens/screenModel.js';
+export { homeViewModel, moduleViewModel, meterCells, clampScroll, wrapText } from './screens/screenModel.js';
+export { HelpScreen, helpLines } from './screens/help.jsx';
+export { ResourcesScreen, resourcesLines } from './screens/resources.jsx';
+export { WorkspaceScreen, workspaceLines } from './screens/workspace.jsx';
+export { StatsScreen, statsLines, sparkline } from './screens/stats.jsx';
+export { PaletteScreen, buildPaletteItems, recentItems, paletteKey } from './screens/palette.jsx';
 export { cursorShape } from './multimedia.js';
 export { Text, Box } from 'ink';
 

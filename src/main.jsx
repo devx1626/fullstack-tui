@@ -17,7 +17,10 @@ import { getCurrentRoute } from './ui/useKeymap.js';
 import { AppRoot } from './ui/AppRoot.jsx';
 import { ServicesProvider, createServices } from './ui/services.jsx';
 import { dispatchGlobal } from './ui/host.jsx';
-import { HomeRoute, ModuleRoute, ChallengeRoute } from './ui/routes.jsx';
+import {
+  HomeRoute, ModuleRoute, ChallengeRoute,
+  HelpRoute, ResourcesRoute, WorkspaceRoute, StatsRoute,
+} from './ui/routes.jsx';
 import { Store } from './core/store.js';
 import { Settings } from './ui/settings.js';
 import { buildRecap } from './core/recap.js';
@@ -33,6 +36,10 @@ const SCREENS = {
   home: HomeRoute,
   module: ModuleRoute,
   challenge: ChallengeRoute,
+  help: HelpRoute,
+  resources: ResourcesRoute,
+  workspace: WorkspaceRoute,
+  stats: StatsRoute,
 };
 
 function ChromeFrame({ theme, tier, input }) {

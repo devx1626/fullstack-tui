@@ -16,7 +16,7 @@ shows where a binding applies (`any` = global).
 | `app.back` | `<Esc>` | any | Go back |
 | `app.help` | `?` | any | Help manual |
 | `app.repaint` | `<C-l>` | any | Repaint screen |
-| `app.palette` | `<C-p>` | any | Command palette |
+| `app.palette` | `<C-k>` | any | Command palette |
 
 ## Navigation
 
