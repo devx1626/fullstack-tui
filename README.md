@@ -101,8 +101,11 @@ screen of the phase is ported (dashboard, module, lesson, projects, challenge,
 help, resources, workspace, progress, settings), the command palette runs on
 `Ctrl+K`, a first launch opens on the welcome tour, and split panes remember
 their width per screen (drag the divider, or `<C-left>`/`<C-right>`). Next up is
-Phase 2, the editor itself. See `tui-overhaul-spec.md` and
-`errors-and-qol-spec.md` for the plan and progress tables.
+Phase 2, the editor itself — `src/editor/` now has its document model (one
+`applyEdit` chokepoint), undo/redo history and a wcwidth-style width helper,
+with the vim state machine and the `CodeEditor` to come. See
+`tui-overhaul-spec.md` and `errors-and-qol-spec.md` for the plan and progress
+tables.
 
 ## License
 
