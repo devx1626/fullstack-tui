@@ -320,7 +320,16 @@ export function commentChanges(doc, rangeLike, lineComment = '//') {
   });
 }
 
-/** Row indexes a range or selection touches. */
+/**
+ * Row indexes a range or selection touches.
+ *
+ * A range that ends at column 0 of a later row includes that row: a selection
+ * running from mid-line to the start of the next line covers that line's
+ * newline, which is vim's line-span convention (and what `V`/`dj` produce).
+ * Line-oriented operations that must NOT include the boundary row (a linewise
+ * operator applied to whole lines) trim their range first — see
+ * `linewiseRows` in `vim/operators.js`.
+ */
 export function rowsOfRange(doc, rangeLike) {
   const r = rangeLike && rangeLike.start && rangeLike.end ? rangeLike : selRange(rangeLike);
   if (!r) return [];

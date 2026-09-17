@@ -748,14 +748,56 @@ try {
     else process.stdout.write(`   ok  ${screen}: ${key.char || key.name} → ${got}\n`);
   }
 
-  // The published keymap reference must match the registry (task 1.8):
-  // docs/keymap.md is generated, so any hand edit or binding change that is
-  // not regenerated fails the gate instead of shipping stale docs.
-  const { renderKeymapDocs } = await import('./gen-keymap-docs.js');
-  const docsPath = path.join(ROOT, 'docs', 'keymap.md');
-  const currentDocs = fs.existsSync(docsPath) ? fs.readFileSync(docsPath, 'utf8') : '';
-  if (currentDocs !== renderKeymapDocs()) fail('docs/keymap.md is stale — run: npm run keymap:docs');
-  else process.stdout.write('   ok  docs/keymap.md matches the registry\n');
+  // The published references must match their sources (task 1.8): docs/keymap.md
+  // is generated from the command registry and docs/vim.md from VIM_BINDINGS, so
+  // any hand edit or binding change that is not regenerated fails the gate
+  // instead of shipping stale docs.
+  const { renderKeymapDocs, renderVimDocs } = await import('./gen-keymap-docs.js');
+  for (const [rel, render] of [['docs/keymap.md', renderKeymapDocs], ['docs/vim.md', renderVimDocs]]) {
+    const file = path.join(ROOT, rel);
+    const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    if (current !== render()) fail(`${rel} is stale — run: npm run keymap:docs`);
+    else process.stdout.write(`   ok  ${rel} matches its source table\n`);
+  }
+
+  // Task 2.11: every vim binding in Appendix B.5 must actually resolve. The
+  // table drives the docs, so a binding that quietly stops being consumed would
+  // otherwise ship as documented-but-dead (the pane-nudge keys already did that
+  // once — see the notes in `src/ui/input/index.js`).
+  const { VIM_BINDINGS, VIM_MODES, createVimState, reduceKey } = await import('../src/editor/vim.js');
+  const { docFromText } = await import('../src/editor/document.js');
+  const { createRegisters } = await import('../src/editor/registers.js');
+  const vimDocs = {
+    normal: docFromText('foo bar\n(baz)\nif (x) {\nqux', { caret: { row: 0, col: 0 } }),
+    insert: docFromText('foo', { caret: { row: 0, col: 1 } }),
+    visual: docFromText('foo bar', { caret: { row: 0, col: 0 } }),
+  };
+  let deadBindings = 0;
+  for (const binding of VIM_BINDINGS) {
+    const entry = binding.mode === 'normal' ? [] : [{ name: binding.mode === 'visual' ? 'char' : 'char', char: binding.mode === 'visual' ? 'v' : 'i' }];
+    let doc = vimDocs[binding.mode] || vimDocs.normal;
+    let state = createVimState({ mode: VIM_MODES.NORMAL });
+    let registers = createRegisters();
+    let consumed = true;
+    for (const key of [...entry, ...binding.keys]) {
+      // `dd`, `gg`, `cc`, `yy`, `gc` are two keystrokes, not one key name.
+      const strokes = /^[a-zA-Z]{2}$/.test(key) ? [...key] : [key];
+      for (const stroke of strokes) {
+        const r = reduceKey(state, stroke, { doc, registers, tabSize: 2, lineComment: '//' });
+        state = r.state;
+        doc = r.doc;
+        registers = r.registers;
+        consumed = consumed && r.consumed;
+      }
+    }
+    if (!consumed) {
+      deadBindings += 1;
+      fail(`vim binding ${binding.keys.join(' ')} (${binding.mode}) does not resolve`);
+    }
+  }
+  if (!deadBindings) {
+    process.stdout.write(`   ok  all ${VIM_BINDINGS.length} vim bindings resolve (docs/vim.md)\n`);
+  }
 } catch (err) {
   fail(`registry: ${err && err.message ? err.message : err}`);
 }
