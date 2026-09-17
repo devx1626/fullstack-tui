@@ -4,7 +4,7 @@
 `src/ui/commands.js` — do not edit by hand. `npm run check` fails when this
 file drifts from the registry; regenerate with `npm run keymap:docs`.*
 
-58 commands. User overrides live in `.data/keymap.json` and are
+67 commands. User overrides live in `.data/keymap.json` and are
 merged over these defaults; unknown ids are reported, never fatal. `Screen`
 shows where a binding applies (`any` = global).
 
@@ -17,6 +17,7 @@ shows where a binding applies (`any` = global).
 | `app.help` | `?` | any | Help manual |
 | `app.repaint` | `<C-l>` | any | Repaint screen |
 | `app.palette` | `<C-k>` | any | Command palette |
+| `app.tour` | — *(palette only)* | any | Replay welcome tour |
 
 ## Navigation
 

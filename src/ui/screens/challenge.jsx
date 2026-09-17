@@ -13,7 +13,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
-import { SplitPane } from '../components/splitPane.jsx';
+import { ResizableSplit } from '../components/ResizableSplit.jsx';
 import { clampSplit } from '../components/splitClamp.js';
 import { useKeymap } from '../useKeymap.js';
 import { cursorShape } from '../multimedia.js';
@@ -24,14 +24,20 @@ export function ChallengeScreen({
   code = '',
   mode = 'normal', // 'normal' | 'insert' — vim state arrives in Phase 2
   width = 80,
+  // Task 1.2: the route owns the pane ratio (persisted per screen, dragged with
+  // the mouse, nudged with the commands). Standalone renders fall back to the
+  // classic 0.42 split, so this screen still works without a host.
+  leftWidth: leftWidthProp,
+  dragging = false,
   status = null,
   busy = false,
   results = null, // Q7: { passed, results, durationMs, notes }
+  onMouse,
   onCommand,
   onModeChange,
 }) {
-  const [leftWidth, setLeftWidth] = useState(Math.round(width * 0.42));
   const [lastCommand, setLastCommand] = useState(null);
+  const leftWidth = leftWidthProp ?? Math.round(width * 0.42);
 
   // M0: block cursor in normal mode, bar in insert. Written straight to the
   // terminal (outside ink's frame); restored to the terminal default on unmount.
@@ -47,16 +53,19 @@ export function ChallengeScreen({
     onCommand?.(id);
   }, [mode, onCommand, onModeChange]);
 
-  useKeymap('challenge', handle);
+  // `onMouse` is how the drag on the pane divider reaches the route that owns
+  // the ratio (task 1.2); returning false leaves the event unclaimed.
+  useKeymap('challenge', handle, { onMouse });
 
   const clamped = clampSplit(width, leftWidth, 20, 24);
   const lines = code ? code.split('\n') : ['(empty buffer — the Phase 2 editor types here)'];
 
   return (
     <Box flexDirection="column">
-      <SplitPane
+      <ResizableSplit
         totalWidth={width}
         leftWidth={clamped}
+        dragging={dragging}
         left={(
           <Box flexDirection="column">
             <Text bold color="cyan"> {title || 'untitled challenge'}</Text>

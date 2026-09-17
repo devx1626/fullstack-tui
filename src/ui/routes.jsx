@@ -13,9 +13,13 @@ import { Text } from 'ink';
 import { useHost } from './host.jsx';
 import { useServices } from './services.jsx';
 import { useKeymap } from './useKeymap.js';
+import { useRouter } from './router.jsx';
+import { detectCapabilities } from './capabilities.js';
 import { nextIndex } from './nav.js';
 import { findChallenge, firstUnpassedIn } from '../core/targets.js';
 import { nextLesson } from '../content/index.js';
+import { preferenceRows, vimPreferenceRow, togglePreference } from './preferences.js';
+import { useResizableSplit } from './components/ResizableSplit.jsx';
 import { HomeScreen } from './screens/home.jsx';
 import { ModuleScreen } from './screens/module.jsx';
 import { ChallengeScreen } from './screens/challenge.jsx';
@@ -25,6 +29,8 @@ import { HelpScreen } from './screens/help.jsx';
 import { ResourcesScreen } from './screens/resources.jsx';
 import { WorkspaceScreen } from './screens/workspace.jsx';
 import { StatsScreen } from './screens/stats.jsx';
+import { SettingsScreen } from './screens/settings.jsx';
+import { TourScreen, tourSteps, tourReducer } from './screens/tour.jsx';
 
 /** Solution → displayable text (string challenges or a files map). */
 function solutionText(challenge) {
@@ -140,6 +146,19 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     );
   }, [challengeId, lessonId, moduleId, services]);
 
+  // Task 1.2: the ratio (not the column count) is remembered per screen, so a
+  // remembered layout survives a resize; drag and nudge both write it back.
+  const split = useResizableSplit({
+    screen: 'challenge',
+    pane: 'brief',
+    settings: services && services.settings,
+    totalWidth: host.width,
+    minLeft: 20,
+    minRight: 24,
+    fallbackRatio: 0.42,
+  });
+  const { widen, narrow, reset: resetPanes, onMouse } = split;
+
   const challengeKey = target ? `${target.lessonId}.${target.challengeId}` : null;
   const record = target ? services.store.challengeRecord(challengeKey) : null;
   const saved = record && typeof record.lastCode === 'string' ? record.lastCode : null;
@@ -221,6 +240,16 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         setStatus('Draft cleared — the starter is back (Ctrl+S re-checks it).');
         return;
       }
+      case 'view.paneWider':
+        widen();
+        return;
+      case 'view.paneNarrower':
+        narrow();
+        return;
+      case 'view.paneReset':
+        resetPanes();
+        host.say('Pane widths reset to the default split.', 'ok');
+        return;
       case 'editor.format': {
         // Suggest-only (Q10): never rewrite the buffer from a route.
         const { formatCode } = await import('../core/format.js');
@@ -235,7 +264,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       default:
         host.run(id);
     }
-  }, [busy, challengeKey, code, hintIndex, host, services, showSolution, target]);
+  }, [busy, challengeKey, code, hintIndex, host, narrow, resetPanes, services, showSolution, target, widen]);
 
   if (!target) return <Text color="red">unknown challenge: {challengeId || lessonId || moduleId}</Text>;
 
@@ -248,6 +277,9 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       status={status}
       busy={busy}
       results={results}
+      leftWidth={split.leftWidth}
+      dragging={split.dragging}
+      onMouse={onMouse}
       onCommand={onCommand}
     />
   );
@@ -463,6 +495,125 @@ export function StatsRoute() {
       curriculum={(services && services.curriculum) || []}
       cursor={cursor}
       height={host.height}
+      onCommand={onCommand}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Settings (Phase 1, task 1.4 — the last screen of the phase)
+// ---------------------------------------------------------------------------
+
+export function SettingsRoute() {
+  const host = useHost();
+  const services = useServices();
+  const settings = services && services.settings;
+  // The classic store is not reactive, and neither is the Settings instance, so
+  // a bump after a toggle re-derives the rows (the value column must show the
+  // new value immediately — the classic view re-renders the same way).
+  const [revision, setRevision] = useState(0);
+
+  const rows = useMemo(
+    () => [...preferenceRows({ settings }), vimPreferenceRow({ settings })],
+    [settings, revision], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const onCommand = useCallback((id) => {
+    const move = nextIndex(host.cursor, id, rows.length);
+    if (move !== null) {
+      host.setCursor(move);
+      return;
+    }
+    if (id === 'settings.toggle' || id === 'settings.vimToggle') {
+      const key = id === 'settings.vimToggle' ? 'vimMode' : (rows[host.cursor] && rows[host.cursor].key);
+      if (!key) return;
+      const { message, kind } = togglePreference(settings, key);
+      setRevision((v) => v + 1);
+      host.say(message, kind === 'good' ? 'ok' : 'warn');
+      return;
+    }
+    host.run(id);
+  }, [host, rows, settings]);
+
+  return (
+    <SettingsScreen
+      rows={rows}
+      cursor={host.cursor}
+      width={host.width}
+      height={host.height}
+      onCommand={onCommand}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Welcome tour (Phase 1, task 1.6)
+// ---------------------------------------------------------------------------
+
+export function TourRoute() {
+  const host = useHost();
+  const services = useServices();
+  const router = useRouter();
+  const settings = services && services.settings;
+  // The tier decides whether the mouse step is honest (spec §9: tiers C/D
+  // adjust the copy); detectCapabilities is a cached probe.
+  const steps = useMemo(() => tourSteps({ tier: detectCapabilities().tier }), []);
+  const [index, setIndex] = useState(0);
+
+  const editorPrefs = (settings && settings.data && settings.data.editor) || {};
+  const modeless = editorPrefs.vimMode === false;
+
+  /**
+   * Stamping `onboardedAt` is what gates the tour, so BOTH exits (finish and
+   * skip) go through here, and the stack is reset to the dashboard rather than
+   * popped: booting straight into the tour means there is nothing underneath it.
+   */
+  const finish = useCallback((why) => {
+    if (settings && settings.data) {
+      settings.data.onboardedAt = new Date().toISOString();
+      if (typeof settings.save === 'function') settings.save();
+    }
+    router.reset('home');
+    host.say(why === 'skip'
+      ? 'Tour skipped — replay it from the palette (Ctrl+K → Replay welcome tour).'
+      : 'Welcome aboard. Ctrl+K lists every command; ? opens the manual.', 'ok');
+  }, [host, router, settings]);
+
+  const onCommand = useCallback((id) => {
+    switch (id) {
+      case 'tour.next': {
+        const next = tourReducer({ index }, { type: 'next' }, steps.length);
+        if (next.done) finish('next');
+        else setIndex(next.index);
+        return;
+      }
+      case 'tour.modeless': {
+        togglePreference(settings, 'vimMode');
+        host.say(modeless
+          ? 'Back to vim keys — i to type, Esc to stop.'
+          : 'Simple keys on — no modes to learn (remembered).', 'ok');
+        return;
+      }
+      case 'tour.skip':
+      // Esc is the global `app.back`; on the tour that means skip (spec §9:
+      // "skippable at every step"), handled here rather than by a second binding.
+      case 'app.back':
+        finish('skip');
+        return;
+      default:
+        host.run(id);
+    }
+  }, [finish, host, index, modeless, settings, steps.length]);
+
+  const step = steps[Math.min(index, steps.length - 1)] || steps[0];
+  return (
+    <TourScreen
+      step={index}
+      total={steps.length}
+      title={step.title}
+      body={step.body}
+      sandbox={step.id === 'sandbox'}
+      modeless={modeless}
       onCommand={onCommand}
     />
   );

@@ -21,6 +21,7 @@ import {
   HomeRoute, ModuleRoute, ChallengeRoute,
   LessonRoute, ProjectsRoute,
   HelpRoute, ResourcesRoute, WorkspaceRoute, StatsRoute,
+  SettingsRoute, TourRoute,
 } from './ui/routes.jsx';
 import { Store } from './core/store.js';
 import { Settings } from './ui/settings.js';
@@ -43,6 +44,8 @@ const SCREENS = {
   resources: ResourcesRoute,
   workspace: WorkspaceRoute,
   stats: StatsRoute,
+  settings: SettingsRoute,
+  tour: TourRoute,
 };
 
 function ChromeFrame({ theme, tier, input }) {
@@ -51,9 +54,10 @@ function ChromeFrame({ theme, tier, input }) {
   return (
     <Box flexDirection="column">
       <Text color={theme.accent}>╭{line}╮</Text>
-      <Text color={theme.text}>  ◈ fullstack-tui — next UI (Phase 1)</Text>
+      <Text color={theme.text}>  ◈ fullstack-tui — next UI (Phase 1 complete)</Text>
       <Text color={theme.muted}>  theme: {theme.name} · tier: {tier}</Text>
-      <Text color={theme.muted}>  screens: home · module · challenge — classic UI is still the default</Text>
+      <Text color={theme.muted}>  every screen of the phase is ported; the Phase 2 editor is next</Text>
+      <Text color={theme.muted}>  run it on a real terminal for the interactive UI (classic stays the default)</Text>
       <Text color={theme.accent}>╰{line}╯</Text>
       <Text color={theme.faint}>  ctrl+c quit · input: {input}</Text>
     </Box>
@@ -83,9 +87,17 @@ export function main() {
 
   // Ctrl+C is ours (E4 fix): exitOnCtrlC would unmount Ink's tree but leave
   // our stdin hold alive, so the process lingered after ^C on a real TTY.
+  // Task 1.6: first launch opens on the welcome tour instead of the dashboard
+  // (`onboardedAt: null`); finishing or skipping stamps it and resets the stack
+  // to home. Everything else about the tour lives in routes.jsx TourRoute.
+  const onboarded = !!(settings.data && settings.data.onboardedAt);
   const { unmount } = render(      <AltScreen>
       <ServicesProvider services={services}>
-        <AppRoot screens={SCREENS} onQuit={() => quit()} />
+        <AppRoot
+          screens={SCREENS}
+          initial={onboarded ? { name: 'home', params: {} } : { name: 'tour', params: {} }}
+          onQuit={() => quit()}
+        />
       </ServicesProvider>
     </AltScreen>,
     { exitOnCtrlC: false, patchConsole: true },

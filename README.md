@@ -44,6 +44,8 @@ npm run ui:next    # experimental Ink-based UI (FULLSTACK_UI=next)
 | `Ctrl+P` | Preview in browser (classic: also the palette off-challenge) |
 | `Ctrl+K` | Command palette (next UI; classic accepts it too) |
 | `Alt+1..5` | Top-level tabs: Dashboard · Projects · Progress · Resources · Workspace (`Alt+h`/`Alt+l` cycle) |
+| `Ctrl+←` / `Ctrl+→` | Resize the challenge split (drag the divider, or `Ctrl+K` → reset) |
+| `s` | Settings, from the dashboard (`Space` toggles the focused row) |
 | `?` | Help manual · `q` or `Ctrl+C` quit |
 
 ## Requirements
@@ -94,13 +96,13 @@ recover to defaults if corrupt.
 ## Status
 
 The classic UI is the stable, default experience. The Ink-based UI
-(`npm run ui:next`) is under active development — Phase 0 (shell, input
-pipeline, router) is complete and Phase 1 is in progress: the dashboard,
-module, lesson, challenge and projects routes are interactive, the help,
-resources, workspace and progress screens are ported, and the command palette
-runs on `Ctrl+K`. Still landing: the settings screen, split-pane persistence
-and the welcome tour. See `tui-overhaul-spec.md` and `errors-and-qol-spec.md`
-for the plan and progress tables.
+(`npm run ui:next`) is under active development — **Phase 1 is complete**: every
+screen of the phase is ported (dashboard, module, lesson, projects, challenge,
+help, resources, workspace, progress, settings), the command palette runs on
+`Ctrl+K`, a first launch opens on the welcome tour, and split panes remember
+their width per screen (drag the divider, or `<C-left>`/`<C-right>`). Next up is
+Phase 2, the editor itself. See `tui-overhaul-spec.md` and
+`errors-and-qol-spec.md` for the plan and progress tables.
 
 ## License
 

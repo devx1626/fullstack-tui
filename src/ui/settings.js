@@ -8,6 +8,7 @@
  */import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { clampRatio } from './components/splitClamp.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SETTINGS_FILE = path.join(HERE, '..', '..', '.data', 'settings.json');
@@ -25,6 +26,10 @@ export function defaults() {
     milestonesSeen: [],
     bannerDismissedOn: null, // 'YYYY-MM-DD' when today's banner is dismissed
     palette: { recent: [] },
+    // Per-screen pane ratios (overhaul §7.4 / task 1.2):
+    //   { challenge: { brief: 0.42 }, browser: { render: 0.5 } }
+    // Ratios (0..1), not columns, so a remembered layout survives a resize.
+    panes: {},
   };
 }
 
@@ -37,6 +42,12 @@ export function merge(saved) {
   const out = { ...base, ...saved };
   for (const key of ['editor', 'goal', 'palette']) {
     out[key] = { ...base[key], ...(saved && saved[key]) };
+  }
+  // `panes` is a map of screen → { key: ratio }: merge per screen so a future
+  // screen's defaults are not wiped by an older settings file.
+  out.panes = { ...base.panes };
+  for (const [screen, panes] of Object.entries((saved && saved.panes) || {})) {
+    if (panes && typeof panes === 'object' && !Array.isArray(panes)) out.panes[screen] = { ...panes };
   }
   if (!Array.isArray(out.milestonesSeen)) out.milestonesSeen = [];
   return out;
@@ -111,6 +122,36 @@ export class Settings {
     const recent = this.data.palette.recent.filter((x) => x !== id);
     recent.unshift(id);
     this.data.palette.recent = recent.slice(0, 5);
+    this.save();
+  }
+
+  // -- pane ratios (overhaul §7.4, task 1.2) -------------------------------------
+  /**
+   * Remembered ratio for a screen's pane, clamped to sane bounds. Ratios are
+   * stored per screen (`panes.challenge.brief`) so one screen's layout never
+   * moves another's, and a hand-edited file can't push a pane off-screen.
+   */
+  paneRatio(screen, key, fallback) {
+    const pane = this.data.panes && this.data.panes[screen];
+    const saved = pane && Number(pane[key]);
+    return Number.isFinite(saved) ? clampRatio(saved) : clampRatio(fallback);
+  }
+
+  setPaneRatio(screen, key, ratio) {
+    // clampRatio never returns a non-finite value, so what is stored is always
+    // safe to lay out with.
+    const clamped = clampRatio(ratio);
+    this.data.panes = this.data.panes || {};
+    this.data.panes[screen] = { ...(this.data.panes[screen] || {}), [key]: clamped };
+    this.save();
+    return clamped;
+  }
+
+  /** Drop a screen's remembered layout — the palette's reset-to-default command. */
+  resetPanes(screen) {
+    if (!this.data.panes) return;
+    if (screen === undefined) delete this.data.panes;
+    else delete this.data.panes[screen];
     this.save();
   }
 

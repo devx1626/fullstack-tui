@@ -37,7 +37,8 @@ import { dispatchToScreen } from './useKeymap.js';
 import { openOverlay } from './input/overlayStack.js';
 import { clampSelected } from './fuzzy.js';
 import { effectiveKeymap } from './keymap.js';
-import { SCREEN_TARGETS } from './screenTargets.js';
+import { SCREEN_TARGETS, TAB_TARGETS } from './screenTargets.js';
+import { togglePreference } from './preferences.js';
 import { PaletteScreen, buildPaletteItems, recentItems, paletteKey } from './screens/palette.jsx';
 import { paletteMatches } from './components/palette.jsx';
 import { firstUnpassed, firstUnpassedIn } from '../core/targets.js';
@@ -75,10 +76,15 @@ export function dispatchGlobal(ev, screen) {
   return sink.handler(id, ev) === true;
 }
 
-/** Screens the overhaul hasn't ported yet — named in the honest notice. */
-export const UNPORTED_SCREENS = {
-  'home.openSettings': 'the settings screen',
-};
+/**
+ * Screens the overhaul hasn't ported yet — named in the honest notice.
+ *
+ * Empty as of the settings port: every screen named in task 1.4 has a route.
+ * Keep the map (and this shape) so the next unported screen only has to add an
+ * entry and immediately gets the honest "lands with the port" message instead
+ * of the generic one.
+ */
+export const UNPORTED_SCREENS = {};
 
 export function CommandHost({ onQuit, children }) {
   const router = useRouter();
@@ -171,12 +177,34 @@ export function CommandHost({ onQuit, children }) {
       case 'module.openProject':
         go('projects');
         return true;
+      case 'home.openSettings':
+        go('settings');
+        return true;
+      case 'app.tour':
+        go('tour');
+        return true;
+      case 'settings.vimToggle': {
+        // Global (spec B.7 lists it as palette + tour), so it must work from any
+        // screen — the settings screen handles it locally when it is focused.
+        const { message } = togglePreference(services && services.settings, 'vimMode');
+        say(message, 'ok');
+        return true;
+      }
+      case 'view.paneWider':
+      case 'view.paneNarrower':
+      case 'view.paneReset':
+        // The challenge route owns these when it is focused; off a challenge
+        // screen there is no split to resize, so say so instead of guessing.
+        say('Pane widths apply to the challenge split — open a challenge first.', 'warn');
+        return true;
       case 'nav.jumpTab1':
       case 'nav.jumpTab2':
       case 'nav.jumpTab3':
       case 'nav.jumpTab4':
       case 'nav.jumpTab5': {
-        const order = SCREEN_TARGETS.map((s) => s.route);
+        // The five TABS of Appendix B.2, not every palette destination — Help
+        // and Settings are screens, not tabs.
+        const order = TAB_TARGETS.map((s) => s.route);
         const target = order[Number(id.slice(-1)) - 1];
         if (target) go(target);
         return true;
@@ -185,7 +213,7 @@ export function CommandHost({ onQuit, children }) {
       case 'nav.tabPrev': {
         // Cycle the top-level tabs (Appendix B.2). From a non-tab screen
         // (lesson/challenge) this steps forward from the dashboard.
-        const order = SCREEN_TARGETS.map((s) => s.route);
+        const order = TAB_TARGETS.map((s) => s.route);
         const at = order.indexOf(screen);
         const delta = id === 'nav.tabNext' ? 1 : -1;
         go(order[((at < 0 ? 0 : at) + delta + order.length) % order.length]);

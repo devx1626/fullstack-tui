@@ -25,6 +25,20 @@ test('parseKeys: longest sequence wins (CSI vs Esc)', () => {
   assert.deepEqual(names(parseKeys('\x1bOH')), ['home']);
 });
 
+// Task 1.2's pane-nudge bindings are unusable if the modified-arrow sequences
+// fall through to the Alt branch, so the CSI 1;<mod> forms are pinned here.
+test('parseKeys: modified arrows are named, not read as Alt+[', () => {
+  assert.deepEqual(names(parseKeys('\x1b[1;2C')), ['shift-right']);
+  assert.deepEqual(names(parseKeys('\x1b[1;3D')), ['alt-left']);
+  assert.deepEqual(names(parseKeys('\x1b[1;5C')), ['ctrl-right']);
+  assert.deepEqual(names(parseKeys('\x1b[1;5D')), ['ctrl-left']);
+  assert.deepEqual(names(parseKeys('\x1b[1;6C')), ['ctrl-shift-right']);
+  assert.deepEqual(names(parseKeys('\x1b[1;6D')), ['ctrl-shift-left']);
+  // The plain arrows are untouched.
+  assert.deepEqual(names(parseKeys('\x1b[C')), ['right']);
+  assert.deepEqual(names(parseKeys('\x1b[D')), ['left']);
+});
+
 test('mouse: SGR press, release, motion, wheel with modifiers', () => {
   const m = new MouseParser();
   const evs = m.feed('\x1b[<0;10;5M\x1b[<0;10;5m\x1b[<32;20;8M\x1b[<64;4;2M\x1b[<65;4;2M');

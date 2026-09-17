@@ -22,6 +22,14 @@ const KEYMAP = {
   '\x1b[H': 'home', '\x1b[F': 'end', '\x1b[1~': 'home', '\x1b[4~': 'end',
   '\x1b[7~': 'home', '\x1b[8~': 'end', '\x1bOH': 'home', '\x1bOF': 'end',
   '\x1b[Z': 'shift-tab',
+  // Modified arrows (xterm CSI 1;<mod> form). Without these the bytes arrive as
+  // ESC + '[1;5C' → Alt+[ and the bindings are unreachable, which is how the
+  // pane-nudge keys (`<C-left>`/`<C-right>`, spec §7.4) would have shipped dead.
+  //   2 = shift, 3 = alt, 5 = ctrl, 6 = ctrl+shift
+  '\x1b[1;2C': 'shift-right', '\x1b[1;2D': 'shift-left',
+  '\x1b[1;3C': 'alt-right', '\x1b[1;3D': 'alt-left',
+  '\x1b[1;5C': 'ctrl-right', '\x1b[1;5D': 'ctrl-left',
+  '\x1b[1;6C': 'ctrl-shift-right', '\x1b[1;6D': 'ctrl-shift-left',
   '\r': 'enter', '\n': 'enter', '\x7f': 'backspace', '\x08': 'backspace',
   '\t': 'tab', ' ': 'space',
 };

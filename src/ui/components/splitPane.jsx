@@ -1,11 +1,12 @@
 /**
- * SplitPane (Phase 1 task 1.2 slice, spec Appendix D): vertical split with
- * drag-to-resize. Layout is owned by the parent; the pane reports resize
- * intent via onResize(newLeftCols) so the dispatcher/registry can own the
- * command path (mouse drag AND keyboard ^W left / ^W right later).
+ * SplitPane (spec Appendix D): the vertical-split LAYOUT. Widths are clamped to
+ * [minLeft, total-minRight]; useLayoutEffect lets the parent sync real terminal
+ * bounds on mount (window width arrives there).
  *
- * Widths are clamped to [minLeft, total-minRight]; useLayoutEffect lets the
- * parent sync real terminal bounds on mount (window width arrives there).
+ * This is the drawing half only. The behavior task 1.2 asks for — mouse drag on
+ * the divider, keyboard nudge, per-screen persistence, reset-to-default — lives
+ * in `ResizableSplit.jsx` (`useResizableSplit` + `<ResizableSplit>`), which
+ * wraps this component; screens should use that one.
  */
 import React, { useLayoutEffect } from 'react';
 import { Box, Text } from 'ink';

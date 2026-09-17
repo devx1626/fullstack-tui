@@ -34,13 +34,18 @@ function ScreenFrame({ children, theme, size }) {
   );
 }
 
-export function AppRoot({ screens, onQuit }) {
+/**
+ * @param {{screens: object, onQuit: () => void, initial?: {name: string, params: object}}} props
+ *   `initial` is the bottom of the route stack — main.jsx uses it to open the
+ *   welcome tour on a first launch (task 1.6) instead of the dashboard.
+ */
+export function AppRoot({ screens, onQuit, initial }) {
   const size = useWindowSize();
   const caps = detectCapabilities();
   const theme = themeForCapabilities(caps, process.env.FULLSTACK_THEME);
 
   return (
-    <RouterProvider screens={screens}>
+    <RouterProvider screens={screens} initial={initial}>
       <ScreenFrame theme={theme} size={size}>
         <CommandHost onQuit={onQuit}>
           <RouterView />

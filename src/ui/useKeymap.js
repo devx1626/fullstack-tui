@@ -55,12 +55,16 @@ export function dispatchToScreen(id, ev = { type: 'command', source: 'palette' }
  * @param {string|null} screen current screen id (null = works everywhere)
  * @param {(id: string, ev: object) => void} onCommand called with the
  *   resolved command id (Appendix C) and the raw parser event
- * @param {{enabled?: boolean, keymap?: Map}} opts
+ * @param {{enabled?: boolean, keymap?: Map, onMouse?: (ev) => boolean}} opts
+ *   `onMouse` receives SGR mouse events (input/index.js) for the focused
+ *   screen. Like `onKey`, the registered handler reads the LATEST callback
+ *   through a ref; returning false lets the event fall through to the global
+ *   handler, so a screen only claims the clicks it actually handles.
  *
  * Handlers should be stable (useCallback) — the effect re-registers on
  * identity change, which is fine but churns.
  */
-export function useKeymap(screen, onCommand, { enabled = true, keymap } = {}) {
+export function useKeymap(screen, onCommand, { enabled = true, keymap, onMouse } = {}) {
   // The registered handler reads the LATEST callback through a ref, so a
   // re-render never leaves a stale closure registered. Without this, handlers
   // that close over state (a list cursor, a code buffer) would be one frame
@@ -68,6 +72,8 @@ export function useKeymap(screen, onCommand, { enabled = true, keymap } = {}) {
   // the pre-`j` value. It also stops the effect churning on every keystroke.
   const handlerRef = useRef(onCommand);
   handlerRef.current = onCommand;
+  const mouseRef = useRef(onMouse);
+  mouseRef.current = onMouse;
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -91,6 +97,13 @@ export function useKeymap(screen, onCommand, { enabled = true, keymap } = {}) {
         if (!id) return false;
         handler(id, ev);
         return true;
+      },
+      // Mouse is opt-in: a screen without an onMouse leaves the event to the
+      // dispatcher's global pass (and to nothing, by design).
+      onMouse: (ev) => {
+        const handler = mouseRef.current;
+        if (typeof handler !== 'function') return false;
+        return handler(ev) === true;
       },
     });
     return () => clearRoute();

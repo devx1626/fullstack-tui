@@ -121,11 +121,32 @@ export const COMMANDS = [
   // `width: 50%`); the vim binding lands with the Phase 2 editor.
   { id: 'editor.bracketMatch', title: 'Jump to the matching bracket', screen: 'challenge', keys: { default: [] }, run: 'jumpToMatchingBracket' },
 
-  // Projects (capstone checklists). Shift+Tab would toggle the focus back, but
-  // the input pipeline does not emit shift-modified keys yet (see
-  // screenTargets.js); Tab cycles the focus instead.
+  // Projects (capstone checklists). Shift+Tab toggles the focus back on the
+  // lesson screen, but the projects list has one focus target, so Tab cycles.
   { id: 'projects.focusToggle', title: 'Focus the checklist', screen: 'projects', keys: { default: ['<Tab>'] }, run: 'projects.focusToggle' },
   { id: 'projects.tick', title: 'Tick the focused requirement', screen: 'projects', keys: { default: ['<Space>'] }, run: 'projects.tick' },
+
+  // Settings (task 1.4). Space acts on the FOCUSED ROW's key, never a magic
+  // index, so inserting rows cannot rewire the toggles.
+  { id: 'settings.toggle', title: 'Toggle the focused preference', screen: 'settings', keys: { default: ['<Space>'] }, run: 'toggleSetting' },
+  { id: 'settings.vimToggle', title: 'Toggle vim keys (Phase 2 editor)', screen: null, keys: { default: [] }, run: 'toggleVim' },
+
+  // Pane widths (task 1.2). Spec §7.4 asks for "⌃⇧←/→, rebindable"; both forms
+  // are bound because terminals disagree on which they send, and the input
+  // pipeline now parses the xterm CSI 1;<mod> sequences for both.
+  { id: 'view.paneWider', title: 'Widen the left pane', screen: 'challenge', keys: { default: ['<C-right>', '<C-S-right>'] }, run: 'widenPane' },
+  { id: 'view.paneNarrower', title: 'Narrow the left pane', screen: 'challenge', keys: { default: ['<C-left>', '<C-S-left>'] }, run: 'narrowPane' },
+  { id: 'view.paneReset', title: 'Reset pane widths', screen: 'challenge', keys: { default: [] }, run: 'resetPanes' },
+
+  // Welcome tour (task 1.6). Esc is deliberately NOT bound here: it is the
+  // global `app.back`, and the tour route treats it as skip (so the stack pops
+  // and `onboardedAt` is stamped through one code path instead of two).
+  { id: 'tour.next', title: 'Next tour step', screen: 'tour', keys: { default: ['<CR>'] }, run: 'tour.next' },
+  { id: 'tour.skip', title: 'Skip the welcome tour', screen: 'tour', keys: { default: [] }, run: 'tour.skip' },
+  { id: 'tour.modeless', title: 'Use simple keys (no vim modes)', screen: 'tour', keys: { default: ['v'] }, run: 'tour.modeless' },
+
+  // Global app commands from Appendix B.1 that the palette offers.
+  { id: 'app.tour', title: 'Replay welcome tour', screen: null, keys: { default: [] }, run: 'tour' },
 
   // Browser
   { id: 'browser.close', title: 'Back to editor', screen: 'browser', keys: { default: ['<C-b>'] }, run: 'pop' }, // Esc is app.back
@@ -277,28 +298,48 @@ export function commandsForScreen(screen) {
 }
 
 /**
+ * Split a parser key event into the same shape `parseBinding` returns, so the
+ * two can be compared field by field.
+ *
+ * Modifiers stack and arrive as name prefixes in a fixed order
+ * (`ctrl-shift-right`), built by the parser's KEYMAP entries (see
+ * input/index.js). Letter case is preserved for chars — bare `g` and `G` are
+ * different bindings (vim).
+ */
+export function eventParts(keyEvent) {
+  if (!keyEvent) return { ctrl: false, alt: false, shift: false, key: null };
+  if (keyEvent.name === 'char') {
+    return { ctrl: false, alt: false, shift: false, key: keyEvent.char }; // case matters
+  }
+  let name = keyEvent.name;
+  const parts = { ctrl: false, alt: false, shift: false };
+  for (;;) {
+    if (name.startsWith('ctrl-')) { parts.ctrl = true; name = name.slice(5); continue; }
+    if (name.startsWith('alt-')) { parts.alt = true; name = name.slice(4); continue; }
+    if (name.startsWith('shift-')) { parts.shift = true; name = name.slice(6); continue; }
+    break;
+  }
+  const NAME_NORM = { escape: 'esc', enter: 'cr', backspace: 'bs', delete: 'del' };
+  return { ...parts, key: NAME_NORM[name] || name };
+}
+
+/**
  * Resolve one App key event (term.js parseChunk shape: `{ name, char? }`,
  * ctrl keys named `ctrl-x`) to a command id on `screen`, or null.
  */
 export function resolveKey(keyEvent, screen, keymapLike = mergeKeymap()) {
-  const isChar = keyEvent.name === 'char';
-  const ctrlMod = keyEvent.name.startsWith('ctrl-');
-  // Alt arrives as `alt-<char>` (ESC-prefixed bytes, see input/index.js).
-  const altMod = keyEvent.name.startsWith('alt-');
-  // Letter case matters (vim g/G): compare chars exactly as typed.
-  const rawName = isChar ? keyEvent.char : keyEvent.name.replace(/^ctrl-/, '').replace(/^alt-/, '');
-  const NAME_NORM = { escape: 'esc', enter: 'cr', backspace: 'bs', delete: 'del' };
-  const key = isChar ? rawName : (NAME_NORM[rawName] || rawName);
+  const ev = eventParts(keyEvent);
   const bindings = bindingsOf(keymapLike);
 
   for (const cmd of COMMANDS) {
     if (cmd.screen !== null && cmd.screen !== screen) continue;
     for (const b of bindings.get(cmd.id) || []) {
       const p = parseBinding(b);
-      if (!p || p.shift) continue;
-      if (p.ctrl !== ctrlMod) continue;
-      if (p.alt !== altMod) continue;
-      if (p.key !== key) continue;
+      if (!p) continue;
+      // Every modifier must match, including shift: `<S-Tab>` and `<Tab>` are
+      // different bindings, and ignoring shift made the former unreachable.
+      if (p.ctrl !== ev.ctrl || p.alt !== ev.alt || p.shift !== ev.shift) continue;
+      if (p.key !== ev.key) continue;
       return cmd.id;
     }
   }

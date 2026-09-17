@@ -102,6 +102,8 @@ test('next-UI routes + command host', async (t) => {
               module: harness.ModuleRoute,
               lesson: harness.LessonRoute,
               challenge: harness.ChallengeRoute,
+              settings: harness.SettingsRoute,
+              tour: harness.TourRoute,
             },
             initial: { name: 'home', params: {} },
           },
@@ -133,9 +135,26 @@ test('next-UI routes + command host', async (t) => {
     };
   }
 
-  function servicesFor(cur, { onDismiss } = {}) {
+  /** An in-memory Settings double: pane ratios round-trip like the real one. */
+  function fakeSettings() {
+    const panes = {};
+    return {
+      data: { palette: { recent: [] }, panes, editor: {} },
+      save: () => {},
+      bannerVisible: () => false,
+      dismissBanner: () => {},
+      paneRatio: (screen, key, fallback) => {
+        const saved = panes[screen] && panes[screen][key];
+        return Number.isFinite(saved) ? saved : fallback;
+      },
+      setPaneRatio: (screen, key, ratio) => { panes[screen] = { ...(panes[screen] || {}), [key]: ratio }; },
+      resetPanes: (screen) => { delete panes[screen]; },
+    };
+  }
+
+  function servicesFor(cur, { onDismiss, settings: settingsOverride } = {}) {
     const store = new Store(STORE_FILE);
-    const settings = {
+    const settings = settingsOverride || {
       bannerVisible: () => false,
       dismissBanner: () => { if (onDismiss) onDismiss(); },
     };
@@ -198,15 +217,18 @@ test('next-UI routes + command host', async (t) => {
       app.inst.unmount();
     });
 
-    await t.test('home: q quits through the host, unported commands explain themselves', async () => {
+    await t.test('home: s opens settings, and q quits through the host', async () => {
       const quits = [];
       const app = mountApp(servicesFor(CURRICULUM), { onQuit: () => quits.push('q') });
       assert.ok(await waitFor(() => app.screen() === 'home'));
 
+      // Task 1.4 is complete, so `s` now opens the real screen rather than the
+      // "lands with the Phase 1 port" notice this test used to assert.
       app.onKey({ name: 'char', char: 's' });
+      assert.ok(await waitFor(() => app.screen() === 'settings'), 's opens the settings screen');
       assert.ok(
-        await waitFor(() => app.frame().includes('lands with the Phase 1 port')),
-        'unported settings screen reported',
+        await waitFor(() => app.frame().includes('Preferences')),
+        'the settings screen renders its rows',
       );
       assert.equal(quits.length, 0);
 
@@ -340,6 +362,78 @@ test('next-UI routes + command host', async (t) => {
       );
 
       app.inst.unmount();
+    });
+
+    await t.test('challenge: pane nudge keys and a divider drag remember the split (task 1.2)', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const settings = fakeSettings();
+      const app = mountApp(servicesFor(CURRICULUM, { settings }));
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l1', challengeId: 'c1' });
+        assert.ok(await waitFor(() => app.screen() === 'challenge'), 'the challenge route is focused');
+        assert.equal(settings.data.panes.challenge, undefined, 'nothing remembered yet');
+
+        // The nudge keys are the ones the pipeline actually emits for ctrl+arrow
+        // (`parseKeys` maps CSI 1;5C/D), so this is the real keystroke path.
+        app.onKey({ name: 'ctrl-right' });
+        assert.ok(
+          await waitFor(() => settings.data.panes.challenge && settings.data.panes.challenge.brief === 0.47),
+          'ctrl+right widens the pane and persists the ratio',
+        );
+        app.onKey({ name: 'ctrl-left' });
+        assert.ok(
+          await waitFor(() => settings.data.panes.challenge.brief.toFixed(2) === '0.42'),
+          'ctrl+left narrows it back',
+        );
+
+        // A divider drag. x/y from the SGR parser are 1-based, so the divider
+        // of a 0.42 split sits at `leftWidth + 1`; the test derives both the
+        // column and the expected ratio from the host's own width rather than
+        // hard-coding a frame size.
+        const W = app.host().width;
+        const dividerX = harness.ratioToColumns(0.42, W, 20, 24) + 1;
+        const route = harness.getCurrentRoute();
+        assert.equal(
+          route.onMouse({ type: 'mouse', action: 'down', button: 0, x: Math.max(1, dividerX - 8), y: 5 }),
+          false,
+          'a click inside a pane is left to the screen',
+        );
+        assert.equal(route.onMouse({ type: 'mouse', action: 'down', button: 0, x: dividerX, y: 5 }), true, 'the divider claims the press');
+        const targetX = dividerX + 12;
+        assert.equal(route.onMouse({ type: 'mouse', action: 'motion', x: targetX, y: 5 }), true, 'the drag follows the mouse');
+        assert.equal(route.onMouse({ type: 'mouse', action: 'up', x: targetX, y: 5 }), true, 'release ends the drag');
+        const dragged = harness.columnsToRatio(targetX - 1, W);
+        assert.ok(dragged > 0.42, `the drag must widen (${dragged})`);
+        assert.ok(
+          await waitFor(() => settings.data.panes.challenge.brief === dragged),
+          'the dragged width is persisted as a ratio',
+        );
+        assert.equal(
+          route.onMouse({ type: 'mouse', action: 'motion', x: dividerX + 30, y: 5 }),
+          false,
+          'motion without a press is not a drag',
+        );
+
+        // Per screen: another screen's layout is untouched, and the palette
+        // command resets just this one. The palette dispatches a registry
+        // command to the FOCUSED SCREEN first (`dispatchToScreen`) and only
+        // falls back to the host table, so that is the path asserted here —
+        // and `host.run` off a challenge screen answers honestly instead.
+        settings.setPaneRatio('browser', 'render', 0.6);
+        assert.equal(harness.dispatchToScreen('view.paneReset'), true, 'the focused screen owns the reset command');
+        assert.ok(await waitFor(() => settings.data.panes.challenge === undefined), 'reset drops this screen\'s ratio');
+        assert.equal(settings.data.panes.browser.render, 0.6, 'reset is per screen');
+        assert.ok(await waitFor(() => app.frame().includes('Pane widths reset')), 'the route reports the reset');
+
+        app.host().run('view.paneReset');
+        assert.ok(
+          await waitFor(() => app.frame().includes('open a challenge first')),
+          'off a challenge screen the host says where the command applies',
+        );
+      } finally {
+        app.inst.unmount();
+      }
     });
   } finally {
     rmSync(STORE_FILE, { force: true });

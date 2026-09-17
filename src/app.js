@@ -38,6 +38,7 @@ import renderBrowser, { BROWSER_TABS } from './views/browser.js';
 import renderPalette from './views/palette.js';
 import renderSettings, { settingsRows } from './views/settings.js';
 import { Settings } from './ui/settings.js';
+import { togglePreference } from './ui/preferences.js';
 import { notify, BEL } from './ui/multimedia.js';
 import { runJs, stringify } from './core/runner.js';
 import { elementTree, previewParts as buildPreviewParts, synthesisParts } from './core/browser.js';
@@ -257,36 +258,11 @@ export class App {
    * instead of doing nothing silently.
    */
   toggleSetting(key) {
-    switch (key) {
-      case 'sound': {
-        this.settings.data.sound = (this.settings.data.sound ?? 'bell') === 'off' ? 'bell' : 'off';
-        this.settings.save();
-        this.note(this.settings.data.sound === 'off'
-          ? 'Sound notifications off.'
-          : 'Sound notifications on (bell + desktop notify).', 'good');
-        break;
-      }
-      case 'wrap': {
-        this.settings.data.editor = this.settings.data.editor || {};
-        this.settings.data.editor.wrap = !(this.settings.data.editor.wrap === true);
-        this.settings.save();
-        this.note(this.settings.data.editor.wrap
-          ? 'Soft wrap on — long lines fold to the editor width.'
-          : 'Soft wrap off — long lines scroll horizontally.', 'good');
-        break;
-      }
-      case 'tabSize': {
-        const next = { 2: 4, 4: 8, 8: 2 }[this.tabSize()] || 2;
-        this.settings.data.editor = this.settings.data.editor || {};
-        this.settings.data.editor.tabSize = next;
-        this.settings.save();
-        this.note(`Indent is now ${next} spaces.`, 'good');
-        break;
-      }
-      default:
-        this.note('This row is set by the environment, not by a toggle - see ? for the key list.', 'muted');
-        break;
-    }
+    // The rows AND their toggles live in src/ui/preferences.js so the next-UI
+    // settings screen cannot drift from this one; the classic view only
+    // supplies its Settings instance and shows the returned message.
+    const { message, kind } = togglePreference(this.settings, key);
+    this.note(message, kind);
     this.render();
   }
 

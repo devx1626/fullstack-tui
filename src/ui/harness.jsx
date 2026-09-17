@@ -13,11 +13,14 @@ import { useKeymap, getCurrentRoute, setCurrentRoute, clearRoute } from './useKe
 
 export { render, useInput, useApp, useState, useEffect, useRef, useKeymap, getCurrentRoute, setCurrentRoute, clearRoute };
 export { dispatchToScreen } from './useKeymap.js';
-export { SCREEN_TARGETS } from './screenTargets.js';
+export { SCREEN_TARGETS, TAB_TARGETS } from './screenTargets.js';
+export { preferenceRows, vimPreferenceRow, togglePreference, clampTabSize, nextTabSize, TAB_SIZES } from './preferences.js';
 export { openOverlay, closeOverlay, clearOverlays, hasOverlays, routeToOverlays, _resetOverlays } from './input/overlayStack.js';
 export { Header, Panel, List, ScrollPane, Footer, Badge, Meter } from './components/chrome.jsx';
 export { Palette, paletteMatches } from './components/palette.jsx';
 export { SplitPane } from './components/splitPane.jsx';
+export { ResizableSplit, useResizableSplit } from './components/ResizableSplit.jsx';
+export { clampSplit, clampRatio, nudgeRatio, ratioToColumns, columnsToRatio, MIN_RATIO, MAX_RATIO, RATIO_STEP } from './components/splitClamp.js';
 export { Modal, Toast } from './components/overlays.jsx';
 export { RouterProvider, RouterView, useRouter } from './router.jsx';
 export { AppRoot } from './AppRoot.jsx';
@@ -26,6 +29,7 @@ export {
   HomeRoute, ModuleRoute, ChallengeRoute,
   LessonRoute, ProjectsRoute,
   HelpRoute, ResourcesRoute, WorkspaceRoute, StatsRoute,
+  SettingsRoute, TourRoute,
 } from './routes.jsx';
 export { ServicesProvider, createServices, useServices } from './services.jsx';
 export { nextIndex, isListMove } from './nav.js';
@@ -40,6 +44,9 @@ export { ResourcesScreen, resourcesLines } from './screens/resources.jsx';
 export { WorkspaceScreen, workspaceLines } from './screens/workspace.jsx';
 export { StatsScreen, statsLines, sparkline } from './screens/stats.jsx';
 export { PaletteScreen, buildPaletteItems, recentItems, paletteKey } from './screens/palette.jsx';
+export { SettingsScreen, settingsLines, settingsLayout, rowMarker } from './screens/settings.jsx';
+export { TourScreen, tourSteps, tourReducer, SANDBOX_SAMPLE } from './screens/tour.jsx';
+export { eventParts } from './commands.js';
 export { cursorShape } from './multimedia.js';
 export { Text, Box } from 'ink';
 
