@@ -148,6 +148,28 @@ export function indexAtVisualColumn(line, target, tabSize = 2) {
   return str.length;
 }
 
+/**
+ * `line` with tabs replaced by spaces (display-only; the buffer keeps tabs),
+ * expanding by the line's own column position so nested tabs stay aligned.
+ */
+export function expandTabsAt(line, startCol, tabSize = 2) {
+  const str = String(line ?? '');
+  const tab = Math.max(1, Number(tabSize) || 1);
+  let col = Math.max(0, Number(startCol) || 0);
+  let out = '';
+  for (const ch of str) {
+    if (ch === '\t') {
+      const spaces = tab - (col % tab);
+      out += ' '.repeat(spaces);
+      col += spaces;
+    } else {
+      out += ch;
+      col += charWidth(ch);
+    }
+  }
+  return out;
+}
+
 /** `line` with tabs replaced by spaces (display-only; the buffer keeps tabs). */
 export function expandTabs(line, tabSize = 2) {
   const str = String(line ?? '');
@@ -169,13 +191,48 @@ export function expandTabs(line, tabSize = 2) {
 
 /**
  * The slice of `line` covering visual columns [startCol, startCol + width).
+ *
  * This is how the viewport renders a long line: one call per visible row, so a
- * horizontally scrolled buffer never builds the whole expanded string.
+ * horizontally scrolled buffer never builds the whole expanded string. Tabs
+ * expand per the LINE's own column position (a tab in the middle of an
+ * indented line stops at a multiple of tabSize from column 0, not from the
+ * slice start), and a window landing INSIDE a double-width character shifts
+ * back to the character's start so it is never cut mid-cell — the caller gets
+ * one column more than asked rather than half a glyph.
  */
 export function sliceByVisualColumn(line, startCol, width, tabSize = 2) {
   const str = String(line ?? '');
-  const from = Math.max(0, Number(startCol) || 0);
-  const cells = Math.max(0, Number(width) || 0);
-  const expanded = expandTabs(str, tabSize);
-  return expanded.slice(from, from + cells);
+  const tab = Math.max(1, Number(tabSize) || 1);
+  const targetFrom = Math.max(0, Number(startCol) || 0);
+  const targetTo = targetFrom + Math.max(0, Number(width) || 0);
+
+  const expanded = expandTabsAt(str, 0, tab);
+  let from = targetFrom;
+  // Snap the window start back off a wide char it would cut (only possible
+  // when startCol > 0). Walk from the target backwards while inside a cell.
+  if (from > 0 && from < expanded.length) {
+    // Expanded index == visual column here only for width-1 chars; walk by
+    // characters to be exact.
+    let col = 0;
+    let snap = -1;
+    for (const ch of expanded) {
+      const w = charWidth(ch);
+      if (col < from && col + w > from) snap = col;
+      if (col >= from) break;
+      col += w;
+    }
+    if (snap !== -1) from = snap;
+  }
+  const to = Math.max(from, targetTo);
+
+  let col = 0;
+  let out = '';
+  for (const ch of expanded) {
+    const w = charWidth(ch);
+    if (col + w <= from) { col += w; continue; }
+    if (col >= to) break;
+    out += ch;
+    col += w;
+  }
+  return out;
 }

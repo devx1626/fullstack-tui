@@ -233,7 +233,7 @@ export function highlightLine(line, lang, theme, state = null) {
   const st = state || createHighlightState();
   return tokenizeLine(line, lang, st).map((t) => ({
     text: t.text,
-    color: t.token ? (theme[t.token] ?? null) : null,
+    color: t.token ? ((theme && theme[t.token]) ?? null) : null,
     bold: !!t.bold,
     italic: !!t.italic,
   }));

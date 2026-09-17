@@ -20,6 +20,7 @@ export { Header, Panel, List, ScrollPane, Footer, Badge, Meter } from './compone
 export { Palette, paletteMatches } from './components/palette.jsx';
 export { SplitPane } from './components/splitPane.jsx';
 export { ResizableSplit, useResizableSplit } from './components/ResizableSplit.jsx';
+export { CodeEditor, useEditorMouse } from './components/CodeEditor.jsx';
 export { clampSplit, clampRatio, nudgeRatio, ratioToColumns, columnsToRatio, MIN_RATIO, MAX_RATIO, RATIO_STEP } from './components/splitClamp.js';
 export { Modal, Toast } from './components/overlays.jsx';
 export { RouterProvider, RouterView, useRouter } from './router.jsx';
