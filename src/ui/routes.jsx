@@ -8,15 +8,19 @@
  * reports per-check results with duration, micro-notes and the failing-check
  * line numbers instead of a one-line shrug.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text } from 'ink';
 import { useHost } from './host.jsx';
 import { useServices } from './services.jsx';
+import { useKeymap } from './useKeymap.js';
 import { nextIndex } from './nav.js';
 import { findChallenge, firstUnpassedIn } from '../core/targets.js';
+import { nextLesson } from '../content/index.js';
 import { HomeScreen } from './screens/home.jsx';
 import { ModuleScreen } from './screens/module.jsx';
 import { ChallengeScreen } from './screens/challenge.jsx';
+import { LessonScreen, lessonLines } from './screens/lesson.jsx';
+import { ProjectsScreen, projectsLines } from './screens/projects.jsx';
 import { HelpScreen } from './screens/help.jsx';
 import { ResourcesScreen } from './screens/resources.jsx';
 import { WorkspaceScreen } from './screens/workspace.jsx';
@@ -94,8 +98,9 @@ export function ModuleRoute({ moduleId }) {
           host.run('module.openProject');
           return;
         }
-        const index = firstUnpassedIn(lesson, (chId) => services.store.isPassed(chId));
-        host.go('challenge', { moduleId: mod.id, lessonId: lesson.id, challengeId: lesson.challenges[index].id });
+        // Phase 1: the lesson screen exists, so Enter opens it (the classic
+        // flow) rather than jumping straight into the first challenge.
+        host.go('lesson', { moduleId: mod.id, lessonId: lesson.id });
         return;
       }
       default:
@@ -246,6 +251,140 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       onCommand={onCommand}
     />
   );
+}
+
+// ---------------------------------------------------------------------------
+// Lesson (Phase 1): prose + practice list, focus and persisted scroll
+// ---------------------------------------------------------------------------
+
+export function LessonRoute({ moduleId, lessonId }) {
+  const host = useHost();
+  const services = useServices();
+  const curriculum = (services && services.curriculum) || [];
+  const store = services && services.store;
+  const mod = curriculum.find((m) => m.id === moduleId) || null;
+  const lesson = mod ? ((mod.lessons || []).find((l) => l.id === lessonId) || (mod.lessons || [])[0]) : null;
+
+  const [focus, setFocus] = useState(() => (lesson && store ? firstUnpassedIn(lesson, (id) => store.isPassed(id)) : 0));
+  const [scroll, setScroll] = useState(0);
+
+  // Restore the persisted scroll position for this lesson (classic parity).
+  useEffect(() => {
+    if (lesson && store && store.getLessonScroll) setScroll(store.getLessonScroll(lesson.id) || 0);
+  }, [lesson, store]);
+
+  const width = host.width || 80;
+  const { lines, challengeRows } = useMemo(
+    () => (lesson ? lessonLines({ mod, lesson, store, focus, width }) : { lines: [], challengeRows: [] }),
+    [mod, lesson, store, focus, width],
+  );
+
+  const persistScroll = useCallback((next) => {
+    setScroll(next);
+    if (lesson && store && store.setLessonScroll) store.setLessonScroll(lesson.id, next);
+  }, [lesson, store]);
+
+  const onCommand = useCallback((id) => {
+    const move = nextIndex(scroll, id, SCROLL_COUNT);
+    if (move !== null) {
+      persistScroll(move);
+      return;
+    }
+    const challenges = lesson ? (lesson.challenges || []) : [];
+    switch (id) {
+      case 'lesson.focusNext': {
+        if (!challenges.length) return;
+        const next = Math.min(challenges.length - 1, focus + 1);
+        setFocus(next);
+        if (typeof challengeRows[next] === 'number') persistScroll(challengeRows[next]);
+        return;
+      }
+      case 'lesson.focusPrev': {
+        if (!challenges.length) return;
+        const next = Math.max(0, focus - 1);
+        setFocus(next);
+        if (typeof challengeRows[next] === 'number') persistScroll(challengeRows[next]);
+        return;
+      }
+      case 'lesson.openChallenge': {
+        const ch = challenges[focus];
+        if (!ch || !mod) return;
+        host.go('challenge', { moduleId: mod.id, lessonId: lesson.id, challengeId: ch.id });
+        return;
+      }
+      case 'lesson.markRead': {
+        if (!lesson || !store) return;
+        store.markLessonRead(lesson.id);
+        host.say(`Marked “${lesson.title}” as read.`, 'ok');
+        return;
+      }
+      case 'lesson.next': {
+        const next = lesson ? nextLesson(lesson.id) : null;
+        if (next) host.go('lesson', { moduleId: next.module.id, lessonId: next.lesson.id });
+        else host.say('That was the last lesson — the capstone projects are next.', 'ok');
+        return;
+      }
+      default:
+        host.run(id);
+    }
+  }, [challengeRows, focus, host, lesson, mod, persistScroll, scroll, store]);
+
+  useKeymap('lesson', onCommand);
+
+  return <LessonScreen lines={lines} height={host.height} scroll={scroll} />;
+}
+
+// ---------------------------------------------------------------------------
+// Projects (Phase 1): capstone checklists
+// ---------------------------------------------------------------------------
+
+export function ProjectsRoute() {
+  const host = useHost();
+  const services = useServices();
+  const curriculum = (services && services.curriculum) || [];
+  const store = services && services.store;
+  const [cursor, setCursor] = useState(0);
+  const [focus, setFocus] = useState('brief');
+  const [checkCursor, setCheckCursor] = useState(0);
+  // The classic store is not reactive; a bump after a tick re-derives the rows.
+  const [revision, setRevision] = useState(0);
+
+  const { lines, project, checks } = useMemo(
+    () => projectsLines({ curriculum, store, cursor, focus, checkCursor, width: host.width || 80 }),
+    [curriculum, store, cursor, focus, checkCursor, host.width, revision],
+  );
+
+  const onCommand = useCallback((id) => {
+    const inChecks = focus === 'checks';
+    const count = inChecks ? checks.length : curriculum.filter((m) => m.project).length;
+    const move = nextIndex(inChecks ? checkCursor : cursor, id, count);
+    if (move !== null) {
+      if (inChecks) setCheckCursor(move);
+      else { setCursor(move); setCheckCursor(0); }
+      return;
+    }
+    switch (id) {
+      case 'projects.focusToggle':
+        if (!checks.length) return;
+        setFocus(inChecks ? 'brief' : 'checks');
+        setCheckCursor(0);
+        return;
+      case 'projects.tick': {
+        if (!inChecks || !project || (!store.toggleProjectCheck)) return;
+        const key = `${project.id}.${checkCursor}`;
+        const now = store.toggleProjectCheck(project.id, key);
+        setRevision((v) => v + 1);
+        host.say(`${now ? 'Ticked' : 'Unticked'}: ${checks[checkCursor]}`, now ? 'ok' : 'warn');
+        return;
+      }
+      default:
+        host.run(id);
+    }
+  }, [checkCursor, checks, curriculum, cursor, focus, host, project, store]);
+
+  useKeymap('projects', onCommand);
+
+  return <ProjectsScreen lines={lines} height={host.height} scroll={0} />;
 }
 
 // ---------------------------------------------------------------------------

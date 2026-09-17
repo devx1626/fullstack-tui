@@ -4,7 +4,7 @@
 `src/ui/commands.js` — do not edit by hand. `npm run check` fails when this
 file drifts from the registry; regenerate with `npm run keymap:docs`.*
 
-49 commands. User overrides live in `.data/keymap.json` and are
+58 commands. User overrides live in `.data/keymap.json` and are
 merged over these defaults; unknown ids are reported, never fatal. `Screen`
 shows where a binding applies (`any` = global).
 
@@ -30,6 +30,13 @@ shows where a binding applies (`any` = global).
 | `nav.last` | `G` | any | Jump to last item |
 | `nav.resume` | `r` | `home` | Resume where you left off |
 | `nav.nextUp` | — *(palette only)* | any | Go to next unpassed challenge |
+| `nav.jumpTab1` | `<A-1>` | any | Go to Dashboard |
+| `nav.jumpTab2` | `<A-2>` | any | Go to Projects |
+| `nav.jumpTab3` | `<A-3>` | any | Go to Progress |
+| `nav.jumpTab4` | `<A-4>` | any | Go to Resources |
+| `nav.jumpTab5` | `<A-5>` | any | Go to Workspace |
+| `nav.tabNext` | `<A-l>` | any | Next tab |
+| `nav.tabPrev` | `<A-h>` | any | Previous tab |
 
 ## Dashboard
 

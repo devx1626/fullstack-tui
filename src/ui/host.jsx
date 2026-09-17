@@ -77,9 +77,7 @@ export function dispatchGlobal(ev, screen) {
 
 /** Screens the overhaul hasn't ported yet — named in the honest notice. */
 export const UNPORTED_SCREENS = {
-  'home.openProjects': 'the projects screen',
   'home.openSettings': 'the settings screen',
-  'module.openProject': 'the project brief screen',
 };
 
 export function CommandHost({ onQuit, children }) {
@@ -169,6 +167,30 @@ export function CommandHost({ onQuit, children }) {
       case 'app.help':
         go('help');
         return true;
+      case 'home.openProjects':
+      case 'module.openProject':
+        go('projects');
+        return true;
+      case 'nav.jumpTab1':
+      case 'nav.jumpTab2':
+      case 'nav.jumpTab3':
+      case 'nav.jumpTab4':
+      case 'nav.jumpTab5': {
+        const order = SCREEN_TARGETS.map((s) => s.route);
+        const target = order[Number(id.slice(-1)) - 1];
+        if (target) go(target);
+        return true;
+      }
+      case 'nav.tabNext':
+      case 'nav.tabPrev': {
+        // Cycle the top-level tabs (Appendix B.2). From a non-tab screen
+        // (lesson/challenge) this steps forward from the dashboard.
+        const order = SCREEN_TARGETS.map((s) => s.route);
+        const at = order.indexOf(screen);
+        const delta = id === 'nav.tabNext' ? 1 : -1;
+        go(order[((at < 0 ? 0 : at) + delta + order.length) % order.length]);
+        return true;
+      }
       case 'app.palette':
         openPalette();
         return true;

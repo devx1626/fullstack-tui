@@ -93,16 +93,20 @@ test('coalescer: a split arrow key resolves to ONE event, not Esc+[A', async () 
   assert.equal(c.buf, '');
 });
 
-test('coalescer: ESC+char is ambiguous (Alt-q vs Esc,q) → held, then both flush', async () => {
+test('coalescer: ESC+char is held for the window, then flushes as Alt+char', async () => {
   const c = new EscapeCoalescer(15);
-  let got = [];
+  const got = [];
   c.onEvent = (e) => got.push(e);
   c.feed('\x1b');
-  const now = c.feed('q'); // could be Alt-q: must wait for the window
+  const now = c.feed('q'); // could still be a split CSI sequence: must wait
   assert.deepEqual(names(now), []);
   await new Promise((r) => setTimeout(r, 40));
-  // After the window with nothing further, both events flush in order.
-  assert.deepEqual(names(got), ['escape', 'char']);
+  // Nothing further arrived, so it is an Alt combination rather than a
+  // sequence — the standard terminal reading (Esc-then-letter inside the
+  // window is Alt+letter, as in vim/readline). Pressing Esc on its own sends
+  // just \x1b, which still flushes as 'escape'.
+  assert.deepEqual(names(got), ['alt-q']);
+  assert.equal(got[0].char, 'q');
   c.flush();
 });
 

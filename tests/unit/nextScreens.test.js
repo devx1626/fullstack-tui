@@ -27,9 +27,17 @@ const CURRICULUM = [
   },
 ];
 
-function fakeStore({ passed = [] } = {}) {
+function fakeStore({ passed = [], read = [], ticks = {} } = {}) {
+  const project = { checks: { ...ticks }, notes: '' };
   return {
     isPassed: (id) => passed.includes(id),
+    isLessonRead: (id) => read.includes(id),
+    markLessonRead: (id) => { if (!read.includes(id)) read.push(id); },
+    getLessonScroll: () => 0,
+    setLessonScroll: () => {},
+    projectRecord: () => project,
+    toggleProjectCheck: (id, key) => { project.checks[key] = !project.checks[key]; return project.checks[key]; },
+    projectProgress: (id, checks) => (checks || []).filter((c, i) => project.checks[`${id}.${i}`]).length,
     todayMinutes: () => 25,
     weekMinutes: () => 210,
     activity: () => [0, 3, 7, 1, 12, 4, 9, 2],
@@ -275,6 +283,183 @@ test('phase 1 screens + palette', async (t) => {
     assert.equal(harness.nextIndex(0, 'nav.pageDown', 1e6), 10);
     assert.equal(harness.nextIndex(0, 'nav.first', 1e6), 0);
     assert.equal(harness.nextIndex(7, 'nav.last', 1e6), 1e6 - 1);
+  });
+
+  await t.test('proseLines renders the markdown-ish subset as text', () => {
+    const lines = harness.proseLines('# Heading\n\nSome **bold** and `code` text.\n\n- one\n- two\n\n> quoted\n\n```js\nconst x = 1;\n```', 40);
+    const kinds = lines.map((l) => l.kind);
+    assert.ok(kinds.includes('heading'), 'heading detected');
+    assert.ok(kinds.includes('bullet'), 'bullets detected');
+    assert.ok(kinds.includes('quote'), 'quote detected');
+    assert.ok(kinds.includes('code'), 'fenced code detected');
+    const prose = lines.filter((l) => l.kind === 'prose').map((l) => l.text).join(' ');
+    assert.ok(prose.includes('Some bold and code text.'), `emphasis markers stripped (${prose})`);
+    assert.ok(lines.some((l) => l.text.includes('const x = 1;')), 'code body preserved');
+  });
+
+  await t.test('lesson screen renders objectives, practice and a challenge row index', async () => {
+    const lesson = {
+      id: '01-html.l1',
+      title: 'Skeleton',
+      minutes: 10,
+      objectives: ['Open a page in the browser'],
+      sections: [{ heading: 'The document', body: 'A page is **structure** first.', code: { source: '<!DOCTYPE html>', lang: 'html', caption: 'skeleton' } }],
+      pitfalls: ['Forgetting the doctype'],
+      keyPoints: ['Headings nest'],
+      challenges: [{ id: 'c1', kind: 'debug', difficulty: 'easy', minutes: 5, prompt: 'Fix the skeleton.' }],
+      resources: [{ label: 'MDN', url: 'https://example.test' }],
+    };
+    const store = fakeStore({ passed: ['01-html.l1.c1'] });
+    const { lines, challengeRows } = harness.lessonLines({ mod: CURRICULUM[0], lesson, store, focus: 0, width: 100 });
+    assert.equal(challengeRows.length, 1, 'one challenge row index recorded');
+    const text = strip(await renderToText(harness.el(harness.LessonScreen, { lines, height: 120 })));
+    assert.ok(text.includes('What you will be able to do'), 'objectives section missing');
+    assert.ok(text.includes('Open a page in the browser'), 'objective missing');
+    assert.ok(text.includes('The document'), 'section heading missing');
+    assert.ok(text.includes('skeleton'), 'code caption missing');
+    assert.ok(text.includes('Common mistakes'), 'pitfalls missing');
+    assert.ok(text.includes('Cheat sheet'), 'key points missing');
+    assert.ok(text.includes('Practice'), 'practice section missing');
+    assert.ok(text.includes('1/1 solved here'), 'practice progress missing');
+    assert.ok(text.includes('Go deeper'), 'resources missing');
+  });
+
+  await t.test('projects screen counts ticks by index (regression: always 0/N)', async () => {
+    const project = { id: '01-html.p', title: 'Portfolio page', minutes: 45, brief: 'Build your page.', checks: ['Has a title', 'Has an image'], stretch: ['Deploy it'] };
+    const curriculum = [{ ...CURRICULUM[0], project }];
+    const store = fakeStore({ ticks: { '01-html.p.0': true } });
+    const { lines, project: built } = harness.projectsLines({ curriculum, store, cursor: 0, focus: 'checks', checkCursor: 1, width: 100 });
+    assert.equal(built.id, '01-html.p');
+    const text = strip(await renderToText(harness.el(harness.ProjectsScreen, { lines, height: 60 })));
+    assert.ok(text.includes('1/2 requirements ticked'), 'the meter must count ticks');
+    assert.ok(text.includes('[✓] Has a title'), 'a ticked item renders ticked');
+    assert.ok(text.includes('[ ] Has an image'), 'an unticked item renders unticked');
+    assert.ok(text.includes('Stretch goals'), 'stretch goals missing');
+  });
+
+  await t.test('store.projectProgress counts `${id}.${index}` ticks (real Store)', async () => {
+    const path = await import('node:path');
+    const fs = await import('node:fs');
+    const { Store } = await import('../../src/core/store.js');
+    const dir = path.join(process.cwd(), '.data', 'check-projprogress');
+    fs.rmSync(dir, { recursive: true, force: true });
+    try {
+      const store = new Store(path.join(dir, 'progress.json'));
+      const checks = ['one', 'two', 'three'];
+      assert.equal(store.projectProgress('p1', checks), 0, 'nothing ticked yet');
+      store.toggleProjectCheck('p1', 'p1.1');
+      assert.equal(store.projectProgress('p1', checks), 1, 'a tick keyed by index must count');
+      store.toggleProjectCheck('p1', 'p1.1');
+      assert.equal(store.projectProgress('p1', checks), 0, 'unticking counts back down');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  await t.test('projects: Tab focuses the checklist and Space ticks through the real route', async () => {
+    const store = fakeStore({});
+    store.stats = () => ({ totals: { challenges: 3, challengesPassed: 0, debug: 1, debugPassed: 0, write: 2, writePassed: 0 }, perModule: [], streak: { current: 0, best: 0 } });
+    const curriculum = [{ ...CURRICULUM[0], project: { id: '01-html.p', title: 'Portfolio page', minutes: 45, brief: 'Build it.', checks: ['Has a title'] } }];
+    const settings = { data: { palette: { recent: [] } }, bannerVisible: () => false, pushRecent: () => {}, dismissBanner: () => {} };
+    const services = harness.createServices({ store, curriculum, settings, overall: { modules: 1, challenges: 3 }, lessonIndex: [] });
+    const out = helper.fakeStdout(120, 60);
+    const inst = harness.render(
+      harness.el(harness.ServicesProvider, { services }, harness.el(harness.AppRoot, {
+        screens: { home: harness.HomeRoute, projects: harness.ProjectsRoute },
+        onQuit: () => {},
+      })),
+      { stdout: out, exitOnCtrlC: false, patchConsole: false },
+    );
+    const waitFor = async (predicate, label) => {
+      for (let i = 0; i < 100; i += 1) {
+        if (predicate()) return true;
+        await new Promise((r) => { setTimeout(r, 10); });
+      }
+      throw new Error(`timed out waiting for ${label}`);
+    };
+    try {
+      await waitFor(() => harness.getCurrentRoute().screen === 'home', 'the home screen');
+      harness.getGlobalCommandSink()('home.openProjects');
+      await waitFor(() => harness.getCurrentRoute().screen === 'projects', 'the projects screen');
+
+      harness.getCurrentRoute().onKey({ name: 'tab' });
+      // The route keeps its cursors in React state, so a key can only act on the
+      // render that has committed the previous one; the dispatcher feeds keys
+      // one event per tick, so waiting here mirrors real input.
+      await waitFor(() => strip(out.chunks.join('')).includes('Space to tick'), 'the checklist to take focus');
+      harness.getCurrentRoute().onKey({ name: 'space' });
+      await waitFor(() => store.projectRecord().checks['01-html.p.0'] === true, 'the tick to land in the store');
+      // And the derived rows render it ticked (frame text is a diff stream, so
+      // assert the rows rather than trying to read a contiguous line from it).
+      const after = harness.projectsLines({ curriculum, store, cursor: 0, focus: 'checks', checkCursor: 0, width: 100 });
+      const afterText = strip(await renderToText(harness.el(harness.ProjectsScreen, { lines: after.lines, height: 40 })));
+      assert.ok(afterText.includes('[✓] Has a title'), 'the ticked box renders');
+      assert.ok(afterText.includes('1/1 requirements ticked'), 'the meter follows the tick');
+    } finally {
+      inst.unmount();
+      harness._resetOverlays();
+      harness.clearRoute();
+    }
+  });
+
+  await t.test('alt keys: ESC+char parses as alt-<char> and resolves to the tab command', async () => {
+    const { parseKeys } = await import('../../src/ui/input/index.js');
+    const { resolveKey, COMMANDS } = await import('../../src/ui/commands.js');
+
+    const alt1 = parseKeys('\x1b1');
+    assert.equal(alt1.length, 1, 'ESC+char is one event, not escape + char');
+    assert.equal(alt1[0].name, 'alt-1');
+    assert.equal(alt1[0].raw, '\x1b1', 'the raw length must cover both bytes (the coalescer consumes by it)');
+
+    // A CSI sequence is still a sequence, and a lone Esc is still an escape.
+    assert.equal(parseKeys('\x1b[A')[0].name, 'up');
+    assert.equal(parseKeys('\x1b')[0].name, 'escape');
+    assert.equal(parseKeys('x')[0].name, 'char', 'plain chars are untouched');
+    assert.equal(parseKeys('\x1b\x1b')[0].name, 'escape', 'a doubled ESC is an escape, not Alt+ESC');
+    assert.equal(parseKeys('\x1b[Z')[0].name, 'shift-tab', 'SS3/CSI sequences still win over the alt branch');
+
+    assert.equal(resolveKey({ type: 'key', name: 'alt-1', char: '1' }, 'home'), 'nav.jumpTab1');
+    assert.equal(resolveKey({ type: 'key', name: 'alt-l', char: 'l' }, 'home'), 'nav.tabNext');
+    assert.equal(resolveKey({ type: 'key', name: 'alt-z', char: 'z' }, 'home'), null, 'unbound alt key resolves to nothing');
+    // The plain digit still belongs to the browser pane, not a tab jump.
+    assert.equal(resolveKey({ type: 'key', name: 'char', char: '1' }, 'browser'), 'browser.jumpTab1');
+
+    for (const n of [1, 2, 3, 4, 5]) {
+      assert.ok(COMMANDS.some((c) => c.id === `nav.jumpTab${n}`), `nav.jumpTab${n} must be registered`);
+    }
+  });
+
+  await t.test('Alt+3 jumps to Progress through the real dispatcher path', async () => {
+    const store = fakeStore({});
+    store.stats = () => ({ totals: { challenges: 3, challengesPassed: 0, debug: 1, debugPassed: 0, write: 2, writePassed: 0 }, perModule: [], streak: { current: 0, best: 0 } });
+    const settings = { data: { palette: { recent: [] } }, bannerVisible: () => false, pushRecent: () => {}, dismissBanner: () => {} };
+    const services = harness.createServices({ store, curriculum: CURRICULUM, settings, overall: { modules: 2, challenges: 3 }, lessonIndex: [] });
+    const out = helper.fakeStdout(120, 60);
+    const inst = harness.render(
+      harness.el(harness.ServicesProvider, { services }, harness.el(harness.AppRoot, {
+        screens: { home: harness.HomeRoute, stats: harness.StatsRoute },
+        onQuit: () => {},
+      })),
+      { stdout: out, exitOnCtrlC: false, patchConsole: false },
+    );
+    const waitFor = async (predicate, label) => {
+      for (let i = 0; i < 100; i += 1) {
+        if (predicate()) return true;
+        await new Promise((r) => { setTimeout(r, 10); });
+      }
+      throw new Error(`timed out waiting for ${label}`);
+    };
+    try {
+      await waitFor(() => harness.getCurrentRoute().screen === 'home', 'the home screen');
+      // dispatchGlobal is exactly what main.jsx's dispatcher calls for keys no
+      // screen claimed — the same route an Alt+3 keystroke takes.
+      assert.equal(harness.dispatchGlobal({ type: 'key', name: 'alt-3', char: '3' }, 'home'), true);
+      await waitFor(() => harness.getCurrentRoute().screen === 'stats', 'the progress screen');
+    } finally {
+      inst.unmount();
+      harness._resetOverlays();
+      harness.clearRoute();
+    }
   });
 
   await t.test('classic UI accepts Ctrl+K too, so the shared help text is true', async () => {

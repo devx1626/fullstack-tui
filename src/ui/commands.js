@@ -90,6 +90,15 @@ export const COMMANDS = [
   { id: 'lesson.markRead', title: 'Mark lesson read', screen: 'lesson', keys: { default: ['m'] }, run: 'lesson.markRead' },
   { id: 'lesson.next', title: 'Next lesson', screen: 'lesson', keys: { default: ['n'] }, run: 'lesson.next' },
   { id: 'nav.nextUp', title: 'Go to next unpassed challenge', screen: null, keys: { default: [] }, run: 'nextUp' },
+  // Top-level tabs (overhaul Appendix B.2). Alt-modified keys are supported by
+  // the input pipeline's ESC-prefix handling, so the specced bindings work.
+  { id: 'nav.jumpTab1', title: 'Go to Dashboard', screen: null, keys: { default: ['<A-1>'] }, run: 'tab.home' },
+  { id: 'nav.jumpTab2', title: 'Go to Projects', screen: null, keys: { default: ['<A-2>'] }, run: 'tab.projects' },
+  { id: 'nav.jumpTab3', title: 'Go to Progress', screen: null, keys: { default: ['<A-3>'] }, run: 'tab.stats' },
+  { id: 'nav.jumpTab4', title: 'Go to Resources', screen: null, keys: { default: ['<A-4>'] }, run: 'tab.resources' },
+  { id: 'nav.jumpTab5', title: 'Go to Workspace', screen: null, keys: { default: ['<A-5>'] }, run: 'tab.workspace' },
+  { id: 'nav.tabNext', title: 'Next tab', screen: null, keys: { default: ['<A-l>'] }, run: 'tab.next' },
+  { id: 'nav.tabPrev', title: 'Previous tab', screen: null, keys: { default: ['<A-h>'] }, run: 'tab.prev' },
 
   // Challenge & editor
   { id: 'challenge.check', title: 'Check my code', screen: 'challenge', keys: { default: ['<C-s>'] }, run: 'checkChallenge' },
@@ -111,6 +120,12 @@ export const COMMANDS = [
   // Q12: palette-only in the classic modeless editor (`%` must stay typable in
   // `width: 50%`); the vim binding lands with the Phase 2 editor.
   { id: 'editor.bracketMatch', title: 'Jump to the matching bracket', screen: 'challenge', keys: { default: [] }, run: 'jumpToMatchingBracket' },
+
+  // Projects (capstone checklists). Shift+Tab would toggle the focus back, but
+  // the input pipeline does not emit shift-modified keys yet (see
+  // screenTargets.js); Tab cycles the focus instead.
+  { id: 'projects.focusToggle', title: 'Focus the checklist', screen: 'projects', keys: { default: ['<Tab>'] }, run: 'projects.focusToggle' },
+  { id: 'projects.tick', title: 'Tick the focused requirement', screen: 'projects', keys: { default: ['<Space>'] }, run: 'projects.tick' },
 
   // Browser
   { id: 'browser.close', title: 'Back to editor', screen: 'browser', keys: { default: ['<C-b>'] }, run: 'pop' }, // Esc is app.back
@@ -268,8 +283,10 @@ export function commandsForScreen(screen) {
 export function resolveKey(keyEvent, screen, keymapLike = mergeKeymap()) {
   const isChar = keyEvent.name === 'char';
   const ctrlMod = keyEvent.name.startsWith('ctrl-');
+  // Alt arrives as `alt-<char>` (ESC-prefixed bytes, see input/index.js).
+  const altMod = keyEvent.name.startsWith('alt-');
   // Letter case matters (vim g/G): compare chars exactly as typed.
-  const rawName = isChar ? keyEvent.char : keyEvent.name.replace(/^ctrl-/, '');
+  const rawName = isChar ? keyEvent.char : keyEvent.name.replace(/^ctrl-/, '').replace(/^alt-/, '');
   const NAME_NORM = { escape: 'esc', enter: 'cr', backspace: 'bs', delete: 'del' };
   const key = isChar ? rawName : (NAME_NORM[rawName] || rawName);
   const bindings = bindingsOf(keymapLike);
@@ -278,8 +295,9 @@ export function resolveKey(keyEvent, screen, keymapLike = mergeKeymap()) {
     if (cmd.screen !== null && cmd.screen !== screen) continue;
     for (const b of bindings.get(cmd.id) || []) {
       const p = parseBinding(b);
-      if (!p || p.alt || p.shift) continue;
+      if (!p || p.shift) continue;
       if (p.ctrl !== ctrlMod) continue;
+      if (p.alt !== altMod) continue;
       if (p.key !== key) continue;
       return cmd.id;
     }

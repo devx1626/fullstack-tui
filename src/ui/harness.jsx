@@ -24,6 +24,7 @@ export { AppRoot } from './AppRoot.jsx';
 export { CommandHost, useHost, dispatchGlobal, setGlobalCommandSink, getGlobalCommandSink } from './host.jsx';
 export {
   HomeRoute, ModuleRoute, ChallengeRoute,
+  LessonRoute, ProjectsRoute,
   HelpRoute, ResourcesRoute, WorkspaceRoute, StatsRoute,
 } from './routes.jsx';
 export { ServicesProvider, createServices, useServices } from './services.jsx';
@@ -32,6 +33,8 @@ export { ChallengeScreen } from './screens/challenge.jsx';
 export { HomeScreen } from './screens/home.jsx';
 export { ModuleScreen } from './screens/module.jsx';
 export { homeViewModel, moduleViewModel, meterCells, clampScroll, wrapText } from './screens/screenModel.js';
+export { LessonScreen, lessonLines, proseLines } from './screens/lesson.jsx';
+export { ProjectsScreen, projectsLines } from './screens/projects.jsx';
 export { HelpScreen, helpLines } from './screens/help.jsx';
 export { ResourcesScreen, resourcesLines } from './screens/resources.jsx';
 export { WorkspaceScreen, workspaceLines } from './screens/workspace.jsx';

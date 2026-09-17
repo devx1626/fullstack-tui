@@ -97,7 +97,12 @@ test('next-UI routes + command host', async (t) => {
         harness.el(
           harness.RouterProvider,
           {
-            screens: { home: harness.HomeRoute, module: harness.ModuleRoute, challenge: harness.ChallengeRoute },
+            screens: {
+              home: harness.HomeRoute,
+              module: harness.ModuleRoute,
+              lesson: harness.LessonRoute,
+              challenge: harness.ChallengeRoute,
+            },
             initial: { name: 'home', params: {} },
           },
           harness.el(
@@ -172,11 +177,19 @@ test('next-UI routes + command host', async (t) => {
       assert.ok(await waitFor(() => app.cursor() === 1), 'module cursor moves');
 
       app.onKey({ name: 'enter' });
-      assert.ok(await waitFor(() => app.screen() === 'challenge'), 'Enter on a lesson pushes the challenge route');
-      // Module row 1 is the "Lists" lesson — its first unpassed challenge.
+      assert.ok(await waitFor(() => app.screen() === 'lesson'), 'Enter on a lesson pushes the lesson route');
+      // Module row 1 is the "Lists" lesson; the lesson screen lists its practice.
+      assert.ok(await waitFor(() => app.frame().includes('Practice')), 'the lesson renders its practice list');
+
+      // Enter on the lesson opens the focused challenge (first unpassed).
+      app.onKey({ name: 'enter' });
+      assert.ok(await waitFor(() => app.screen() === 'challenge'), 'Enter on a lesson opens a challenge');
       assert.ok(await waitFor(() => app.frame().includes('Make a list.')), 'the brief renders');
       assert.ok(await waitFor(() => app.frame().includes('Ctrl+H hint')), 'the challenge footer documents its keys');
       assert.equal(app.cursor(), 0, 'the challenge screen carries no list cursor');
+
+      app.onKey({ name: 'escape' });
+      assert.ok(await waitFor(() => app.screen() === 'lesson'), 'Esc pops back to the lesson');
 
       app.onKey({ name: 'escape' });
       assert.ok(await waitFor(() => app.screen() === 'module'), 'Esc pops back to the module');

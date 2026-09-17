@@ -383,7 +383,15 @@ export class Store {
 
   projectProgress(id, checkIds) {
     const rec = this.projectRecord(id);
-    return checkIds.filter((c) => rec.checks[c]).length;
+    // Ticks are keyed `${projectId}.${index}` (see App.projectsKey), NOT by the
+    // check text — so counting `rec.checks[checkText]` always returned 0 and
+    // every capstone meter read "0/N" however many items were ticked.
+    const total = Array.isArray(checkIds) ? checkIds.length : 0;
+    let done = 0;
+    for (let i = 0; i < total; i += 1) {
+      if (rec.checks[`${id}.${i}`]) done += 1;
+    }
+    return done;
   }
 
   // -- reporting ------------------------------------------------------------

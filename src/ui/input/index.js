@@ -49,6 +49,17 @@ export function parseKeys(chunk) {
       const letter = String.fromCharCode(code + 96);
       if (CTRL_NAMES.has(letter)) events.push({ type: 'key', name: `ctrl-${letter}`, raw: ch });
       else events.push({ type: 'key', name: `ctrl-${letter}`, raw: ch }); // unmapped ctrl: still surfaced
+    } else if (code === 27 && i + 1 < chunk.length && chunk.charCodeAt(i + 1) >= 32 && chunk.charCodeAt(i + 1) < 127) {
+      // ESC + a printable ASCII char is Alt+<char> — the standard terminal
+      // encoding, and what the coalescer's timer flush produces when a user
+      // presses an Alt combination. CSI/SS3 sequences were matched by KEYMAP
+      // above, and a lone ESC at end-of-chunk still falls through to 'escape'.
+      // (Inherent terminal ambiguity: Esc followed by a letter within the
+      // coalescing window reads as Alt+letter, exactly as in vim/readline.)
+      const next = chunk[i + 1];
+      events.push({ type: 'key', name: `alt-${next.toLowerCase()}`, char: next, raw: chunk.slice(i, i + 2) });
+      i += 2;
+      continue;
     } else if (code === 27) {
       events.push({ type: 'key', name: 'escape', raw: ch });
     } else if (code >= 32) {

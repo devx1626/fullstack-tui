@@ -19,6 +19,7 @@ import { ServicesProvider, createServices } from './ui/services.jsx';
 import { dispatchGlobal } from './ui/host.jsx';
 import {
   HomeRoute, ModuleRoute, ChallengeRoute,
+  LessonRoute, ProjectsRoute,
   HelpRoute, ResourcesRoute, WorkspaceRoute, StatsRoute,
 } from './ui/routes.jsx';
 import { Store } from './core/store.js';
@@ -36,6 +37,8 @@ const SCREENS = {
   home: HomeRoute,
   module: ModuleRoute,
   challenge: ChallengeRoute,
+  lesson: LessonRoute,
+  projects: ProjectsRoute,
   help: HelpRoute,
   resources: ResourcesRoute,
   workspace: WorkspaceRoute,
