@@ -747,6 +747,15 @@ try {
     if (got !== want) fail(`key ${JSON.stringify(key)} on ${screen} resolved to ${got}, expected ${want}`);
     else process.stdout.write(`   ok  ${screen}: ${key.char || key.name} → ${got}\n`);
   }
+
+  // The published keymap reference must match the registry (task 1.8):
+  // docs/keymap.md is generated, so any hand edit or binding change that is
+  // not regenerated fails the gate instead of shipping stale docs.
+  const { renderKeymapDocs } = await import('./gen-keymap-docs.js');
+  const docsPath = path.join(ROOT, 'docs', 'keymap.md');
+  const currentDocs = fs.existsSync(docsPath) ? fs.readFileSync(docsPath, 'utf8') : '';
+  if (currentDocs !== renderKeymapDocs()) fail('docs/keymap.md is stale — run: npm run keymap:docs');
+  else process.stdout.write('   ok  docs/keymap.md matches the registry\n');
 } catch (err) {
   fail(`registry: ${err && err.message ? err.message : err}`);
 }

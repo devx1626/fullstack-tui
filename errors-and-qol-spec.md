@@ -192,15 +192,15 @@ New section after the existing ones:
 
 <!-- 2026-09-14: multimedia feasibility assessed — see docs/multimedia.md. Audio/video ruled out; M0 primitives (links, bell, cursor, notify) and M1 probe plan shipped in src/ui/multimedia.js. -->
 
-- [ ] Stabilization pass: all E-items fixed with tests; all S-items verified (fixed or documented not-a-bug with evidence).
-- [ ] No footer/help hint names a nonexistent key (lint-enforced).
-- [ ] Default build contains no spike artifacts.
-- [ ] Ctrl+C from the next UI exits cleanly on a real pty (no lingering process) — regression-checked by `tools/repro-e4.sh`.
-- [ ] Every §4 feature has a green replay assertion in the QoL contract section.
+- [x] Stabilization pass: all E-items fixed with tests; all S-items verified (fixed or documented not-a-bug with evidence).
+- [x] No footer/help hint names a nonexistent key (lint-enforced).
+- [x] Default build contains no spike artifacts.
+- [x] Ctrl+C from the next UI exits cleanly on a real pty (no lingering process) — regression-checked by `tools/repro-e4.sh`.
+- [x] Every §4 feature has a green replay assertion in the QoL contract section.
 - [x] `progress.json` remains schema-identical after exercising every QoL feature (compat guard).
 - [x] Checkpoint sidecars never exceed 10 + 1 entries per challenge; restore round-trips byte-exact (check §6 Q9 replay + `tests/unit/history.test.js`).
-- [ ] Dashboard shows resume row, goal bar, and streak state; banner and milestones each fire at most once per their rules.
-- [ ] Recap prints on quit with correct session data; quitting stays instant.
+- [x] Dashboard shows resume row, goal bar, and streak state; banner and milestones each fire at most once per their rules.
+- [x] Recap prints on quit with correct session data; quitting stays instant.
 
 ---
 

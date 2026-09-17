@@ -218,6 +218,16 @@ const ALLOWED_CONFLICTS = new Set([
   'C+b:browser.close|challenge.browser',
 ]);
 
+/**
+ * Same-screen collisions are never intentional — two commands bound to one
+ * key on one screen would make one unreachable. The set exists so the rule
+ * (and the place to record a deliberate exception) is explicit; it is empty
+ * today. Kept separate from ALLOWED_CONFLICTS because the two cases resolve
+ * differently: cross-screen collisions are "mode wins", same-screen ones are
+ * always a bug.
+ */
+const ALLOWED_SAME_SCREEN = new Set();
+
 function conflictKey(binding, ids) {
   return `${binding}:${ids.slice().sort().join('|')}`;
 }

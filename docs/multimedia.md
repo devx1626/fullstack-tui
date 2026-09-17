@@ -86,7 +86,17 @@ and make the timeout path the default-assume-nothing path.
   terminal *does* support: the milestone banner (Q5), inverse-video flashes, and the
   existing meter/badge chrome.
 
-## 6. Recommendation
+## 6. Implementation status
+
+The M0 byte builders are live in the classic UI (`src/ui/multimedia.js`: OSC 8 links,
+BEL, notification, DECSCUSR cursor shapes). The M1 pieces are **written and unit-tested but
+not yet invoked from the app**: `src/ui/graphicsProbe.js` (env + `probeGraphics`/`probeGraphicsTTY`)
+and `src/ui/screenshot.js` (lazy Playwright PNG builder) are only referenced by their own
+tests. Nothing calls the probe at startup yet, so `capabilities.js` still has no `graphics`
+field. Wiring is deliberately deferred to the browser Render-tab port, where the inline
+preview has something to draw into — until then the modules are inert, not a wiring bug.
+
+## 7. Recommendation
 
 Adopt M0 now (zero risk, all environments), build the M1 screenshot-preview slice behind
 `FULLSTACK_SCREENSHOT=playwright` as a Phase 1 stretch task, add M2 squiggles when the editor

@@ -1,6 +1,6 @@
 # fullstack-tui — Feature Inventory
 
-*Ground truth as of 2026-09-14 (post Phase 0, next-UI Phase 1 opened). This document is the canonical feature list — it feeds the README rewrite (overhaul §15) and the registry wiring (task 0.7a).*
+*Ground truth as of 2026-09-17 (post Phase 0, next-UI Phase 1 in progress — dashboard/module/challenge routes interactive). This document is the canonical feature list — it feeds the README rewrite (overhaul §15) and the registry wiring (task 0.7a).*
 
 ## Multimedia & rich terminal (M0–M2, docs/multimedia.md)
 
@@ -13,9 +13,9 @@
 
 - **Input:** `InputDispatcher` owns raw stdin (mouse SGR 1006, bracketed paste 2004, escape coalescer) feeding a sequential parser chain; "mode wins" routing (focused screen → global); Ctrl+C quits cleanly (E4-verified, no process leak).
 - **Shell:** `AppRoot` = ThemeProvider → RouterProvider (push/pop/replace/reset stack) → ScreenFrame with window-size tracking; alt-screen on TTY, one-shot static render when piped.
-- **Commands:** registry of 46 ids with `.data/keymap.json` user overrides (unknown ids/bad bindings reported, never fatal); `useKeymap(screen, onCommand)` resolves keys to command ids — components never handle raw keys.
+- **Commands:** registry of 49 ids with `.data/keymap.json` user overrides (unknown ids/bad bindings reported, never fatal); `useKeymap(screen, onCommand)` resolves keys to command ids — components never handle raw keys, and `CommandHost` (`src/ui/host.jsx`) owns the per-screen cursor plus the global command table.
 - **Components:** Header/TabBar, Footer, Panel, List, ScrollPane, Badge, Meter, SplitPane (drag-ready, clamp math shared with keyboard nudge), command Palette with fuzzy filter + recents-first ordering.
-- **Screens ported:** challenge slice (SplitPane brief|editor, registry commands, vim cursor). Dashboard/module/lesson/browser/settings ports follow.
+- **Screens ported:** dashboard, module and challenge routes are real (`src/ui/routes.jsx`: `j/k/g/G`, Enter opens, Esc pops, Ctrl+S runs the real grader, Ctrl+H/Ctrl+G hint + solution, record-backed buffer/reset) on top of the challenge slice (SplitPane brief|editor, registry commands, vim cursor). The lesson, projects, stats, help, resources, workspace and settings ports, the command palette screen and the welcome tour follow (named in `UNPORTED_SCREENS`).
 
 ---
 
@@ -32,7 +32,7 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 | `fullstack --verify` | Run every reference solution through its own checks; also asserts debug challenges *fail* on their buggy starter |
 | `fullstack --reset [--all]` | Delete progress (and optionally `.workspace/`) |
 | `fullstack --help` | Flag reference |
-| `FULLSTACK_UI=next fullstack` | Next-UI entry (Ink; Phase 0 hello frame) |
+| `FULLSTACK_UI=next fullstack` | Next-UI entry (Ink; interactive dashboard/module/challenge routes) |
 | `FULLSTACK_THEME=light\|dark` | Force a palette (auto via `COLORFGBG` otherwise) |
 | `EDITOR` / `VISUAL` | External editor used by Ctrl+E |
 
@@ -101,9 +101,8 @@ An interactive **terminal curriculum** for fullstack web development: lessons re
 | `Ctrl+P` | Preview — write `.preview.html` and open in the real browser | Uses the same parts-assembly as the embedded browser; **off-challenge it opens the command palette** |
 | `Ctrl+O` | Save artifact to `.workspace/` | Multi-file: whole folder |
 | `Ctrl+E` | Open the file in `$EDITOR`/`VISUAL` | Terminal released (alt screen off) and restored; file reloaded into the buffer |
-| `Ctrl+F` | **Format** the focused buffer | Prettier-style; never reflows; aborts on broken code (see §4) |
+| `Ctrl+F` | **Format** the focused buffer (or the enclosing CSS rule) | Prettier-style; never reflows; aborts on broken code (see §4). Suggest-only: checks note unformatted code, they never rewrite it |
 | `Ctrl+J` | Jump to the line of a failed check | Only when the check carries a line range |
-| `Ctrl+F` | Format the focused buffer (or the enclosing CSS rule) | Suggest-only: checks note unformatted code, they never rewrite it |
 | `Ctrl+T` | Toggle console output panel | Shows captured logs |
 | `Tab` | Pane toggle on narrow terminals | brief ↔ code |
 
@@ -155,7 +154,7 @@ Follow mode: element selection follows the caret position in markup challenges (
 ## 9. Quality tooling
 
 - `npm run check` / `test` (`tools/check.js`): curriculum deep-validation (shape, langs, check/solution presence, starter-fails-for-debug) + headless render smoke of screens + reference-solution verification (every check passes) + a battery of editor/sandbox unit checks (auto-pairing, completions, grader semantics).
-- `npm run test:unit` — the `node:test` suites (`tests/unit/`: checkpoints, the pure nav/target helpers, and the newer pure modules — `checkNotes`, `recap`, `brackets`, the editor model, soft wrap).
+- `npm run test:unit` — the `node:test` suites (`tests/unit/`: checkpoints and store merging, the pure nav/target helpers, and the newer pure modules — `checkNotes`, `recap`, `brackets`, the editor model, soft wrap, `capabilities`, `hexTo256`, `keymap`, `overlayStack`, `palette`, `splitPane`, `useKeymap`, the input driver, the Ink routes/challenge screen, and `tests/unit/graphicsProbe`/`screenshot`).
 - `.github/workflows/ci.yml` — build + `test:unit` + `check` on every push and PR (Node 22).
 - `npm run verify` — the reference-solution + buggy-starter assertions across all 12 modules (Python reference checks run live when `python3` is available, and are skipped gracefully when it is not).
 - `FULLSTACK_UI=next` pipeline: esbuild bundle (Node 20 target), capability detection, tier-mapped themes, alt-screen wrapper, Ctrl+C lifecycle — verified on a real pty (`tools/repro-e4.sh`).

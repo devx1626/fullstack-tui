@@ -17,7 +17,8 @@
     "test:unit": "node --test tests/unit/*.test.js",
     "verify": "node bin/fullstack.js --verify",
     "list": "node bin/fullstack.js --list",
-    "reset": "node bin/fullstack.js --reset"
+    "reset": "node bin/fullstack.js --reset",
+    "keymap:docs": "node tools/gen-keymap-docs.js"
   },
   "keywords": [
     "tui",
