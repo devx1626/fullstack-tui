@@ -59,8 +59,15 @@ const CURRICULUM = [
   },
 ];
 
-/** Poll until `fn()` is truthy (or time out and return null). */
-async function waitFor(fn, { timeout = 2000, step = 20 } = {}) {
+/** Poll until `fn()` is truthy (or time out and return null).
+ *
+ * The default budget is generous on purpose: the full suite runs many files in
+ * parallel, and the challenge route's mount (session seed + autosave wiring)
+ * takes measurably longer under that contention than a lone-file run. Every
+ * waitFor here polls real app state, so a bigger timeout only costs wall time
+ * on genuine failures.
+ */
+async function waitFor(fn, { timeout = 8000, step = 20 } = {}) {
   const start = Date.now();
   for (;;) {
     const value = fn();
@@ -352,9 +359,10 @@ test('next-UI routes + command host', async (t) => {
         'micro-notes render under the header',
       );
 
-      // Reset: the record-backed buffer drops back to the starter.
+      // Reset: the session buffers drop back to the starter (per-file, with
+      // history — Ctrl+Z restores the work). The draft in the store is cleared.
       app.onKey({ name: 'ctrl-r' });
-      assert.ok(await waitFor(() => app.frame().includes('Draft cleared'), { timeout: 8000 }), 'reset reported');
+      assert.ok(await waitFor(() => app.frame().includes('Reset to starter'), { timeout: 8000 }), 'reset reported');
       assert.equal(
         new Store(STORE_FILE).challengeRecord(challengeId).lastCode ?? null,
         null,
@@ -362,6 +370,44 @@ test('next-UI routes + command host', async (t) => {
       );
 
       app.inst.unmount();
+    });
+
+    await t.test('challenge: typing edits the buffer, undo restores it (task 2.9)', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l1', challengeId: 'c1' });
+        // Wait for a REAL render of this app's challenge screen (a stale route
+        // registration from a previous subtest would satisfy screen() alone).
+        assert.ok(await waitFor(() => app.frame().includes('First heading')), 'challenge rendered');
+        assert.ok(await waitFor(() => app.screen() === 'challenge'));
+
+        // Typed 'x' reaches the editor (nothing binds it) and the debounced
+        // autosave persists it. The caret seeds at {0,0}, so the insert
+        // PREPENDS to the starter: 'x' + '<h1'. Polled through the SAME
+        // services instance the route writes through — a fresh Store would
+        // race sibling test files on the shared store file (full-suite
+        // flakiness).
+        app.onKey({ name: 'char', char: 'x' });
+        const challengeId = 'm1.l1.c1';
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord(challengeId).lastCode === 'x<h1', { timeout: 4000 }),
+          'typing lands in the buffer and autosaves',
+        );
+
+        // Ctrl+Z is unbound by the registry, so it falls through to the vim
+        // reducer, which requests undo. The buffer returns to the starter
+        // ('' — a clean buffer is not a draft), and the autosave records that.
+        app.onKey({ name: 'ctrl-z' });
+        assert.ok(
+          await waitFor(() => (services.store.challengeRecord(challengeId).lastCode ?? null) === null, { timeout: 4000 }),
+          'undo restores the starter and the clean draft is cleared',
+        );
+      } finally {
+        app.inst.unmount();
+      }
     });
 
     await t.test('challenge: pane nudge keys and a divider drag remember the split (task 1.2)', async () => {
