@@ -8,7 +8,7 @@
  * reports per-check results with duration, micro-notes and the failing-check
  * line numbers instead of a one-line shrug.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text } from 'ink';
 import { useHost } from './host.jsx';
 import { useServices } from './services.jsx';
@@ -18,7 +18,29 @@ import { detectCapabilities } from './capabilities.js';
 import { nextIndex } from './nav.js';
 import { findChallenge, firstUnpassedIn } from '../core/targets.js';
 import { nextLesson } from '../content/index.js';
-import { preferenceRows, vimPreferenceRow, togglePreference } from './preferences.js';
+import { preferenceRows, vimPreferenceRow, togglePreference } from './preferences.js';import { applyEdit } from '../editor/document.js';
+import { createSession,
+  sessionDoc,
+  sessionText,
+  sessionTexts,
+  sessionStep,
+  sessionSetView,
+  sessionResetFile,
+  sessionSetText,
+  sessionUndo,
+  sessionRedo,
+  commit,
+  moveCaret,
+  viewOf,
+} from '../editor/document.js';
+import { createVimState, reduceKey, isVisual } from '../editor/vim.js';
+import { typeText, typeBackspace, typeDelete, typeNewline, moveArrow } from '../editor/typekeys.js';
+import { createRegisters } from '../editor/registers.js';
+import { copySequence as clipboardSequence } from '../editor/osc52.js';
+import { clickToPos } from '../editor/viewport.js';
+import { diffRows } from '../editor/diff.js';
+import { effectiveKeymap } from './keymap.js';
+import { resolveKey } from './commands.js';
 import { useResizableSplit } from './components/ResizableSplit.jsx';
 import { HomeScreen } from './screens/home.jsx';
 import { ModuleScreen } from './screens/module.jsx';
@@ -38,6 +60,18 @@ function solutionText(challenge) {
   if (!sol) return '';
   if (typeof sol === 'string') return sol;
   return Object.entries(sol).map(([name, text]) => `── ${name} ──\n${text}`).join('\n\n');
+}
+
+/** Highlight language for a file name (extension → highlight.js key). */
+function langOf(name) {
+  const ext = String(name || '').split('.').pop().toLowerCase();
+  const map = {
+    js: 'js', jsx: 'js', mjs: 'js', cjs: 'js', ts: 'js', tsx: 'js',
+    html: 'html', htm: 'html', css: 'css', json: 'json',
+    sh: 'sh', bash: 'sh', md: 'md', py: 'py', sql: 'sql',
+    yml: 'yaml', yaml: 'yaml',
+  };
+  return map[ext] || 'js';
 }
 
 /** One failing check, rendered as a numbered status line. */
@@ -157,29 +191,155 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     minRight: 24,
     fallbackRatio: 0.42,
   });
-  const { widen, narrow, reset: resetPanes, onMouse } = split;
+  const { widen, narrow, reset: resetPanes, onMouse: splitMouse } = split;
 
+  // ---- Phase 2 editor session (task 2.9) --------------------------------
+  // One session owns every file (docs + history + view state). The seed is
+  // the saved draft → starter, exactly the classic's record-driven boot.
   const challengeKey = target ? `${target.lessonId}.${target.challengeId}` : null;
   const record = target ? services.store.challengeRecord(challengeKey) : null;
-  const saved = record && typeof record.lastCode === 'string' ? record.lastCode : null;
   const starter = target ? (target.challenge.starter ?? '') : '';
-  const code = showSolution ? solutionText(target.challenge) : (saved ?? starter);
 
+  const [session, setSession] = useState(null);
+  const [vim, setVim] = useState(() => createVimState({ enabled: services?.settings?.get?.('editor.vimMode') ?? false }));
+  const [registers, setRegisters] = useState(() => createRegisters());
+  const [selection, setSelection] = useState(null);
+  const [mode, setMode] = useState('normal');
+
+  // (Re)seed when the target changes; a same-target re-render keeps the buffer.
+  useEffect(() => {
+    if (!target) return;
+    const key = `${target.lessonId}.${target.challengeId}`;
+    const rec = services.store.challengeRecord(key);
+    const files = target.challenge.files
+      ? Object.fromEntries(Object.entries(target.challenge.files).map(([n, s]) => [n, rec.lastCode?.[n] ?? s ?? '']))
+      : { [target.challenge.lang || 'js']: (typeof rec.lastCode === 'string' ? rec.lastCode : null) ?? target.challenge.starter ?? '' };
+    const names = Object.keys(files);
+    setSession(createSession(files, {
+      order: names,
+      languages: Object.fromEntries(names.map((n) => [n, langOf(n)])),
+    }));
+    setVim(createVimState({ enabled: !!services?.settings?.data?.editor?.vimMode }));
+    setSelection(null);
+    setMode('normal');
+  }, [target, services]);
+
+  // Autosave (Q8): debounced write of the active file's text. A buffer equal
+  // to the starter is NOT a draft — reset stays "no draft" instead of racing
+  // the reset command and re-persisting the starter as saved work.
+  const saveTimer = useRef(null);
+  useEffect(() => {
+    if (!session || !challengeKey || !services?.store?.saveDraft) return undefined;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const texts = sessionTexts(session);
+      const starters = target?.challenge?.files
+        ? target.challenge.files
+        : { [session.active]: target?.challenge?.starter ?? '' };
+      const isClean = Object.keys(starters).length > 0
+        && Object.entries(starters).every(([n, s]) => (texts[n] ?? '') === (s ?? ''));
+      services.store.saveDraft(
+        challengeKey,
+        isClean ? null : (target?.challenge?.files ? texts : texts[session.active]),
+      );
+    }, 400);
+    return () => clearTimeout(saveTimer.current);
+  }, [session, challengeKey, services, target]);
+
+  const activeName = session ? session.active : 'js';
+
+  /** Copy text via OSC52 (no child process, works over SSH). */
+  const copyText = useCallback((text) => {
+    try {
+      const seq = clipboardSequence(text, { setting: services?.settings?.data?.clipboard ?? null });
+      if (seq) process.stdout.write(seq);
+    } catch { /* clipboard is best-effort; never break a keystroke on it */ }
+  }, [services]);
+
+  /**
+   * One keystroke → session → history. Two paths, one session:
+   *   - vim on:  the vim reducer decides (its result carries the next doc).
+   *   - vim off: the MODELESS layer (typekeys.js) — chars type, backspace/
+   *     delete/enter/arrows behave like the classic editor.
+   * Returns true when the key was consumed.
+   */
+  const applyKey = useCallback((ev) => {
+    if (!session) return true;
+    const name = session.active;
+    const doc = sessionDoc(session, name);
+
+    if (vim && vim.enabled) {
+      const res = reduceKey(vim, ev, { doc, registers, tabSize: session.tabSize });
+
+      let next = session;
+      if (res.changed && res.doc !== doc) {
+        next = commit(session, name, res.doc, { coalesce: res.coalesce || false });
+      }
+      // Requests the engine cannot do itself (pure reducer): undo/redo/scroll.
+      if (res.request?.type === 'undo') next = sessionUndo(next, name);
+      if (res.request?.type === 'redo') next = sessionRedo(next, name);
+      if (res.request?.type === 'scroll' && res.request.amount === 'page') {
+        const view = viewOf(doc);
+        next = sessionSetView(next, name, { scrollTop: Math.max(0, (view.scrollTop || 0) + res.request.dir * 20) });
+      }
+      if (res.request?.type === 'tab') {
+        next = sessionStep(next, res.request.dir);
+      }
+      if (res.request?.type === 'clipboard' && res.request.text) {
+        copyText(res.request.text);
+      }
+      if (res.registers !== registers) setRegisters(res.registers);
+      if (res.state !== vim) setVim(res.state);
+      const nextMode = res.state && res.state.mode ? res.state.mode : 'normal';
+      setMode(isVisual(nextMode) ? 'visual' : nextMode === 'insert' || nextMode === 'replace' ? 'insert' : 'normal');
+      if (next !== session) setSession(next);
+      if (res.status) setStatus(res.status);
+      return res.consumed !== false;
+    }
+
+    // ---- modeless path (vim off): classic-editor behavior ----------------
+    const key = ev && ev.name;
+    let next = session;
+    let consumed = true;
+    if (key === 'char' && ev.char) {
+      next = commit(session, name, applyEdit(doc, typeText(doc, ev.char, selection).changes, typeText(doc, ev.char, selection).caret).doc, { coalesce: 'typing' });
+    } else if (key === 'backspace') {
+      const r = typeBackspace(doc, selection, { indentSize: 2 });
+      next = r.changes.length ? commit(session, name, applyEdit(doc, r.changes, r.caret).doc, { coalesce: 'typing' }) : session;
+    } else if (key === 'delete') {
+      const r = typeDelete(doc, selection);
+      next = r.changes.length ? commit(session, name, applyEdit(doc, r.changes, r.caret).doc, { coalesce: 'typing' }) : session;
+    } else if (key === 'return' || key === 'enter') {
+      const r = typeNewline(doc, selection);
+      next = commit(session, name, applyEdit(doc, r.changes, r.caret).doc, { coalesce: 'typing' });
+    } else if (key === 'left' || key === 'right' || key === 'up' || key === 'down' || key === 'home' || key === 'end') {
+      const p = moveArrow(doc, key);
+      next = commit(session, name, moveCaret(doc, p), { history: false });
+    } else if (key === 'ctrl-z') {
+      next = sessionUndo(session, name);
+    } else if (key === 'ctrl-y' || key === 'shift-ctrl-z') {
+      next = sessionRedo(session, name);
+    } else {
+      consumed = false; // escape, ctrl combos, F-keys … → global handlers
+    }
+    if (selection && consumed) setSelection(null); // typing collapses the drag
+    if (next !== session) setSession(next);
+    return consumed;
+  }, [copyText, registers, selection, session, vim]);
+
+  /** Registry commands (resolved keys, palette, host) — the id decides. */
   const onCommand = useCallback(async (id) => {
     if (nextIndex(0, id, 0) !== null) return; // no list on this screen
     if (!target) return;
     switch (id) {
       case 'challenge.check': {
         if (busy) return;
-        if (target.challenge.files) {
-          setStatus('Multi-file challenges are graded in the classic UI for now.');
-          return;
-        }
         setBusy(true);
         setStatus('running your code…');
         try {
           const { evaluate } = await import('../core/grade.js');
           const started = Date.now();
+          const code = sessionText(session);
           const result = await evaluate(target.challenge, code);
           result.durationMs = Date.now() - started;
           const { checkNotes } = await import('../core/checkNotes.js');
@@ -232,12 +392,63 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
           : `Solution for ${target.challenge.title} — Ctrl+G again to hide.`);
         return;
       case 'challenge.reset': {
-        // The classic pass path clears lastCode through resetChallenge; the
-        // buffer here is record-driven, so dropping the saved draft is reset.
+        // Per-file reset: every file back to its starter, one history entry per
+        // file so Ctrl+Z (undo) brings the learner's work back.
+        const files = target.challenge.files
+          ? target.challenge.files
+          : { [activeName]: target.challenge.starter ?? '' };
+        let next = session;
+        for (const [name, text] of Object.entries(files)) {
+          next = sessionResetFile(next, name, text ?? '', { label: 'reset' });
+        }
+        setSession(next);
         services.store.saveDraft(challengeKey, null);
         setShowSolution(false);
         setResults(null);
-        setStatus('Draft cleared — the starter is back (Ctrl+S re-checks it).');
+        setStatus('Reset to starter — Ctrl+Z brings your work back.');
+        return;
+      }
+      case 'challenge.save': {
+        const texts = sessionTexts(session);
+        services.store.saveDraft(challengeKey, target.challenge.files ? texts : texts[session.active]);
+        setStatus('Saved to your workspace.');
+        return;
+      }
+      case 'editor.tabNext':
+        setSession(sessionStep(session, 1));
+        return;
+      case 'editor.tabPrev':
+        setSession(sessionStep(session, -1));
+        return;
+      case 'editor.undo':
+        setSession(sessionUndo(session));
+        return;
+      case 'editor.redo':
+        setSession(sessionRedo(session));
+        return;
+      case 'challenge.externalEditor': {
+        // Round-trip through $EDITOR with the terminal released (classic parity).
+        const { withTerminalReleased } = await import('../tui/term.js');
+        const { saveArtifact } = await import('../core/workspace.js');
+        const fs = await import('node:fs');
+        const name = session.active;
+        const file = saveArtifact(`.fullstack-tui-edit-${Date.now()}-${name}`, sessionText(session, name));
+        const editor = process.env.VISUAL || process.env.EDITOR || 'vi';
+        await withTerminalReleased(async () => {
+          const { spawn } = await import('node:child_process');
+          await new Promise((resolve) => {
+            const child = spawn(editor, [file], { stdio: 'inherit' });
+            child.on('exit', resolve);
+            child.on('error', resolve);
+          });
+        });
+        try {
+          const updated = fs.readFileSync(file, 'utf8');
+          setSession(sessionSetText(session, name, updated));
+          setStatus(`Reloaded from ${editor}.`);
+        } catch {
+          setStatus('Could not read the file back.');
+        }
         return;
       }
       case 'view.paneWider':
@@ -253,34 +464,96 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       case 'editor.format': {
         // Suggest-only (Q10): never rewrite the buffer from a route.
         const { formatCode } = await import('../core/format.js');
-        const out = formatCode(target.challenge.lang || 'js', code);
+        const out = formatCode(target.challenge.lang || 'js', sessionText(session));
         setStatus(!out
           ? "Couldn't format safely — fix the syntax first."
           : out.changed
-            ? 'The formatter would rewrite this buffer — the Phase 2 editor applies it. (The classic UI formats today: Ctrl+F.)'
+            ? 'The formatter would rewrite this buffer — the classic UI applies it (Ctrl+F).'
             : 'Already formatted.');
         return;
       }
       default:
         host.run(id);
     }
-  }, [busy, challengeKey, code, hintIndex, host, narrow, resetPanes, services, showSolution, target, widen]);
+  }, [activeName, busy, challengeKey, hintIndex, host, narrow, resetPanes, session, services, showSolution, target, widen]);
+
+  // Raw keys: resolved commands first (registry wins), then the editor.
+  // The mouse composition (divider first, editor sink second) is registered
+  // on the same route; raw keys fall through to applyKey via useKeymap's
+  // onRawKey channel (task 2.9).
+  const editorSink = useRef(null);
+  const onMouseRoute = useCallback((ev) => {
+    if (splitMouse && splitMouse(ev)) return true;
+    // The route owns the layout: only events inside the EDITOR pane (right of
+    // the divider column) reach the editor's sink. A click in the brief pane
+    // is nobody's (the pane test relies on that: "left to the screen" means
+    // unclaimed, so global handlers keep working).
+    if (ev && ev.type === 'mouse' && typeof ev.x === 'number' && ev.x - 1 > split.leftWidth) {
+      if (editorSink.current && editorSink.current(ev)) return true;
+    }
+    return false;
+  }, [splitMouse, split.leftWidth]);
+
+  const mouseHandlers = useMemo(() => ({
+    // Click → caret through the pure mapping; drag extends a selection.
+    onDocClick: ({ row, col }) => {
+      if (!session) return;
+      const doc = sessionDoc(session);
+      const p = clickToPos(doc, row, col, { tabSize: session.tabSize });
+      setSelection(null);
+      setSession(commit(session, session.active, moveCaret(doc, p), { history: false }));
+    },
+    onDocDrag: ({ row, col }) => {
+      if (!session) return;
+      const doc = sessionDoc(session);
+      const p = clickToPos(doc, row, col, { tabSize: session.tabSize });
+      setSelection((prev) => ({
+        anchor: (prev && prev.anchor) || doc.caret,
+        head: p,
+      }));
+    },
+    onDocWheel: (dir) => {
+      if (!session) return;
+      const view = viewOf(sessionDoc(session));
+      setSession(sessionSetView(session, session.active, {
+        scrollTop: Math.max(0, (view.scrollTop || 0) + dir * 3),
+      }));
+    },
+  }), [session]);
+
+  useKeymap('challenge', onCommand, { onMouse: onMouseRoute, onRawKey: applyKey });
 
   if (!target) return <Text color="red">unknown challenge: {challengeId || lessonId || moduleId}</Text>;
+  if (!session) return null; // one tick while the session seeds
+
+  const solutionRows = showSolution
+    ? diffRows(sessionText(session), solutionText(target.challenge), {
+      lang: target.challenge.lang || 'js',
+      theme: null,
+    })
+    : [];
 
   return (
     <ChallengeScreen
       title={target.challenge.title || target.challenge.id}
       brief={target.challenge.prompt || ''}
-      code={code}
+      session={session}
+      selection={selection}
+      mode={mode}
       width={host.width}
       status={status}
       busy={busy}
       results={results}
+      showSolution={showSolution}
+      solutionRows={solutionRows}
       leftWidth={split.leftWidth}
       dragging={split.dragging}
-      onMouse={onMouse}
+      onMouse={onMouseRoute}
       onCommand={onCommand}
+      mouseHandlers={mouseHandlers}
+      mouseSink={editorSink}
+      tabSize={session.tabSize}
+      registerInput={false}
     />
   );
 }

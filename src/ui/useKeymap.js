@@ -55,16 +55,20 @@ export function dispatchToScreen(id, ev = { type: 'command', source: 'palette' }
  * @param {string|null} screen current screen id (null = works everywhere)
  * @param {(id: string, ev: object) => void} onCommand called with the
  *   resolved command id (Appendix C) and the raw parser event
- * @param {{enabled?: boolean, keymap?: Map, onMouse?: (ev) => boolean}} opts
+ * @param {{enabled?: boolean, keymap?: Map, onMouse?: (ev) => boolean,
+ *   onRawKey?: (ev) => boolean}} opts
  *   `onMouse` receives SGR mouse events (input/index.js) for the focused
  *   screen. Like `onKey`, the registered handler reads the LATEST callback
  *   through a ref; returning false lets the event fall through to the global
  *   handler, so a screen only claims the clicks it actually handles.
+ *   `onRawKey` (task 2.9) receives every key event NO command resolved to —
+ *   the editor's typing path (vim state machine / modeless typing). Returning
+ *   true claims the key; false lets it fall to the global handler.
  *
  * Handlers should be stable (useCallback) — the effect re-registers on
  * identity change, which is fine but churns.
  */
-export function useKeymap(screen, onCommand, { enabled = true, keymap, onMouse } = {}) {
+export function useKeymap(screen, onCommand, { enabled = true, keymap, onMouse, onRawKey } = {}) {
   // The registered handler reads the LATEST callback through a ref, so a
   // re-render never leaves a stale closure registered. Without this, handlers
   // that close over state (a list cursor, a code buffer) would be one frame
@@ -74,6 +78,8 @@ export function useKeymap(screen, onCommand, { enabled = true, keymap, onMouse }
   handlerRef.current = onCommand;
   const mouseRef = useRef(onMouse);
   mouseRef.current = onMouse;
+  const rawRef = useRef(onRawKey);
+  rawRef.current = onRawKey;
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -94,9 +100,15 @@ export function useKeymap(screen, onCommand, { enabled = true, keymap, onMouse }
         const handler = handlerRef.current;
         if (typeof handler !== 'function') return false;
         const id = resolveKey(ev, screen, map);
-        if (!id) return false;
-        handler(id, ev);
-        return true;
+        if (id) {
+          handler(id, ev);
+          return true;
+        }
+        // Task 2.9: unbound keys reach the editor's raw handler (typing, vim
+        // motions) BEFORE falling through to the global table.
+        const raw = rawRef.current;
+        if (typeof raw === 'function' && raw(ev) === true) return true;
+        return false;
       },
       // Mouse is opt-in: a screen without an onMouse leaves the event to the
       // dispatcher's global pass (and to nothing, by design).
