@@ -18,6 +18,7 @@ import { Box, Text } from 'ink';
 import { Palette } from '../components/palette.jsx';
 import { commandsForScreen, mergeKeymap, displayBinding } from '../commands.js';
 import { clampSelected } from '../fuzzy.js';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
 /**
  * Palette modal key handling, as a pure function: given the current query /
@@ -124,16 +125,18 @@ export function PaletteScreen({
   onRun,
   onCancel,
 }) {
+  const theme = useTheme();
+  const ic = useIcons();
   // Filtering is shared with the owner of `selected` (paletteMatches), so the
   // highlighted row and the executed row can never disagree.
   return (
     <Box flexDirection="column" paddingLeft={1}>
       <Text>
-        <Text color="cyan" bold> Command palette </Text>
-        <Text color="gray"> {items.length} commands · Enter run · Esc close</Text>
+        <Text color={theme.accent} bold> Command palette </Text>
+        <Text color={theme.muted}> {items.length} commands {ic.bullet} Enter run {ic.bullet} Esc close</Text>
       </Text>
       <Palette
-        title="⌘ Commands"
+        title={`${ic.command} Commands`}
         query={query}
         commands={items}
         recents={recents}

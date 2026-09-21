@@ -1,0 +1,14 @@
+# editor replay: vim-edit-undo-redo
+
+## app.js
+let n = 2; let n = 1;
+
+## viewport
+1  let n = 2; let n = 1;
+2
+3
+4
+5
+6
+7
+8

@@ -22,6 +22,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { useKeymap } from '../useKeymap.js';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
 /** The scratch buffer shown in the sandbox step (never graded, never saved). */
 export const SANDBOX_SAMPLE = [
@@ -130,32 +131,34 @@ export function tourReducer({ index = 0 } = {}, action = {}, total = 1) {
 }
 
 export function TourScreen({ step = 0, total = 1, title, body = [], modeless = false, sandbox = false, onCommand }) {
+  const theme = useTheme();
+  const ic = useIcons();
   useKeymap('tour', (id) => onCommand?.(id));
 
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="cyan" bold> ◈ Welcome tour </Text>
-        <Text color="gray"> step {Math.min(step + 1, total)}/{total}</Text>
+        <Text color={theme.accent} bold> {ic.brand} Welcome tour </Text>
+        <Text color={theme.muted}> step {Math.min(step + 1, total)}/{total}</Text>
       </Text>
       <Text> </Text>
-      <Text bold color="cyan"> {title}</Text>
+      <Text bold color={theme.accent}> {title}</Text>
       {body.map((line, i) => (
-        <Text key={i} color={i === 0 ? undefined : 'gray'}> {line}</Text>
+        <Text key={i} color={i === 0 ? undefined : theme.muted}> {line}</Text>
       ))}
       {sandbox ? (
         <Box flexDirection="column" marginTop={1}>
-          <Text color="gray"> scratch buffer</Text>
+          <Text color={theme.muted}> scratch buffer</Text>
           {SANDBOX_SAMPLE.map((line, i) => (
-            <Text key={i} color="green"> {line}</Text>
+            <Text key={i} color={theme.good}> {line}</Text>
           ))}
         </Box>
       ) : null}
       <Text> </Text>
-      <Text color={modeless ? 'green' : 'gray'}>
+      <Text color={modeless ? theme.good : theme.muted}>
         {' '}keys: {modeless ? 'simple (no modes) — remembered' : 'vim (i to type, Esc to stop)'}
       </Text>
-      <Text color="gray"> Enter {step >= total - 1 ? 'finish' : 'next'} · v simple keys · Esc skip</Text>
+      <Text color={theme.muted}> Enter {step >= total - 1 ? 'finish' : 'next'} {ic.bullet} v simple keys {ic.bullet} Esc skip</Text>
     </Box>
   );
 }

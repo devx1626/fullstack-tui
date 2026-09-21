@@ -32,6 +32,7 @@ import { Box, Text } from 'ink';
 import { useRouter } from './router.jsx';
 import { useServices } from './services.jsx';
 import { useWindowSize } from './useWindowSize.js';
+import { useTheme, useIcons } from './theme/context.jsx';
 import { COMMANDS, resolveKey } from './commands.js';
 import { dispatchToScreen } from './useKeymap.js';
 import { openOverlay } from './input/overlayStack.js';
@@ -87,6 +88,8 @@ export function dispatchGlobal(ev, screen) {
 export const UNPORTED_SCREENS = {};
 
 export function CommandHost({ onQuit, children }) {
+  const theme = useTheme();
+  const ic = useIcons();
   const router = useRouter();
   const services = useServices();
   const size = useWindowSize();
@@ -365,8 +368,8 @@ export function CommandHost({ onQuit, children }) {
         ) : null}
         {notice ? (
           <Box marginTop={1}>
-            <Text color={notice.kind === 'error' ? 'red' : notice.kind === 'warn' ? 'yellow' : 'cyan'}>
-              {' '}· {notice.message} ·
+            <Text color={notice.kind === 'error' ? theme.bad : notice.kind === 'warn' ? theme.warn : theme.accent}>
+              {' '}{ic.bullet} {notice.message} {ic.bullet}
             </Text>
           </Box>
         ) : null}

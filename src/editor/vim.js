@@ -696,9 +696,14 @@ function insertKey(state, spec, ctx, registers) {
     return insertEdit(state, ctx, registers, [{ start: doc.caret, end: doc.caret, text: ' '.repeat(spaces) }], { row: doc.caret.row, col: doc.caret.col + spaces }, 'indent');
   }
 
-  const token = ARROW_TO_MOTION[spec.name] || t;
-  if (token === 'h' || token === 'l' || token === 'j' || token === 'k') {
-    const m = applyMotion(doc, doc.caret, token, { count: 1, goalCol: null });
+  // Arrow keys move the caret; the LETTERS h/j/k/l must type. The old
+  // `ARROW_TO_MOTION[spec.name] || t` fallback routed a typed `h`/`j`/`k`/`l`
+  // through this motion branch, so insert mode silently dropped four of the
+  // most common letters — typing `hello` produced `eo` and dragged the caret
+  // around. Only a real arrow key has an entry in ARROW_TO_MOTION.
+  const arrowMotion = ARROW_TO_MOTION[spec.name];
+  if (arrowMotion) {
+    const m = applyMotion(doc, doc.caret, arrowMotion, { count: 1, goalCol: null });
     return done(state, withCaret(doc, m.caret), registers);
   }
   if (spec.name === 'home') return done(state, withCaret(doc, S.lineStart(doc, doc.caret.row)), registers);
@@ -744,9 +749,10 @@ function replaceKey(state, spec, ctx, registers) {
     const out = smartBackspace(doc);
     return insertEdit(state, ctx, registers, out.changes, out.caret, 'typing');
   }
-  const token = ARROW_TO_MOTION[spec.name] || t;
-  if (token === 'h' || token === 'l' || token === 'j' || token === 'k') {
-    const m = applyMotion(doc, doc.caret, token, { count: 1 });
+  // Same rule as insert mode: arrows move, the letters h/j/k/l overtype.
+  const arrowMotion = ARROW_TO_MOTION[spec.name];
+  if (arrowMotion) {
+    const m = applyMotion(doc, doc.caret, arrowMotion, { count: 1 });
     return done(state, withCaret(doc, m.caret), registers);
   }
   if (spec.name === 'enter') {
@@ -1082,11 +1088,6 @@ function confirmKey(state, spec, ctx, registers) {
   if (t === 'a') return commit(true, true);
   if (t === 'q' || t === 'escape') return finish(accepted);
   return done(state, ctx.doc, registers, { status: 'y = yes, n = no, a = all, q = quit' });
-}
-
-/** `:registers` and `:%s` plans are surfaced for the caller's panel. */
-export function confirmSubstituteState(state) {
-  return state && state.confirm ? { ...state.confirm } : null;
 }
 
 function repeatChange(state, ctx, registers) {

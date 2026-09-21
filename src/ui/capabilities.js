@@ -1,10 +1,11 @@
 /**
  * Capability detection (spec §7.1).
  *
- * Probed once at startup; drives theme tier, icon set, mouse mode. Phase 0
- * ships the core probes (color depth, unicode, TTY, tier); Nerd Font and
- * mouse heuristics get refined in later phases.
+ * Probed once at startup; drives theme tier, icon set, mouse mode. The icon
+ * probe (Nerd Font / `FULLSTACK_ICONS`) lives in theme/icons.js and is folded
+ * into the profile here so screens can read one `caps` object.
  */
+import { autoIconSet } from './theme/icons.js';
 
 export function detectCapabilities(env = process.env, isTTY = process.stdout.isTTY) {
   const term = String(env.TERM || '');
@@ -42,5 +43,8 @@ export function detectCapabilities(env = process.env, isTTY = process.stdout.isT
   else if (tty && unicode) tier = 'C';
   else tier = 'D';
 
-  return { isTTY: !!isTTY, tty, colorDepth, unicode, tier, term, colorterm };
+  // -- icons (overhaul §7.1): env override → known-Nerd terminal → unicode → ascii
+  const icons = autoIconSet(env, unicode);
+
+  return { isTTY: !!isTTY, tty, colorDepth, unicode, tier, term, colorterm, icons };
 }

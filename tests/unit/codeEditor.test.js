@@ -104,6 +104,52 @@ if (harness) {
     assert.ok(!text.includes('line 24'), 'row above the window leaked in');
   });
 
+  test('a re-render updates the edited row and keeps the other rows (row-element reuse)', async () => {
+    // CodeEditor caches each row's ELEMENT and reuses it while the props are
+    // identical (the keystroke-to-paint optimisation). A bug there would pin a
+    // stale line on screen, so update the document in place and assert both
+    // halves: the edited row is new AND the untouched rows survive.
+    function Probe({ text }) {
+      return harness.el(harness.CodeEditor, { document: text, width: 40, height: 6, language: 'text' });
+    }
+    const out = helper.fakeStdout(40, 12);
+    const inst = harness.render(harness.el(Probe, { text: 'alpha\nbeta\ngamma' }), {
+      stdout: out,
+      stdin: helper.fakeStdin(),
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    await new Promise((r) => setTimeout(r, 60));
+    inst.rerender(harness.el(Probe, { text: 'alpha\nBETA-changed\ngamma' }));
+    await new Promise((r) => setTimeout(r, 60));
+    const frame = helper.stripAnsi(out.chunks.join(''));
+    inst.unmount();
+    assert.ok(frame.includes('BETA-changed'), 'the edited row was not re-rendered');
+    assert.ok(frame.includes('alpha') && frame.includes('gamma'), 'an untouched row vanished');
+  });
+
+  test('a caret-only move paints no different text (stable-frame contract)', async () => {
+    // tools/check.js §9 measures a caret-only move at ~60% of a typing keystroke
+    // because ink re-renders and re-tokenizes the whole frame on ANY update. The
+    // component half of the contract is this: the caret lives in the terminal
+    // cursor, never in the text layer — so a stable-frame caret path (reposition
+    // the cursor without a state update) would have nothing to reconcile.
+    const { docFromText, moveCaret } = await import('../../src/editor/document.js');
+    const doc = docFromText('const a = 1;\nconst b = 2;');
+    const frameFor = (caret) => renderToText(
+      harness.el(harness.CodeEditor, {
+        document: moveCaret(doc, caret),
+        width: 40,
+        height: 4,
+        language: 'js',
+        theme: THEME,
+      }),
+    );
+    const atStart = strip(await frameFor({ row: 0, col: 0 }));
+    const moved = strip(await frameFor({ row: 1, col: 3 }));
+    assert.equal(moved, atStart, 'the caret changed the painted text');
+  });
+
   test('CodeEditor hides the gutter with showGutter=false', async () => {
     const text = strip(await renderToText(
       harness.el(harness.CodeEditor, {

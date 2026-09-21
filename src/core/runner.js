@@ -33,12 +33,17 @@ const stringify = (v) => {
   }
 };
 
-/** Offline stand-in for fetch, driven by a per-challenge mock table. */
-function makeFetch(mock = {}) {
+/**
+ * Offline stand-in for fetch, driven by a per-challenge mock table.
+ * `onRecord(url, status)` is the warmed console's network-log hook — the
+ * network pane shows what the learner's code actually requested.
+ */
+function makeFetch(mock = {}, onRecord = null) {
   return async (url, options = {}) => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const target = String(url);
     const key = Object.keys(mock).find((k) => target.includes(k));
+    if (onRecord) onRecord(target, key === undefined ? 404 : 200);
     const response = (body) => ({
       ok: true,
       status: 200,
@@ -149,42 +154,19 @@ ${testsSource}
 }
 
 /**
- * Run `code` in this thread and collect test results.
- *
- * @param {string} code learner source
- * @param {object} opts
- * @param {{label:string, expr:string}[]} opts.tests  expressions evaluated in scope
- * @param {string[]} opts.capture  variable names to read back out of the sandbox
- * @param {number} opts.timeout  milliseconds before we assume an infinite loop
- * @param {string} opts.domHtml  when set, a DOM is built from this fixture and injected
- * @param {boolean} opts.async  wrap in an async function so `await` works
- * @param {object} opts.mockFetch  URL fragment -> JSON body for the offline fetch
- * @param {string} opts.prelude  code injected before the learner's, for challenge-specific helpers
- * @param {string} opts.sourceText  the learner's original source, exposed to checks as `__src`
+ * Build the sandbox object and vm context shared by the one-shot runner and
+ * the warmed console session (Phase 3): identical globals, DOM injection and
+ * fetch semantics in both, so a console expression sees exactly what a check
+ * run sees. `onRecord` taps the offline fetch for the network pane.
  */
-export function runInProcess(code, opts = {}) {
+function makeSandbox(opts = {}, onRecord = null) {
   const {
-    tests = [],
-    capture = [],
-    timeout = 2000,
-    extraLogs = [],
     domHtml = null,
-    async = false,
     mockFetch = null,
   } = opts;
 
-  const out = {
-    ok: true,
-    error: null,
-    stack: null,
-    results: [],
-    captured: {},
-    logs: [...extraLogs],
-    dom: null,
-  };
-
-  /** Wrap a timer callback so its failures are recorded rather than fatal. */
   const asyncErrors = [];
+  /** Wrap a timer callback so its failures are recorded rather than fatal. */
   const safeCallback = (fn) => (...args) => {
     try {
       const returned = fn(...args);
@@ -199,14 +181,11 @@ export function runInProcess(code, opts = {}) {
   };
 
   const dom = domHtml == null ? null : createDom(domHtml);
-  out.dom = dom;
   const domBootstrap = dom ? 'if (typeof document !== "undefined") document.dispatchEvent("DOMContentLoaded");' : '';
-
-  const wrapped = buildSource(code, { capture, tests, domBootstrap, async, prelude: opts.prelude || '' });
 
   const sandbox = {
     __stringify: stringify,
-    __source: String(opts.sourceText ?? code),
+    __source: String(opts.sourceText ?? ''),
     // Learner code schedules timers with abandon. A throw inside a callback
     // becomes a recorded log line instead of an uncaught exception that would
     // take the whole TUI down with it.
@@ -239,8 +218,12 @@ export function runInProcess(code, opts = {}) {
     isNaN,
     isFinite,
     structuredClone,
-    fetch: makeFetch(mockFetch || {}),
+    fetch: makeFetch(mockFetch || {}, onRecord),
     AbortController,
+    // Recorded timer/microtask failures surface in the run's logs (the
+    // one-shot path drains them after the run; the session drains them
+    // per evaluation).
+    __asyncErrors: asyncErrors,
   };
 
   if (dom) {
@@ -278,6 +261,46 @@ export function runInProcess(code, opts = {}) {
   }
   sandbox.globalThis = sandbox;
 
+  return { sandbox, dom, domBootstrap, asyncErrors };
+}
+
+/**
+ * Run `code` in this thread and collect test results.
+ *
+ * @param {string} code learner source
+ * @param {object} opts
+ * @param {{label:string, expr:string}[]} opts.tests  expressions evaluated in scope
+ * @param {string[]} opts.capture  variable names to read back out of the sandbox
+ * @param {number} opts.timeout  milliseconds before we assume an infinite loop
+ * @param {string} opts.domHtml  when set, a DOM is built from this fixture and injected
+ * @param {boolean} opts.async  wrap in an async function so `await` works
+ * @param {object} opts.mockFetch  URL fragment -> JSON body for the offline fetch
+ * @param {string} opts.prelude  code injected before the learner's, for challenge-specific helpers
+ * @param {string} opts.sourceText  the learner's original source, exposed to checks as `__src`
+ */
+export function runInProcess(code, opts = {}) {
+  const {
+    tests = [],
+    capture = [],
+    timeout = 2000,
+    extraLogs = [],
+  } = opts;
+
+  const out = {
+    ok: true,
+    error: null,
+    stack: null,
+    results: [],
+    captured: {},
+    logs: [...extraLogs],
+    dom: null,
+  };
+
+  const { sandbox, dom, domBootstrap, asyncErrors } = makeSandbox(opts);
+  out.dom = dom;
+
+  const wrapped = buildSource(code, { capture, tests, domBootstrap, async: opts.async || false, prelude: opts.prelude || '' });
+
   const absorb = (returned) => {
     out.results = (returned && returned.__results) || [];
     out.captured = (returned && returned.__captured) || {};
@@ -303,7 +326,7 @@ export function runInProcess(code, opts = {}) {
 
   const context = vm.createContext(sandbox);
 
-  if (!async) {
+  if (!opts.async) {
     try {
       return absorb(script.runInContext(context, { timeout }));
     } catch (err) {
@@ -422,4 +445,173 @@ function runInWorker(code, opts) {
 export function runJs(code, opts = {}) {
   if (!opts.async) return runInProcess(code, opts);
   return runInWorker(code, opts);
+}
+
+// ---------------------------------------------------------------------------
+// Warmed console session (Phase 3 seam, overhaul §5.4 item 3)
+//
+// The classic console re-runs the learner's whole script for every expression,
+// so a `setInterval` in their code re-fires on each Enter and each evaluation
+// pays the full worker spawn. A session keeps ONE vm context per browser visit
+// instead: the learner's code executes once (a fresh worker per visit, not per
+// expression), and later expressions evaluate on top of the values it defined.
+// Isolation semantics are unchanged — still a vm context with a fake console,
+// no fs, mocked fetch; only the reuse is new.
+// ---------------------------------------------------------------------------
+
+/** One warmed evaluation slot. */
+let consoleSession = null;
+
+/**
+ * Evaluate the learner's code ONCE, then keep the vm context warm across
+ * console expressions (Phase 3 seam, overhaul §5.4 item 3).
+ *
+ * A fresh context is built when `code` or the DOM fixture changes, when a
+ * previous evaluation poisoned the context, or after an explicit reset. The
+ * first call runs the learner's code; every call (including the first) then
+ * evaluates `expr` in the SAME context, so `const`/`let`/`function` from the
+ * learner's code — and from earlier expressions — stay in scope. Isolation is
+ * unchanged: still the runInProcess sandbox (fake console, no fs, mocked
+ * fetch), just reused instead of rebuilt per keystroke... per Enter.
+ *
+ * A console-only shadow `console` collects page logs per evaluation, so
+ * `console.log` calls from the learner's own code replay in the pane exactly
+ * once per rebuild — and every evaluation's logs return with its result.
+ *
+ * @param {string} code     learner source (re-executed only when it changes)
+ * @param {string} expr     the console expression to evaluate
+ * @param {object} [opts]   { domHtml, mockFetch, prelude, timeout }
+ * @returns {Promise<{ok, error, value, logs, requests, rebuilt}>}
+ *   `value` is REPL-formatted; `requests` is the session's cumulative fetch
+ *   log (mock table hits and 404s), which is how the network pane fills.
+ */
+export async function runConsoleSession(code, expr, opts = {}) {
+  const timeout = opts.timeout || 2000;
+  const codeText = String(code ?? '');
+  const domHtml = opts.domHtml ?? null;
+
+  // Rebuild conditions: first visit, changed source/fixture, poisoned context.
+  const needsRebuild = !consoleSession
+    || consoleSession.code !== codeText
+    || consoleSession.domHtml !== domHtml
+    || consoleSession.dead;
+
+  if (needsRebuild) {
+    consoleSession = {
+      code: codeText,
+      domHtml,
+      dead: false,
+      requests: [],
+      logs: [],
+      context: null,
+      guard: null,
+    };
+  }
+  const session = consoleSession;
+  const rebuilt = needsRebuild;
+
+  if (needsRebuild) {
+    const { sandbox, domBootstrap } = makeSandbox({
+      domHtml,
+      mockFetch: opts.mockFetch || null,
+      sourceText: codeText,
+    }, (url, status) => session.requests.push({ url, status }));
+    const context = vm.createContext(sandbox);
+
+    // Run the boot at CONTEXT SCOPE (no async wrapper): top-level
+    // `const/let/function` declarations become global lexical bindings of the
+    // context — exactly what a browser REPL does — so later expression scripts
+    // see them without re-running the code. The per-session `console` (a
+    // lexical global) writes into `__logs` (a `var`, so it is readable as a
+    // context property from here).
+    const consoleSource = `const console = {
+  log: (...a) => __logs.push(a.map(__stringify).join(' ')),
+  info: (...a) => __logs.push(a.map(__stringify).join(' ')),
+  warn: (...a) => __logs.push('warn: ' + a.map(__stringify).join(' ')),
+  error: (...a) => __logs.push('error: ' + a.map(__stringify).join(' ')),
+  table: (v) => __logs.push(__stringify(v)),
+  debug: () => {}, group: () => {}, groupEnd: () => {},
+  time: () => {}, timeEnd: () => {},
+};\nvar __logs = [];`;
+    const bootSource = `${consoleSource}\n${opts.prelude || ''}\n${codeText}\n${domBootstrap}\nundefined;`;
+    let script;
+    try {
+      script = new vm.Script(bootSource, { filename: 'console.js' });
+    } catch (err) {
+      // A SYNTAX error in the learner's code: report it and keep the session
+      // dead so the next expression retries the boot from scratch.
+      session.dead = true;
+      return { ok: false, error: cleanError(err), value: null, logs: [], requests: session.requests, rebuilt };
+    }
+    try {
+      script.runInContext(context, { timeout });
+    } catch (err) {
+      // Boot errors (runtime throw) mark the context poisoned: a browser
+      // console shows the page's uncaught exception and keeps a REPL whose
+      // state may be half-initialised; we take the safer route and rebuild on
+      // the next expression.
+      session.dead = true;
+      return { ok: false, error: cleanError(err), value: null, logs: [], requests: session.requests, rebuilt };
+    }
+
+    session.context = context;
+    session.sandbox = sandbox;
+  }
+
+  // ---- evaluate the expression in the warm context ------------------------
+  const expression = String(expr ?? '');
+  // The async wrapper is per-expression only (`await` is not legal at script
+  // top level); it reads the context's global lexical bindings, so functions
+  // and values from the learner's code are in scope.
+  const exprSource = `(async function () {\n__consoleResult = { value: await (${expression}) };\n})()`;
+  let exprScript;
+  try {
+    exprScript = new vm.Script(exprSource, { filename: 'console-expr.js' });
+  } catch (err) {
+    // A syntax error in the EXPRESSION must not kill the session (the page's
+    // state is fine — the typed line was wrong), exactly like a browser REPL.
+    return { ok: false, error: cleanError(err), value: null, logs: [], requests: session.requests, rebuilt };
+  }
+
+  const out = { ok: true, error: null, value: null, logs: [], requests: session.requests, rebuilt };
+  const logCursor = session.sandbox.__logs.length;
+  const guard = new Promise((_, reject) => {
+    const t = setTimeout(() => reject(new Error('Timed out waiting for your async code to settle.')), timeout + 1500);
+    if (typeof t.unref === 'function') t.unref();
+  });
+  try {
+    await Promise.race([exprScript.runInContext(session.context, { timeout }), guard]);
+    const result = session.sandbox.__consoleResult;
+    out.value = formatConsoleValue(result && typeof result === 'object' && 'value' in result ? result.value : result);
+  } catch (err) {
+    out.ok = false;
+    out.error = cleanError(err);
+    if (/Script execution timed out|infinite loop|Timed out/i.test(out.error)) {
+      // A hung evaluation poisons the shared context (its timers may still be
+      // running); rebuild from scratch on the next expression.
+      session.dead = true;
+    }
+  }
+  // This evaluation's console output: whatever __logs gained, plus any timer
+  // callbacks that misbehaved while it ran. On a rebuild the boot's own page
+  // logs are included too — exactly once, like a browser console replaying
+  // the page's output when it (re)loads.
+  const delta = session.sandbox.__logs.slice(logCursor);
+  out.logs = rebuilt ? session.sandbox.__logs.concat(session.sandbox.__asyncErrors.splice(0)) : delta.concat(session.sandbox.__asyncErrors.splice(0));
+  return out;
+}
+
+/** Drop the warmed context: the next evaluation rebuilds from scratch. */
+export function resetConsoleSession() {
+  consoleSession = null;
+}
+
+/** A console/network-pane value formatter (same shape the classic app uses). */
+export function formatConsoleValue(value) {
+  return stringify(value);
+}
+
+/** Test seam: no session may leak between suites. */
+export function _resetConsoleSessionForTests() {
+  consoleSession = null;
 }

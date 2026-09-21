@@ -131,6 +131,18 @@ const LESSON_MARKS = {
   unread: { mark: '○', tone: 'faint' },
 };
 
+/** ASCII marks for the same statuses (tier D), used when the active icon set is ascii. */
+const LESSON_MARKS_ASCII = {
+  done: { mark: '+', tone: 'good' },
+  open: { mark: 'o', tone: 'warn' },
+  unread: { mark: '.', tone: 'faint' },
+};
+
+/** Marks for an icon set: the ascii set gets 7-bit marks, everything else unicode. */
+export function lessonMarks(icons) {
+  return icons && icons.meterFull === '#' ? LESSON_MARKS_ASCII : LESSON_MARKS;
+}
+
 /**
  * Module screen view-model.
  *

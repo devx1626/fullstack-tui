@@ -74,8 +74,6 @@ export const OPERATOR_NAMES = {
   d: 'delete', c: 'change', y: 'yank', '>': 'indent', '<': 'outdent', gu: 'lowercase', gU: 'uppercase', gc: 'comment',
 };
 
-/** Visual modes, in the vocabulary `resolveTarget` understands. */
-export const VISUAL_MODES = { v: 'char', V: 'line', '<C-v>': 'block' };
 
 /**
  * Resolve an operator's range.

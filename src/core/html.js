@@ -36,7 +36,33 @@ function addText(parent, raw) {
   parent.children.push({ tag: '#text', text: raw, children: [], parent, attrs: {} });
 }
 
-/** Parse HTML into a tree rooted at `#root`. */
+/**
+ * Flat offset → `{row, col}` (both 0-based). Phase 3 seam (overhaul §5.4):
+ * click-to-inspect maps a node's source range back to an editor caret.
+ */
+export function offsetToPos(source, offset) {
+  const text = String(source ?? '');
+  const n = Math.max(0, Math.min(Number(offset) || 0, text.length));
+  let row = 0;
+  let lineStart = 0;
+  for (let i = 0; i < n; i += 1) {
+    if (text.charCodeAt(i) === 10) {
+      row += 1;
+      lineStart = i + 1;
+    }
+  }
+  return { row, col: n - lineStart };
+}
+
+/**
+ * Parse HTML into a tree rooted at `#root`.
+ *
+ * Every element node carries a `range` — `{start, end}` offsets into the
+ * SOURCE, spanning the open tag (`<div class="x">`). Callers that don't care
+ * ignore it; click-to-inspect uses it to jump from a rendered pane back to the
+ * line the element starts on. `closeTag`-only sources get `null` ranges for
+ * their phantom nodes, which is fine: there is no source position to jump to.
+ */
 export function parse(src) {
   const root = { tag: '#root', attrs: {}, children: [], parent: null, text: '' };
   const stack = [root];
@@ -70,7 +96,14 @@ export function parse(src) {
 
     const tag = openTag.toLowerCase();
     const parent = stack[stack.length - 1];
-    const node = { tag, attrs: parseAttrs(attrsRaw), children: [], parent, selfClosed: !!selfClose };
+    const node = {
+      tag,
+      attrs: parseAttrs(attrsRaw),
+      children: [],
+      parent,
+      selfClosed: !!selfClose,
+      range: { start: m.index, end: m.index + full.length },
+    };
     parent.children.push(node);
 
     if (selfClose || VOID.has(tag)) continue;
@@ -307,20 +340,47 @@ export const extractStyles = (src) => extractAll(src, 'style').join('\n');
 export const extractScripts = (src) => extractAll(src, 'script').join('\n');
 
 /** Structural sanity warnings surfaced as friendly hints rather than failures. */
-export function lint(src) {
+/**
+ * Structural sanity warnings surfaced as friendly hints rather than failures.
+ *
+ * `lintWithLines(src)` is the Phase 3 form: same checks, but each note is
+ * `{text, line, col}` (1-based line) so the render pane can show the clickable
+ * `⚠ … (line 14)` rows and click-to-inspect can jump the editor to the exact
+ * source line. `lint` stays for the classic UI and any other callers.
+ */
+export function lintWithLines(src) {
   const dom = new Dom(src);
   const notes = [];
+  const at = (node) => {
+    const range = node && node.range;
+    if (!range) return { line: null, col: null };
+    const pos = offsetToPos(dom.source, range.start);
+    return { line: pos.row + 1, col: pos.col };
+  };
   const imgs = dom.query('img');
   const missingAlt = imgs.filter((n) => !('alt' in n.attrs));
-  if (missingAlt.length) notes.push(`${missingAlt.length} <img> tag(s) are missing an alt attribute`);
+  if (missingAlt.length) {
+    notes.push({ text: `${missingAlt.length} <img> tag(s) are missing an alt attribute`, ...at(missingAlt[0]) });
+  }
   const anchors = dom.query('a');
   const emptyAnchors = anchors.filter((n) => !textContent(n).trim() && !('aria-label' in n.attrs));
-  if (emptyAnchors.length) notes.push(`${emptyAnchors.length} <a> tag(s) have no readable text or aria-label`);
+  if (emptyAnchors.length) {
+    notes.push({ text: `${emptyAnchors.length} <a> tag(s) have no readable text or aria-label`, ...at(emptyAnchors[0]) });
+  }
   const inputs = dom.query('input');
   const noLabel = inputs.filter((n) => !('aria-label' in n.attrs) && !('id' in n.attrs) && !('placeholder' in n.attrs));
-  if (noLabel.length) notes.push(`${noLabel.length} <input>(s) have no label, aria-label or placeholder`);
+  if (noLabel.length) {
+    notes.push({ text: `${noLabel.length} <input>(s) have no label, aria-label or placeholder`, ...at(noLabel[0]) });
+  }
   const h1 = dom.count('h1');
-  if (h1 > 1) notes.push(`${h1} <h1> elements found - a page should normally have exactly one`);
-  if (!/^<!doctype html>/i.test(dom.source.trim())) notes.push('Missing <!DOCTYPE html> on the first line');
+  if (h1 > 1) notes.push({ text: `${h1} <h1> elements found - a page should normally have exactly one`, line: 1, col: 0 });
+  if (!/^<!doctype html>/i.test(String(src ?? '').trim())) {
+    notes.push({ text: 'Missing <!DOCTYPE html> on the first line', line: 1, col: 0 });
+  }
   return notes;
+}
+
+/** Classic string form, kept for the classic UI. */
+export function lint(src) {
+  return lintWithLines(src).map((n) => n.text);
 }

@@ -168,6 +168,13 @@ const CASES = [
   ['escape at column 0 does not wrap', ['abc'], pos(0, 0), 'i escape', { caret: pos(0, 0), mode: VIM_MODES.NORMAL }],
   ['R is overtype', ['abc'], pos(0, 0), 'R x escape', { text: ['xbc'], mode: VIM_MODES.NORMAL }],
   ['R past end of line appends', ['abc'], pos(0, 3), 'R x escape', { text: ['abcx'] }],
+  // h/j/k/l are motions in NORMAL mode but ordinary letters here. The motion
+  // branch used to key off the typed character too, so insert mode dropped
+  // them (`i h e l l o` produced `eo` and moved the caret around).
+  ['insert mode types the letters h/j/k/l', ['abc'], pos(0, 0), 'i h e l l o', { text: ['helloabc'], caret: pos(0, 5), mode: VIM_MODES.INSERT }],
+  ['arrow keys still move the caret in insert mode', ['abc'], pos(0, 0), 'i right right', { text: ['abc'], caret: pos(0, 2), mode: VIM_MODES.INSERT }],
+  ['replace mode types h/j/k/l as overtype', ['abc'], pos(0, 0), 'R h i', { text: ['hic'], caret: pos(0, 2), mode: VIM_MODES.REPLACE }],
+  ['replace mode arrow keys move without overtyping', ['abc'], pos(0, 0), 'R right right', { text: ['abc'], caret: pos(0, 2) }],
   ['insert mode Enter splits the line', ['foo bar'], pos(0, 3), 'A enter', { text: ['foo bar', ''], caret: pos(1, 0) }],
   ['Enter keeps the indent', ['  foo'], pos(0, 5), 'A enter', { text: ['  foo', '  '], caret: pos(1, 2) }],
   ['Enter after an opening brace indents a level', ['if (x) {'], pos(0, 8), 'A enter', { text: ['if (x) {', '  '], caret: pos(1, 2) }],

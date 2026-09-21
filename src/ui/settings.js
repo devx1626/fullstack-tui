@@ -80,6 +80,28 @@ export class Settings {
     }
   }
 
+  // -- theme (Phase 4 picker, overhaul §7.2) ---------------------------------
+  /**
+   * Persist a theme choice. `null` means Auto (the terminal prompts the
+   * heuristic). The picker calls this; `themeForCapabilities` validates the
+   * name again on read, so a hand-edited file can't wedge resolution.
+   */
+  setTheme(name) {
+    this.data.theme = name || null;
+    this.save();
+    return this.data.theme;
+  }
+
+  /**
+   * Persist an icon-set choice ('auto' | 'nerd' | 'unicode' | 'ascii'). The
+   * resolver validates on read, so a hand-edited file can't wedge rendering.
+   */
+  setIcons(name) {
+    this.data.icons = name || 'auto';
+    this.save();
+    return this.data.icons;
+  }
+
   // -- Q6 at-risk banner -----------------------------------------------------
   bannerVisible(streak) {
     if (!streak || streak.current < 2) return false;

@@ -23,6 +23,7 @@ import {
   HelpRoute, ResourcesRoute, WorkspaceRoute, StatsRoute,
   SettingsRoute, TourRoute,
 } from './ui/routes.jsx';
+import { BrowserRoute } from './ui/routesBrowser.jsx';
 import { Store } from './core/store.js';
 import { Settings } from './ui/settings.js';
 import { buildRecap } from './core/recap.js';
@@ -38,6 +39,7 @@ const SCREENS = {
   home: HomeRoute,
   module: ModuleRoute,
   challenge: ChallengeRoute,
+  browser: BrowserRoute,
   lesson: LessonRoute,
   projects: ProjectsRoute,
   help: HelpRoute,
@@ -100,7 +102,15 @@ export function main() {
         />
       </ServicesProvider>
     </AltScreen>,
-    { exitOnCtrlC: false, patchConsole: true },
+    // maxFps: ink defaults to 30, which caps painting at a ~34 ms trailing edge
+    // — larger than the whole §12 keystroke-to-paint budget. 240 (a ~5 ms
+    // throttle) is measured to be off the critical path: on a one-line probe
+    // ink's own floor is p50 35 / 11.5 / 6.3 ms at maxFps 30 / 120 / 500, so
+    // the throttle is the dominant term for LIGHT frames (palette, lists) while
+    // a heavy editor frame is CPU-bound and unaffected. A real paint costs ≥ 5 ms
+    // of CPU here, so the write rate an interactive session can reach stays far
+    // below 240 fps; the cap only removes artificial waiting.
+    { exitOnCtrlC: false, patchConsole: true, maxFps: 240 },
   );
 
   let done = false;

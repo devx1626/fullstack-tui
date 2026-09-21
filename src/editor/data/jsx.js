@@ -62,5 +62,3 @@ export const JSX_SNIPPETS = [
   ['createRoot', "const root = createRoot(document.getElementById('root'));\nroot.render(<App />);", 'mount a React app'],
 ];
 
-/** Merged over `complete.js`'s JS keywords when the language is jsx/tsx. */
-export const JSX_KEYWORDS = ['jsx', 'tsx'];

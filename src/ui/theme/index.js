@@ -3,9 +3,11 @@
  *
  * Ink accepts hex colors, which are always emitted as 24-bit sequences by
  * chalk (ink's color engine). For tier B/C we down-map the hex tokens to the
- * nearest 256/16 palette entry so older terminals get coherent colors; for
- * tier D all color is dropped. Chrome asks only for theme tokens and never
- * for raw values.
+ * nearest 256 palette entry — as ink's own `ansi256(n)` STRING form, because
+ * its colorizer calls `color.startsWith(...)` and a bare number throws
+ * (`color.startsWith is not a function`, caught by the tier smoke in
+ * tools/check.js). For tier D all color is dropped. Chrome asks only for theme
+ * tokens and never for raw values.
  */
 import { midnight, paper, themes } from './themes.js';
 
@@ -54,18 +56,22 @@ function mapTheme(theme, depth) {
       out[k] = v; // hex passthrough
     } else {
       const idx = hexTo256(v);
-      out[k] = idx == null ? v : (depth === 0 ? undefined : idx);
+      out[k] = idx == null ? v : (depth === 0 ? undefined : `ansi256(${idx})`);
     }
   }
   return out;
 }
 
 export function themeForCapabilities(caps, requested) {
-  let base = paper;
-  if (requested === 'midnight') base = midnight;
-  else if (requested === 'paper') base = paper;
-  else if (!requested) {
-    // Auto: COLORFGBG heuristic like the classic app, else dark.
+  // Selection order (spec §7.2): FULLSTACK_THEME env → saved settings →
+  // COLORFGBG heuristic → default. Names are case-insensitive and looked up
+  // through the `themes` map, so adding a palette there is all it takes to
+  // make it selectable — no branch to remember.
+  const key = String(requested || '').toLowerCase();
+  let base = Object.prototype.hasOwnProperty.call(themes, key) ? themes[key] : null;
+  if (!base) {
+    // Auto: COLORFGBG heuristic like the classic app, else dark. An unknown
+    // name lands here too rather than silently painting the wrong palette.
     const cfg = process.env.COLORFGBG;
     const bg = cfg ? Number(String(cfg).split(';').pop()) : NaN;
     base = Number.isFinite(bg) && bg >= 7 ? paper : midnight;

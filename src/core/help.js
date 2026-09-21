@@ -57,11 +57,11 @@ export const HELP_SECTIONS = [
     title: 'Inside the built-in browser',
     hint: 'Ctrl+B from any challenge',
     rows: [
-      ['Tab / Shift+Tab', 'cycle Render, Elements, Styles, Console, Issues'],
+      ['Tab / Shift+Tab', 'cycle Render, Elements, Styles, Console, Network'],
       ['1 - 5', 'jump straight to a pane'],
       ['j / k', 'scroll, or move through the DOM tree'],
       ['PgUp / PgDn', 'scroll a page at a time'],
-      ['Enter', 'on the Console pane: evaluate the expression'],
+      ['Enter', 'jump to the selected element\'s source line; evaluates on Console'],
       ['Ctrl+U', 'clear the console input line'],
       ['Ctrl+L', 'clear the console output'],
       ['Esc / Ctrl+B', 'back to the editor'],
@@ -89,5 +89,5 @@ export const HELP_NOTES = [
   '**Debug challenges** hand you broken code. **Write challenges** start you from nothing. Both end with a sample solution you can compare against.',
   'Every artefact you solve is written to `.workspace/` as a real file. Open it, keep it, push it to GitHub.',
   'The editor suggests code the way an editor extension does: tag and attribute names, CSS properties and values, JS/SQL/shell snippets, and the words already in your file. Auto-pairing closes brackets, quotes and HTML tags as you type.',
-  '**Ctrl+B** opens a browser for the page you are building: Render shows the layout with your CSS applied, Elements is the DOM tree, Styles explains which rules matched, Console evaluates expressions against your own code, and Issues lists accessibility and structure problems.',
+  '**Ctrl+B** opens a browser for the page you are building: Render shows the layout with your CSS applied (click a line to inspect the element that produced it — Enter jumps to its source line, and the ⚠ rows underneath are clickable too), Elements is the DOM tree, Styles explains which rules matched, Console evaluates expressions against your own code on a warmed session, and Network shows the challenge\'s mocked routes plus what your code actually fetched.',
 ];

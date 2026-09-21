@@ -16,6 +16,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { filterCommands, clampSelected } from '../fuzzy.js';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
 /**
  * Recents-first ordering + fuzzy filter. Exported so the owner of `selected`
@@ -42,29 +43,31 @@ export function Palette({
   onCancel, // () => void
 }) {
   // Recents float to the top on an empty query (QoL: palette-first navigation).
+  const theme = useTheme();
+  const ic = useIcons();
   const matches = paletteMatches(commands, recents, query);
   const sel = clampSelected(selected, matches.length);
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-      <Text bold color="cyan">◈ {title}</Text>
+    <Box flexDirection="column" borderStyle={ic.borderStyle} borderColor={theme.accent} paddingX={1}>
+      <Text bold color={theme.accent}>{ic.brand} {title}</Text>
       <Text>
-        <Text color="cyan">{'> '}</Text>
+        <Text color={theme.accent}>{'> '}</Text>
         <Text>{query}</Text>
-        <Text color="gray">▏</Text>
+        <Text color={theme.muted}>▏</Text>
       </Text>
       {matches.length === 0 ? (
-        <Text color="gray"> no matching commands</Text>
+        <Text color={theme.muted}> no matching commands</Text>
       ) : (
         matches.slice(0, height).map((cmd, i) => (
-          <Text key={cmd.id} color={i === sel ? undefined : 'gray'}>
-            <Text color={i === sel ? 'cyan' : 'gray'}>{i === sel ? '▸ ' : '  '}</Text>
+          <Text key={cmd.id} color={i === sel ? undefined : theme.muted}>
+            <Text color={i === sel ? theme.accent : theme.muted}>{i === sel ? `${ic.select} ` : '  '}</Text>
             {cmd.title}
-            {cmd.keys ? <Text color="gray">{'  '.padEnd(4)}{cmd.keys}</Text> : null}
+            {cmd.keys ? <Text color={theme.muted}>{'  '.padEnd(4)}{cmd.keys}</Text> : null}
           </Text>
         ))
       )}
-      <Text color="gray"> ↑/↓ move · Enter run · Esc close </Text>
+      <Text color={theme.muted}> {ic.arrowUp}/{ic.arrowDown} move {ic.bullet} Enter run {ic.bullet} Esc close </Text>
     </Box>
   );
 }

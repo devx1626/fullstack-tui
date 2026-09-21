@@ -14,13 +14,18 @@ import { useHost } from './host.jsx';
 import { useServices } from './services.jsx';
 import { useKeymap } from './useKeymap.js';
 import { useRouter } from './router.jsx';
+import { browserJumpHandoff } from './routesBrowser.jsx';
 import { detectCapabilities } from './capabilities.js';
 import { nextIndex } from './nav.js';
 import { findChallenge, firstUnpassedIn } from '../core/targets.js';
+import { CelebrateLine } from './components/overlays.jsx';
+import { ICON_SETS } from './theme/icons.js';
+import { milestoneToast } from './milestones.js';
 import { nextLesson } from '../content/index.js';
-import { preferenceRows, vimPreferenceRow, togglePreference } from './preferences.js';import { applyEdit } from '../editor/document.js';
+import { preferenceRows, vimPreferenceRow, togglePreference, stepTheme, stepIcons } from './preferences.js';import { applyEdit } from '../editor/document.js';
 import { createSession,
   sessionDoc,
+  sessionFocus,
   sessionText,
   sessionTexts,
   sessionStep,
@@ -32,7 +37,18 @@ import { createSession,
   commit,
   moveCaret,
   viewOf,
+  offsetOf,
 } from '../editor/document.js';
+import {
+  acceptItem,
+  completionsAt,
+  createPopup,
+  lineWord,
+  popupItem,
+  popupKey,
+  shouldTrigger,
+  signatureAt,
+} from '../editor/completions.js';
 import { createVimState, reduceKey, isVisual } from '../editor/vim.js';
 import { typeText, typeBackspace, typeDelete, typeNewline, moveArrow } from '../editor/typekeys.js';
 import { createRegisters } from '../editor/registers.js';
@@ -41,7 +57,10 @@ import { clickToPos } from '../editor/viewport.js';
 import { diffRows } from '../editor/diff.js';
 import { effectiveKeymap } from './keymap.js';
 import { resolveKey } from './commands.js';
+import { NUDGE_AFTER_MS } from './hints.js';
 import { useResizableSplit } from './components/ResizableSplit.jsx';
+import { useTheme, useIcons, useThemeControl, useIconControl } from './theme/context.jsx';
+import { CompletionPopup } from './components/CompletionPopup.jsx';
 import { HomeScreen } from './screens/home.jsx';
 import { ModuleScreen } from './screens/module.jsx';
 import { ChallengeScreen } from './screens/challenge.jsx';
@@ -74,10 +93,10 @@ function langOf(name) {
   return map[ext] || 'js';
 }
 
-/** One failing check, rendered as a numbered status line. */
-function failingLine(r) {
-  const base = `✗ ${r.label}${r.message ? ` — ${r.message}` : ''}`;
-  return Number.isFinite(r.line) && r.line >= 1 ? `${base} (→ line ${r.line})` : base;
+/** One failing check, rendered as a numbered status line (icons: the active set). */
+function failingLine(r, icons = ICON_SETS.unicode) {
+  const base = `${icons.cross} ${r.label}${r.message ? ` ${icons.dash} ${r.message}` : ''}`;
+  return Number.isFinite(r.line) && r.line >= 1 ? `${base} (${icons.to} line ${r.line})` : base;
 }
 
 export function HomeRoute() {
@@ -165,11 +184,19 @@ export function ModuleRoute({ moduleId }) {
 export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   const host = useHost();
   const services = useServices();
+  const theme = useTheme();
+  const icons = useIcons();
+  const router = useRouter();
   const [showSolution, setShowSolution] = useState(false);
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [hintIndex, setHintIndex] = useState(0);
   const [results, setResults] = useState(null); // Q7 view of the last run
+  // §7.3 motion: a pass celebration, keyed so each solved challenge celebrates
+  // once per mount (re-running check on an already-passed challenge re-fires
+  // the pass path, but the key change restarts the settle — a deliberate
+  // one-line flourish, not a state machine).
+  const [celebrate, setCelebrate] = useState(null);
 
   const target = useMemo(() => {
     if (!services) return null;
@@ -200,11 +227,151 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   const record = target ? services.store.challengeRecord(challengeKey) : null;
   const starter = target ? (target.challenge.starter ?? '') : '';
 
-  const [session, setSession] = useState(null);
-  const [vim, setVim] = useState(() => createVimState({ enabled: services?.settings?.get?.('editor.vimMode') ?? false }));
-  const [registers, setRegisters] = useState(() => createRegisters());
-  const [selection, setSelection] = useState(null);
-  const [mode, setMode] = useState('normal');
+  // Every mutable editor value is ALSO held in a ref and written through a
+  // ref-backed setter. React state is what re-renders the screen; the ref is
+  // what a KEYSTROKE reads. Without that, two bytes arriving in one stdin chunk
+  // both run against the same render's value — and since these setters pass a
+  // VALUE rather than an updater, the second silently overwrites the first,
+  // dropping characters for fast typists and for any chunked input (the
+  // ``{type:'paste'}`` path is safe; a coalesced burst of keys was not).
+  const [session, setSessionState] = useState(null);
+  const sessionRef = useRef(null);
+  const setSession = useCallback((next) => {
+    sessionRef.current = next;
+    setSessionState(next);
+  }, []);
+
+  // Phase 3 jump-to-source: the browser screen writes a pending jump and pops;
+  // this effect (the challenge stays mounted underneath a pushed screen) moves
+  // the caret — and the active file tab — to the element's source position.
+  // Runs once per pop because the browser clears the slot as it navigates.
+  useEffect(() => {
+    const jump = browserJumpHandoff.pending;
+    if (!jump || !session) return;
+    browserJumpHandoff.pending = null;
+    const current = sessionRef.current || session;
+    let next = current;
+    if (jump.file && next.files[jump.file]) next = sessionFocus(next, jump.file);
+    const file = next.files[next.active];
+    if (file && file.doc && Array.isArray(file.doc.lines)) {
+      const clampedRow = Math.max(0, Math.min(jump.row, file.doc.lines.length - 1));
+      const line = file.doc.lines[clampedRow] || '';
+      const clampedCol = Math.max(0, Math.min(jump.col || 0, line.length));
+      next = commit(next, next.active, moveCaret(file.doc, { row: clampedRow, col: clampedCol }), { history: false });
+    }
+    setSession(next);
+  }, [session]);
+
+  const [vim, setVimState] = useState(() => createVimState({ enabled: services?.settings?.get?.('editor.vimMode') ?? false }));
+  const vimRef = useRef(vim);
+  const setVim = useCallback((next) => { vimRef.current = next; setVimState(next); }, []);
+
+  const [registers, setRegistersState] = useState(() => createRegisters());
+  const registersRef = useRef(registers);
+  const setRegisters = useCallback((next) => { registersRef.current = next; setRegistersState(next); }, []);
+
+  const [selection, setSelectionState] = useState(null);
+  const selectionRef = useRef(null);
+  const setSelection = useCallback((next) => {
+    // Functional form is used by the drag handler; resolve it against the ref so
+    // two motions in one tick extend the same selection.
+    const value = typeof next === 'function' ? next(selectionRef.current) : next;
+    selectionRef.current = value;
+    setSelectionState(value);
+  }, []);
+
+  const [mode, setModeState] = useState('normal');
+  const modeRef = useRef('normal');
+  const setMode = useCallback((next) => { modeRef.current = next; setModeState(next); }, []);
+
+  // §9 one-time normal-mode nudge. The deadline lives in a ref (typing must
+  // not re-render), the visible flag in state; `nudgeFired` makes it ONCE per
+  // mount — a dismissed nudge never comes back, even after another 2 s pause.
+  const nudgeAt = useRef(null);
+  const [nudge, setNudge] = useState(false);
+  const nudgeFired = useRef(false);
+
+  // ---- completions popup (task 2.7) --------------------------------------
+  // The engine (`src/editor/completions.js`) owns the list, the selection and
+  // the accepted change list. The route owns WHEN it opens (a typed character
+  // or Ctrl+Space) and applies the result through the same `commit` chokepoint
+  // as typing, so an accepted completion is one undo step (spec §8.2).
+  const [popup, setPopupState] = useState(null);
+  const popupRef = useRef(null);
+  const setPopup = useCallback((next) => { popupRef.current = next; setPopupState(next); }, []);
+  // Live snippet tab stops: Tab walks an accepted snippet's placeholders until
+  // the last one, then releases the key back to the screen.
+  const stopsRef = useRef(null);
+
+  const langNow = useCallback((doc) => (
+    (doc && doc.language) || (target && target.challenge && target.challenge.lang) || 'js'
+  ), [target]);
+
+  /** Recompute the popup after a key; a typed char can open OR refilter it. */
+  const completeFrom = useCallback((nextSession, ch) => {
+    const doc = sessionDoc(nextSession);
+    if (!doc) {
+      setPopup(null);
+      return;
+    }
+    const lang = langNow(doc);
+    const prefix = lineWord(sessionText(nextSession), offsetOf(doc, doc.caret));
+    if (!shouldTrigger({ ch: ch || '', prefix, lang })) {
+      setPopup(null);
+      return;
+    }
+    const list = completionsAt(doc, { lang });
+    setPopup(list ? createPopup(list) : null);
+  }, [langNow]);
+
+  /** Ctrl+Space / the palette command: open on demand, and say so if empty. */
+  const openCompletions = useCallback(() => {
+    const current = sessionRef.current;
+    if (!current) return;
+    const doc = sessionDoc(current);
+    const list = completionsAt(doc, { lang: langNow(doc) });
+    setPopup(list ? createPopup(list) : null);
+    if (!list) setStatus('Nothing to complete here.');
+  }, [langNow, setPopup]);
+
+  /** Accept the focused item (Enter/Tab, or a mouse click through popupClick). */
+  const acceptPopup = useCallback(() => {
+    const popupState = popupRef.current;
+    const current = sessionRef.current;
+    if (!popupState || !current) return false;
+    const doc = sessionDoc(current);
+    const accepted = acceptItem(doc, popupState, popupItem(popupState));
+    if (accepted) {
+      const edited = applyEdit(doc, accepted.changes, accepted.caret).doc;
+      setSession(commit(current, current.active, edited, { coalesce: false, label: 'completion' }));
+      stopsRef.current = accepted.stops && accepted.stops.length > 1
+        ? { stops: accepted.stops, index: 0 }
+        : null;
+    }
+    setPopup(null);
+    return true;
+  }, [setPopup, setSession]);
+
+  /**
+   * Popup keys outrank vim and the screen (§10.3 row 1). Returning false lets
+   * the key through, which is what makes typing while the list is open refilter
+   * it instead of dismissing it.
+   */
+  const popupHandles = useCallback((ev) => {
+    const popupState = popupRef.current;
+    if (!popupState) return false;
+    const { popup: next, action } = popupKey(popupState, ev);
+    if (action === 'move') {
+      setPopup(next);
+      return true;
+    }
+    if (action === 'dismiss') {
+      setPopup(null);
+      return true;
+    }
+    if (action === 'accept') return acceptPopup();
+    return false;
+  }, [acceptPopup, setPopup]);
 
   // (Re)seed when the target changes; a same-target re-render keeps the buffer.
   useEffect(() => {
@@ -228,10 +395,12 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   // to the starter is NOT a draft — reset stays "no draft" instead of racing
   // the reset command and re-persisting the starter as saved work.
   const saveTimer = useRef(null);
+  // The write the debounce is about to perform. Kept in a ref so UNMOUNT can
+  // flush it instead of dropping it (see below).
+  const pendingSave = useRef(null);
   useEffect(() => {
     if (!session || !challengeKey || !services?.store?.saveDraft) return undefined;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
+    const write = () => {
       const texts = sessionTexts(session);
       const starters = target?.challenge?.files
         ? target.challenge.files
@@ -242,9 +411,31 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         challengeKey,
         isClean ? null : (target?.challenge?.files ? texts : texts[session.active]),
       );
+    };
+    pendingSave.current = write;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      pendingSave.current = null;
+      write();
     }, 400);
-    return () => clearTimeout(saveTimer.current);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
   }, [session, challengeKey, services, target]);
+
+  // Leaving the challenge inside the 400 ms debounce window must not lose the
+  // edit: a popped screen unmounts this route, which would otherwise clear the
+  // timer with the keystroke still unsaved. Flush it on unmount instead.
+  useEffect(() => () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const flush = pendingSave.current;
+    pendingSave.current = null;
+    if (flush) flush();
+  }, []);
 
   const activeName = session ? session.active : 'js';
 
@@ -264,14 +455,56 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
    * Returns true when the key was consumed.
    */
   const applyKey = useCallback((ev) => {
+    // Read the LATEST editor state, not this render's snapshot: a burst of keys
+    // from one stdin chunk must compose (see the ref note above).
+    const session = sessionRef.current;
+    const vim = vimRef.current;
+    const registers = registersRef.current;
+    const selection = selectionRef.current;
+    const mode = modeRef.current;
     if (!session) return true;
+
+    // Task 2.7: while the completion popup is open it owns ↑/↓/Tab/Enter/Esc
+    // (§10.3 row 1 — overlays outrank vim and the screen). Anything it declines
+    // falls through, which is what lets typing refilter the list.
+    if (popupHandles(ev)) return true;
+
+    // Snippet tab stops: Tab walks an accepted snippet's placeholders, then
+    // releases the key back to the screen.
+    if (ev && ev.name === 'tab' && stopsRef.current) {
+      const { stops, index } = stopsRef.current;
+      const at = Math.min(index + 1, stops.length - 1);
+      setSession(commit(session, session.active, moveCaret(sessionDoc(session), stops[at]), { history: false }));
+      stopsRef.current = at >= stops.length - 1 ? null : { stops, index: at };
+      return true;
+    }
+
     const name = session.active;
     const doc = sessionDoc(session, name);
+
+    // §9 guardrail: text typed in NORMAL mode with no edit for >2 s raises a
+    // one-time footer nudge (beginners type before they press i). Text keys
+    // start the clock; any edit (vim or modeless) or an Esc/i press clears it.
+    if (mode === 'normal' && ev && ev.name === 'char' && ev.char && ev.char.trim()) {
+      if (nudgeAt.current == null) nudgeAt.current = Date.now();
+      else if (Date.now() - nudgeAt.current > NUDGE_AFTER_MS && !nudgeFired.current) {
+        nudgeFired.current = true;
+        setNudge(true);
+      }
+    } else if (ev && (ev.name === 'escape' || ev.char === 'i') && nudgeAt.current != null) {
+      nudgeAt.current = null;
+      setNudge(false);
+    }
 
     if (vim && vim.enabled) {
       const res = reduceKey(vim, ev, { doc, registers, tabSize: session.tabSize });
 
       let next = session;
+      // An actual edit closes the nudge — the beginner found their way in.
+      if (res.changed && nudgeAt.current != null) {
+        nudgeAt.current = null;
+        setNudge(false);
+      }
       if (res.changed && res.doc !== doc) {
         next = commit(session, name, res.doc, { coalesce: res.coalesce || false });
       }
@@ -283,7 +516,12 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         next = sessionSetView(next, name, { scrollTop: Math.max(0, (view.scrollTop || 0) + res.request.dir * 20) });
       }
       if (res.request?.type === 'tab') {
-        next = sessionStep(next, res.request.dir);
+        // `sessionStep` returns the next file NAME, not a session (it is the
+        // pure name-picker; `sessionFocus` does the switching). Assigning the
+        // name straight to the session state left `session.active` undefined
+        // and the NEXT keystroke threw from `sessionDoc`.
+        const nextName = sessionStep(next, res.request.dir);
+        if (nextName) next = sessionFocus(next, nextName);
       }
       if (res.request?.type === 'clipboard' && res.request.text) {
         copyText(res.request.text);
@@ -292,6 +530,8 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       if (res.state !== vim) setVim(res.state);
       const nextMode = res.state && res.state.mode ? res.state.mode : 'normal';
       setMode(isVisual(nextMode) ? 'visual' : nextMode === 'insert' || nextMode === 'replace' ? 'insert' : 'normal');
+      if (res.changed && ev && ev.name === 'char' && ev.char) completeFrom(next, ev.char);
+      else if (ev && (ev.name === 'backspace' || ev.name === 'escape')) { setPopup(null); stopsRef.current = null; }
       if (next !== session) setSession(next);
       if (res.status) setStatus(res.status);
       return res.consumed !== false;
@@ -323,12 +563,33 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       consumed = false; // escape, ctrl combos, F-keys … → global handlers
     }
     if (selection && consumed) setSelection(null); // typing collapses the drag
+    if (consumed && key === 'char' && ev.char) completeFrom(next, ev.char);
+    else if (consumed && (key === 'backspace' || key === 'delete')) { setPopup(null); stopsRef.current = null; }
     if (next !== session) setSession(next);
     return consumed;
-  }, [copyText, registers, selection, session, vim]);
+  }, [completeFrom, copyText, popupHandles, setMode, setRegisters, setSelection, setSession, setVim]);
 
   /** Registry commands (resolved keys, palette, host) — the id decides. */
   const onCommand = useCallback(async (id) => {
+    // Same ref rule as applyKey: a command reached right after a keystroke must
+    // act on the state that keystroke produced, not on the last render's.
+    const session = sessionRef.current;
+    const vim = vimRef.current;
+    const registers = registersRef.current;
+    const popup = popupRef.current;
+    // Task 2.7 popup priority. ↑/↓ resolve to the GLOBAL nav ids (there is no
+    // challenge-scoped binding) and would be swallowed by the list-move guard
+    // below; Esc is the global `app.back` and would pop the screen. While the
+    // popup is open it owns both, and everything else falls through — so
+    // Ctrl+S and further typing keep working with the list visible.
+    if (popup) {
+      if (id === 'app.back') { setPopup(null); return; }
+      if (id === 'nav.up' || id === 'nav.down') {
+        const { popup: next } = popupKey(popup, id === 'nav.up' ? 'up' : 'down');
+        setPopup(next);
+        return;
+      }
+    }
     if (nextIndex(0, id, 0) !== null) return; // no list on this screen
     if (!target) return;
     switch (id) {
@@ -358,12 +619,21 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
             // Q13 accounting + workspace parity with the classic pass path.
             if (services.sessionState) services.sessionState.passed.add(challengeKey);
             services.store.recordAttempt(challengeKey, code, true);
+            // Q5 (Phase 4 parity): milestone toasts on Ink. takeMilestones
+            // marks each seen, so a milestone fires exactly once — the same
+            // single-fire contract the classic pass path has. Guarded like
+            // the classic call: a settings-less mount still passes cleanly.
+            const fresh = services.settings && typeof services.settings.takeMilestones === 'function'
+              ? services.settings.takeMilestones(services.store.stats(services.curriculum))
+              : [];
+            if (fresh.length) host.say(milestoneToast(fresh, icons), 'ok');
             setStatus(`${total}/${total} checks passed in ${result.durationMs} ms — solved. Saved to your workspace.`);
+            setCelebrate({ key: `${challengeKey}.${Date.now()}` });
           } else {
             if (services.sessionState) services.sessionState.failures += total - passed;
             const failures = result.results.filter((r) => !r.ok);
-            const head = `${passed}/${total} checks passed in ${result.durationMs} ms — ${failures.length} failing:`;
-            setStatus([head, ...failures.slice(0, 4).map(failingLine)].join('\n'));
+            const head = `${passed}/${total} checks passed in ${result.durationMs} ms ${icons.dash} ${failures.length} failing:`;
+            setStatus([head, ...failures.slice(0, 4).map((r) => failingLine(r, icons))].join('\n'));
           }
         } catch (err) {
           setStatus(`check threw: ${err && err.message ? err.message : err}`);
@@ -414,12 +684,25 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         setStatus('Saved to your workspace.');
         return;
       }
-      case 'editor.tabNext':
-        setSession(sessionStep(session, 1));
+      case 'challenge.browser': {
+        // Phase 3 (spec task 3.6): Ctrl+B pushes the embedded browser screen.
+        router.push('browser', {
+          moduleId: target.moduleId,
+          lessonId: target.lessonId,
+          challengeId: target.challengeId,
+        });
         return;
-      case 'editor.tabPrev':
-        setSession(sessionStep(session, -1));
+      }
+      case 'editor.tabNext': {
+        const nextName = sessionStep(session, 1);
+        if (nextName) setSession(sessionFocus(session, nextName));
         return;
+      }
+      case 'editor.tabPrev': {
+        const nextName = sessionStep(session, -1);
+        if (nextName) setSession(sessionFocus(session, nextName));
+        return;
+      }
       case 'editor.undo':
         setSession(sessionUndo(session));
         return;
@@ -451,6 +734,17 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         }
         return;
       }
+      case 'settings.vimToggle': {
+        // Live switch (2.10): the editor reads `vim.enabled` per keystroke, so
+        // swapping the state here is enough — no remount, no restart.
+        const nextEnabled = !(vim && vim.enabled);
+        setVim(createVimState({ enabled: nextEnabled }));
+        setRegisters(createRegisters());
+        setMode('normal');
+        setSelection(null);
+        host.say(nextEnabled ? 'Vim keys on — i to insert, Esc to leave.' : 'Vim keys off — type directly, no modes.', 'ok');
+        return;
+      }
       case 'view.paneWider':
         widen();
         return;
@@ -472,10 +766,33 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
             : 'Already formatted.');
         return;
       }
+      case 'editor.completionTrigger':
+        openCompletions();
+        return;
+      case 'app.back': {
+        // Esc is the GLOBAL `app.back`, and CommandHost resolves commands
+        // BEFORE the editor's raw channel — so on this screen the vim machine
+        // never saw it and insert mode was a trap (Esc navigated away instead
+        // of returning to normal, which is the opposite of what the vim
+        // toggle's own message promises). While the editor is mid-mode Esc
+        // belongs to the editor; in normal mode it still leaves the screen.
+        const s = vimRef.current;
+        const editorMidMode = !!(s && s.enabled) && (
+          modeRef.current !== 'normal'
+          || !!s.operator || !!s.pending || !!s.input || !!s.confirm
+          || s.count !== '' || !!s.blockInsert
+        );
+        if (editorMidMode) {
+          applyKey({ name: 'escape' });
+          return;
+        }
+        host.run('app.back');
+        return;
+      }
       default:
         host.run(id);
     }
-  }, [activeName, busy, challengeKey, hintIndex, host, narrow, resetPanes, session, services, showSolution, target, widen]);
+  }, [activeName, applyKey, busy, challengeKey, hintIndex, host, narrow, openCompletions, resetPanes, services, setPopup, setRegisters, setSelection, setSession, setVim, showSolution, target, widen]);
 
   // Raw keys: resolved commands first (registry wins), then the editor.
   // The mouse composition (divider first, editor sink second) is registered
@@ -494,44 +811,57 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     return false;
   }, [splitMouse, split.leftWidth]);
 
-  const mouseHandlers = useMemo(() => ({
-    // Click → caret through the pure mapping; drag extends a selection.
-    onDocClick: ({ row, col }) => {
-      if (!session) return;
-      const doc = sessionDoc(session);
-      const p = clickToPos(doc, row, col, { tabSize: session.tabSize });
-      setSelection(null);
-      setSession(commit(session, session.active, moveCaret(doc, p), { history: false }));
-    },
-    onDocDrag: ({ row, col }) => {
-      if (!session) return;
-      const doc = sessionDoc(session);
-      const p = clickToPos(doc, row, col, { tabSize: session.tabSize });
-      setSelection((prev) => ({
-        anchor: (prev && prev.anchor) || doc.caret,
-        head: p,
-      }));
-    },
-    onDocWheel: (dir) => {
-      if (!session) return;
-      const view = viewOf(sessionDoc(session));
-      setSession(sessionSetView(session, session.active, {
-        scrollTop: Math.max(0, (view.scrollTop || 0) + dir * 3),
-      }));
-    },
-  }), [session]);
+  // Mouse intents read the session through the ref too: a click can arrive in
+  // the same tick as a keystroke (and a drag is a burst of motions).
+  const mouseHandlers = useMemo(() => {
+    const at = (row, col) => {
+      const current = sessionRef.current;
+      if (!current) return null;
+      const doc = sessionDoc(current);
+      return { current, doc, p: clickToPos(doc, row, col, { tabSize: current.tabSize }) };
+    };
+    return {
+      // Click → caret through the pure mapping; drag extends a selection.
+      onDocClick: ({ row, col }) => {
+        const hit = at(row, col);
+        if (!hit) return;
+        setSelection(null);
+        setSession(commit(hit.current, hit.current.active, moveCaret(hit.doc, hit.p), { history: false }));
+      },
+      onDocDrag: ({ row, col }) => {
+        const hit = at(row, col);
+        if (!hit) return;
+        setSelection((prev) => ({
+          anchor: (prev && prev.anchor) || hit.doc.caret,
+          head: hit.p,
+        }));
+      },
+      onDocWheel: (dir) => {
+        const current = sessionRef.current;
+        if (!current) return;
+        const view = viewOf(sessionDoc(current));
+        setSession(sessionSetView(current, current.active, {
+          scrollTop: Math.max(0, (view.scrollTop || 0) + dir * 3),
+        }));
+      },
+    };
+  }, [setSelection, setSession]);
 
   useKeymap('challenge', onCommand, { onMouse: onMouseRoute, onRawKey: applyKey });
 
-  if (!target) return <Text color="red">unknown challenge: {challengeId || lessonId || moduleId}</Text>;
+  if (!target) return <Text color={theme.bad}>unknown challenge: {challengeId || lessonId || moduleId}</Text>;
   if (!session) return null; // one tick while the session seeds
 
   const solutionRows = showSolution
     ? diffRows(sessionText(session), solutionText(target.challenge), {
       lang: target.challenge.lang || 'js',
-      theme: null,
+      theme,
     })
     : [];
+
+  // Signature help (§8.9): the engine decides whether the caret sits inside a
+  // known call; the route only forwards the result to the popup's second line.
+  const popupSignature = popup ? signatureAt(sessionDoc(session)) : null;
 
   return (
     <ChallengeScreen
@@ -554,6 +884,11 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       mouseSink={editorSink}
       tabSize={session.tabSize}
       registerInput={false}
+      nudge={nudge}
+      vimEnabled={!!(vim && vim.enabled)}
+      popup={popup}
+      popupSignature={popupSignature}
+      celebrate={celebrate}
     />
   );
 }
@@ -565,6 +900,11 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
 export function LessonRoute({ moduleId, lessonId }) {
   const host = useHost();
   const services = useServices();
+  // Rows are built here (not in the screen), so the theme tokens have to reach
+  // `lessonLines` — otherwise a page of rows renders in the default palette and
+  // tier D still emits color.
+  const theme = useTheme();
+  const icons = useIcons();
   const curriculum = (services && services.curriculum) || [];
   const store = services && services.store;
   const mod = curriculum.find((m) => m.id === moduleId) || null;
@@ -580,8 +920,8 @@ export function LessonRoute({ moduleId, lessonId }) {
 
   const width = host.width || 80;
   const { lines, challengeRows } = useMemo(
-    () => (lesson ? lessonLines({ mod, lesson, store, focus, width }) : { lines: [], challengeRows: [] }),
-    [mod, lesson, store, focus, width],
+    () => (lesson ? lessonLines({ mod, lesson, store, focus, width, theme, icons }) : { lines: [], challengeRows: [] }),
+    [mod, lesson, store, focus, width, theme, icons],
   );
 
   const persistScroll = useCallback((next) => {
@@ -646,6 +986,8 @@ export function LessonRoute({ moduleId, lessonId }) {
 export function ProjectsRoute() {
   const host = useHost();
   const services = useServices();
+  const theme = useTheme();
+  const icons = useIcons();
   const curriculum = (services && services.curriculum) || [];
   const store = services && services.store;
   const [cursor, setCursor] = useState(0);
@@ -655,8 +997,8 @@ export function ProjectsRoute() {
   const [revision, setRevision] = useState(0);
 
   const { lines, project, checks } = useMemo(
-    () => projectsLines({ curriculum, store, cursor, focus, checkCursor, width: host.width || 80 }),
-    [curriculum, store, cursor, focus, checkCursor, host.width, revision],
+    () => projectsLines({ curriculum, store, cursor, focus, checkCursor, width: host.width || 80, theme, icons }),
+    [curriculum, store, cursor, focus, checkCursor, host.width, revision, theme, icons],
   );
 
   const onCommand = useCallback((id) => {
@@ -781,13 +1123,24 @@ export function SettingsRoute() {
   const host = useHost();
   const services = useServices();
   const settings = services && services.settings;
+  // Live-preview controls (overhaul §7.1/§7.2): null outside <AppRoot> (unit
+  // tests that render the route's screen directly), so every call is guarded.
+  const themeControl = useThemeControl();
+  const iconControl = useIconControl();
+  const icons = useIcons();
+
+  /** Apply a picker result to its live control (theme or icons). */
+  const applyPreview = useCallback((key, result) => {
+    if (key === 'theme' && themeControl) themeControl.setTheme(result.theme);
+    if (key === 'icons' && iconControl) iconControl.setIcons(result.icons);
+  }, [themeControl, iconControl]);
   // The classic store is not reactive, and neither is the Settings instance, so
   // a bump after a toggle re-derives the rows (the value column must show the
   // new value immediately — the classic view re-renders the same way).
   const [revision, setRevision] = useState(0);
 
   const rows = useMemo(
-    () => [...preferenceRows({ settings }), vimPreferenceRow({ settings })],
+    () => [...preferenceRows({ settings, icons }), vimPreferenceRow({ settings, icons })],
     [settings, revision], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
@@ -797,16 +1150,31 @@ export function SettingsRoute() {
       host.setCursor(move);
       return;
     }
+    if (id === 'settings.optionNext' || id === 'settings.optionPrev') {
+      // The live-preview pickers (overhaul §7.1/§7.2): ←/→ step only a picker
+      // row (Theme or Icons), so the keys stay inert on environment rows.
+      const key = rows[host.cursor] && rows[host.cursor].key;
+      const dir = id === 'settings.optionNext' ? 1 : -1;
+      const result = key === 'theme' ? stepTheme(settings, dir) : key === 'icons' ? stepIcons(settings, dir) : null;
+      if (!result) return;
+      applyPreview(key, result);
+      setRevision((v) => v + 1);
+      host.say(result.message, 'ok');
+      return;
+    }
     if (id === 'settings.toggle' || id === 'settings.vimToggle') {
       const key = id === 'settings.vimToggle' ? 'vimMode' : (rows[host.cursor] && rows[host.cursor].key);
       if (!key) return;
-      const { message, kind } = togglePreference(settings, key);
+      const result = togglePreference(settings, key);
+      // A picker change re-renders the whole tree immediately (AppRoot owns the
+      // choices above the router); every other row keeps its own behavior.
+      applyPreview(key, result);
       setRevision((v) => v + 1);
-      host.say(message, kind === 'good' ? 'ok' : 'warn');
+      host.say(result.message, result.kind === 'good' ? 'ok' : 'warn');
       return;
     }
     host.run(id);
-  }, [host, rows, settings]);
+  }, [host, rows, settings, applyPreview]);
 
   return (
     <SettingsScreen

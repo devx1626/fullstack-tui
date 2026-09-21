@@ -32,6 +32,11 @@ const KEYMAP = {
   '\x1b[1;6C': 'ctrl-shift-right', '\x1b[1;6D': 'ctrl-shift-left',
   '\r': 'enter', '\n': 'enter', '\x7f': 'backspace', '\x08': 'backspace',
   '\t': 'tab', ' ': 'space',
+  // Ctrl+Space (and Ctrl+@) is NUL in raw mode. It has no KEYMAP entry and is
+  // below the printable range, so without this it was silently DROPPED — and
+  // the spec's Ctrl+Space completion trigger (§8.9 / Appendix B.5) could never
+  // fire for real. Outside that control range it still falls through below.
+  '\x00': 'ctrl-space',
 };
 
 const CTRL_NAMES = new Set(['c', 'd', 'e', 'f', 'g', 'k', 'l', 'n', 'o', 'p', 'r', 's', 't', 'u', 'v', 'y', 'z']);

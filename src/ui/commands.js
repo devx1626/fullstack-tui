@@ -25,10 +25,13 @@ export function parseBinding(binding) {
   };
   // Bare single character ("s", "G", "4") — case-sensitive for letters.
   if (/^[A-Za-z0-9]$/.test(binding)) return { ctrl: false, alt: false, shift: false, key: binding };
-  const m = /^<([ACAS]-)*([A-Za-z0-9]+|space|CR|Esc|Tab|BS|Del|up|down|left|right|home|end|pageup|pagedown|enter|escape|tab|backspace|delete)>$/.exec(binding);
+  // NOTE: the mods group must be non-capturing INSIDE a capturing repeat —
+  // `([ACAS]-)*` keeps only the LAST repetition ("<C-A-left>" → "A-", losing
+  // Ctrl), which silently mis-parsed stacked-modifier overrides and conflicts.
+  const m = /^<(([ACAS]-)*)([A-Za-z0-9]+|space|CR|Esc|Tab|BS|Del|up|down|left|right|home|end|pageup|pagedown|enter|escape|tab|backspace|delete)>$/.exec(binding);
   if (!m) return null;
   const mods = m[1] || '';
-  const named = m[2].toLowerCase();
+  const named = m[3].toLowerCase();
   const key = norm[named] || (named.length === 1 ? named : named);
   return {
     ctrl: mods.includes('C-'),
@@ -56,6 +59,31 @@ export function displayBinding(binding) {
  * Phase 1 dispatcher replaces this with real functions.
  */
 export const COMMANDS = [
+  // Browser (screen-scoped ids MUST precede the Global section: resolveKey
+  // walks COMMANDS in order and the first match wins, so on the browser
+  // screen <up> resolves to browser.consoleHistoryUp instead of nav.up, <C-l>
+  // to browser.consoleClear instead of app.repaint, and a printable char to
+  // browser.selfInput instead of app.quit/nav — the route decides what a
+  // bare char means per pane; on the console pane it types into the input)
+  { id: 'browser.close', title: 'Back to editor', screen: 'browser', keys: { default: ['<C-b>'] }, run: 'pop' }, // Esc is app.back
+  { id: 'browser.tabNext', title: 'Next browser pane', screen: 'browser', keys: { default: ['<Tab>'] }, run: 'browser.tabNext' },
+  { id: 'browser.tabPrev', title: 'Previous browser pane', screen: 'browser', keys: { default: ['<S-Tab>'] }, run: 'browser.tabPrev' },
+  { id: 'browser.jumpTab1', title: 'Render pane', screen: 'browser', keys: { default: ['1'] }, run: 'browser.tab(0)' },
+  { id: 'browser.jumpTab2', title: 'Elements pane', screen: 'browser', keys: { default: ['2'] }, run: 'browser.tab(1)' },
+  { id: 'browser.jumpTab3', title: 'Styles pane', screen: 'browser', keys: { default: ['3'] }, run: 'browser.tab(2)' },
+  { id: 'browser.jumpTab4', title: 'Console pane', screen: 'browser', keys: { default: ['4'] }, run: 'browser.tab(3)' },
+  { id: 'browser.jumpTab5', title: 'Network pane', screen: 'browser', keys: { default: ['5'] }, run: 'browser.tab(4)' },
+  { id: 'browser.consoleRun', title: 'Evaluate expression', screen: 'browser', keys: { default: ['<CR>'] }, run: 'runConsole' },
+  { id: 'browser.consoleHistoryUp', title: 'Previous console input', screen: 'browser', keys: { default: ['<up>'] }, run: 'consoleHistoryUp' },
+  { id: 'browser.consoleHistoryDown', title: 'Next console input', screen: 'browser', keys: { default: ['<down>'] }, run: 'consoleHistoryDown' },
+  { id: 'browser.consoleClearInput', title: 'Clear console input line', screen: 'browser', keys: { default: ['<C-u>'] }, run: 'consoleClearInput' },
+  { id: 'browser.consoleClear', title: 'Clear console output', screen: 'browser', keys: { default: ['<C-l>'] }, run: 'consoleClear' },
+  // Catches every remaining printable key ON THE BROWSER SCREEN before the
+  // global single-letter commands (q/j/k/1..5) can: the console pane turns
+  // them into typing; other panes hand them back to the global table via
+  // host.run so nothing else changes.
+  { id: 'browser.selfInput', title: 'Type in the console', screen: 'browser', keys: { default: [] }, run: 'browser.selfInput' },
+
   // Global
   { id: 'app.quit', title: 'Quit', screen: null, keys: { default: ['<C-c>', 'q'] }, run: 'quit' },
   { id: 'app.back', title: 'Go back', screen: null, keys: { default: ['<Esc>'] }, run: 'pop' },
@@ -129,6 +157,12 @@ export const COMMANDS = [
   // Settings (task 1.4). Space acts on the FOCUSED ROW's key, never a magic
   // index, so inserting rows cannot rewire the toggles.
   { id: 'settings.toggle', title: 'Toggle the focused preference', screen: 'settings', keys: { default: ['<Space>'] }, run: 'toggleSetting' },
+  // Option pickers (overhaul §7.1/§7.2): ←/→ step whichever picker row is
+  // focused (Theme or Icons), live-previewing and persisting to
+  // .data/settings.json. Space cycles the same table, so the two cannot
+  // disagree.
+  { id: 'settings.optionPrev', title: 'Previous option', screen: 'settings', keys: { default: ['<left>'] }, run: 'optionPrev' },
+  { id: 'settings.optionNext', title: 'Next option', screen: 'settings', keys: { default: ['<right>'] }, run: 'optionNext' },
   { id: 'settings.vimToggle', title: 'Toggle vim keys (Phase 2 editor)', screen: null, keys: { default: [] }, run: 'toggleVim' },
 
   // Pane widths (task 1.2). Spec §7.4 asks for "⌃⇧←/→, rebindable"; both forms
@@ -147,17 +181,6 @@ export const COMMANDS = [
 
   // Global app commands from Appendix B.1 that the palette offers.
   { id: 'app.tour', title: 'Replay welcome tour', screen: null, keys: { default: [] }, run: 'tour' },
-
-  // Browser
-  { id: 'browser.close', title: 'Back to editor', screen: 'browser', keys: { default: ['<C-b>'] }, run: 'pop' }, // Esc is app.back
-  { id: 'browser.tabNext', title: 'Next browser pane', screen: 'browser', keys: { default: ['<Tab>'] }, run: 'browser.tabNext' },
-  { id: 'browser.tabPrev', title: 'Previous browser pane', screen: 'browser', keys: { default: ['<S-Tab>'] }, run: 'browser.tabPrev' },
-  { id: 'browser.jumpTab1', title: 'Render pane', screen: 'browser', keys: { default: ['1'] }, run: 'browser.tab(0)' },
-  { id: 'browser.jumpTab2', title: 'Elements pane', screen: 'browser', keys: { default: ['2'] }, run: 'browser.tab(1)' },
-  { id: 'browser.jumpTab3', title: 'Styles pane', screen: 'browser', keys: { default: ['3'] }, run: 'browser.tab(2)' },
-  { id: 'browser.jumpTab4', title: 'Console pane', screen: 'browser', keys: { default: ['4'] }, run: 'browser.tab(3)' },
-  { id: 'browser.jumpTab5', title: 'Issues pane', screen: 'browser', keys: { default: ['5'] }, run: 'browser.tab(4)' },
-  { id: 'browser.consoleRun', title: 'Evaluate expression', screen: 'browser', keys: { default: ['<CR>'] }, run: 'runConsole' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -253,6 +276,14 @@ export function findConflicts(keymapLike = mergeKeymap()) {
 const ALLOWED_CONFLICTS = new Set([
   // <C-b>: browser open (challenge) vs close (browser) — different screens.
   'C+b:browser.close|challenge.browser',
+  // <C-l>: repaint (global) vs clear-the-console-output (browser screen).
+  'C+l:app.repaint|browser.consoleClear',
+  // <up>/<down>: console history (browser screen) vs scrolling (global). The
+  // browser route deliberately wins on its own screen: the console pane needs
+  // history, and on the other panes the route falls through to the same
+  // scroll/selection behaviour the nav ids provide.
+  'up:browser.consoleHistoryUp|nav.up',
+  'down:browser.consoleHistoryDown|nav.down',
 ]);
 
 /**

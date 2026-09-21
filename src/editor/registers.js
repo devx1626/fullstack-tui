@@ -146,7 +146,3 @@ export function normaliseRegisterName(ch) {
   return null;
 }
 
-/** Is this character the start of a register prefix (`"`)? */
-export function isRegisterPrefix(ch) {
-  return ch === '"';
-}

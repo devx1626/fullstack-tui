@@ -397,14 +397,34 @@ test('next-UI routes + command host', async (t) => {
           'typing lands in the buffer and autosaves',
         );
 
-        // Ctrl+Z is unbound by the registry, so it falls through to the vim
-        // reducer, which requests undo. The buffer returns to the starter
-        // ('' — a clean buffer is not a draft), and the autosave records that.
-        app.onKey({ name: 'ctrl-z' });
+        // Two bytes arriving in ONE stdin chunk (an SSH burst, a fast typist, a
+        // coalesced read) must BOTH land. The route reads the latest editor
+        // state through refs for exactly this: before, both keys ran against
+        // the same render and the second silently overwrote the first.
+        // Both keys are UNBOUND on this screen (a bound letter is a command by
+        // design — `y` is challenge.copySolution, for instance), so they are
+        // exactly the "two printable bytes in one chunk" case.
+        app.onKey({ name: 'char', char: 'a' });
+        app.onKey({ name: 'char', char: 'b' });
         assert.ok(
-          await waitFor(() => (services.store.challengeRecord(challengeId).lastCode ?? null) === null, { timeout: 4000 }),
-          'undo restores the starter and the clean draft is cleared',
+          await waitFor(() => services.store.challengeRecord(challengeId).lastCode === 'xab<h1', { timeout: 4000 }),
+          'a two-key burst in one tick applies both characters',
         );
+
+        // Ctrl+Z is unbound by the registry, so it falls through to the vim
+        // reducer, which requests undo. Undo runs are coalesced inside a 400 ms
+        // window, so the burst is one step and the earlier 'x' may or may not
+        // share it depending on how long the autosave polls took — undo until
+        // the buffer is the starter again ('' — a clean buffer is not a draft).
+        let clean = false;
+        for (let i = 0; i < 3 && !clean; i += 1) {
+          app.onKey({ name: 'ctrl-z' });
+          clean = await waitFor(
+            () => (services.store.challengeRecord(challengeId).lastCode ?? null) === null,
+            { timeout: 4000 },
+          );
+        }
+        assert.ok(clean, 'undo restores the starter and the clean draft is cleared');
       } finally {
         app.inst.unmount();
       }

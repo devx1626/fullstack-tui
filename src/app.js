@@ -39,6 +39,7 @@ import renderPalette from './views/palette.js';
 import renderSettings, { settingsRows } from './views/settings.js';
 import { Settings } from './ui/settings.js';
 import { togglePreference } from './ui/preferences.js';
+import { milestoneToast } from './ui/milestones.js';
 import { notify, BEL } from './ui/multimedia.js';
 import { runJs, stringify } from './core/runner.js';
 import { elementTree, previewParts as buildPreviewParts, synthesisParts } from './core/browser.js';
@@ -1691,19 +1692,15 @@ export class App {
       if (result.passed) this.store.promoteDailyBest(challengeId, checkpoint);
     }
     if (result.passed) {
-      // Q5: celebrate streak milestones exactly once (7/30/100 days, new best).
+      // Q5: celebrate milestones exactly once (streaks, new best, module %)
+      // — takeMilestones decides which are fresh, the shared module says what
+      // to call them, so the Ink UI's toast cannot drift from this text.
       const milestones = this.settings.takeMilestones(this.stats);
-      const milestoneText = milestones.length
-        ? ` ★ ${milestones[0].startsWith('streak-')
-          ? `${milestones[0].split('-')[1]}-day streak!`
-          : milestones[0].startsWith('best-')
-            ? `new best streak: ${milestones[0].split('-')[1]} days`
-            : milestones[0].replace('module-', '').replace(/-(\d+)$/, ' $1%')}`
-        : '';
+      const milestoneText = milestoneToast(milestones);
       this.saveToWorkspace(false);
       this.notifyDone(`Passed: ${challenge.title}`);
       this.sessionPassed.add(challengeId); // Q13
-      this.note(`All checks passed. Saved to your workspace - press Ctrl+P to see it.${milestoneText}`, 'good', true);
+      this.note(`All checks passed. Saved to your workspace - press Ctrl+P to see it.${milestoneText ? ` ${milestoneText}` : ''}`, 'good', true);
     } else {
       const failed = result.results.filter((r) => !r.ok).length;
       this.sessionFailures += failed; // Q13

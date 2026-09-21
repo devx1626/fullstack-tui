@@ -122,9 +122,10 @@ test('phase 1: settings, tour and pane persistence', async (t) => {
     const settings = { data: {}, save: () => written.push(1) };
 
     const rows = harness.preferenceRows({ settings, env: { HOME: '/home/me' }, workspace: '/home/me/ws' });
-    assert.deepEqual(rows.map((r) => r.key), ['theme', 'sound', 'wrap', 'tabSize', 'workspace', 'editor']);
+    assert.deepEqual(rows.map((r) => r.key), ['theme', 'icons', 'sound', 'wrap', 'tabSize', 'workspace', 'editor']);
     assert.equal(rows.find((r) => r.key === 'workspace').value, '~/ws', 'HOME is shortened for display');
-    assert.equal(rows.find((r) => r.key === 'theme').toggleable, false, 'environment rows are not toggles');
+    assert.equal(rows.find((r) => r.key === 'theme').toggleable, true, 'the theme picker is a toggle row');
+    assert.equal(rows.find((r) => r.key === 'workspace').toggleable, false, 'environment rows are not toggles');
     assert.equal(harness.vimPreferenceRow({ settings }).key, 'vimMode', 'the next UI adds the vim row');
 
     // Space on a row acts on its KEY, and every toggle saves.
@@ -140,7 +141,11 @@ test('phase 1: settings, tour and pane persistence', async (t) => {
     assert.equal(settings.data.editor.tabSize, 2, '8 wraps to 2');
     assert.equal(harness.togglePreference(settings, 'vimMode').changed, true);
     assert.equal(settings.data.editor.vimMode, false);
-    assert.equal(harness.togglePreference(settings, 'theme').changed, false, 'theme is not a toggle');
+    // Theme cycles through the curated set and persists (Phase 4 picker).
+    const themeToggle = harness.togglePreference(settings, 'theme');
+    assert.equal(themeToggle.changed, true, 'theme is a picker row');
+    assert.equal(settings.data.theme, 'midnight', 'unset (Auto) cycles to the first palette');
+    assert.equal(themeToggle.theme, 'midnight');
 
     assert.ok(written.length >= 6, 'each toggle persists');
     assert.equal(harness.clampTabSize(99), 8, 'a hand-edited width is clamped');
@@ -152,7 +157,8 @@ test('phase 1: settings, tour and pane persistence', async (t) => {
     const rows = [...harness.preferenceRows({ settings }), harness.vimPreferenceRow({ settings })];
     const { lines, cursorLine } = harness.settingsLayout({ rows, cursor: 2, width: 100 });
     assert.equal(lines[cursorLine].props.children[1], '▸', 'the focused row carries the marker');
-    assert.equal(harness.rowMarker(rows[0], false), ' ', 'environment rows have no marker');
+    assert.equal(harness.rowMarker(rows[0], false), '·', 'the theme picker row carries the toggle marker');
+    assert.equal(harness.rowMarker(rows.find((r) => r.key === 'workspace'), false), ' ', 'environment rows have no marker');
 
     const text = strip(await helper.renderToText(
       harness.el(harness.SettingsScreen, { rows, cursor: 2, width: 100, height: 40 }),

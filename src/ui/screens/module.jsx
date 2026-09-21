@@ -8,13 +8,20 @@
  */
 import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { moduleViewModel, meterCells } from './screenModel.js';
+import { moduleViewModel, meterCells, lessonMarks } from './screenModel.js';
 import { useKeymap } from '../useKeymap.js';
 import { useServices } from '../services.jsx';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
-const MARK_TONE = { done: 'green', open: 'yellow', unread: 'gray' };
+/** Lesson status → theme roles (spec §7.2 tokens). */
+const markToneFor = (theme) => ({ done: theme.good, open: theme.warn, unread: theme.muted });
 
 export function ModuleScreen({ vm: vmProp, mod: modProp, moduleId, statsEntry, store: storeProp, cursor = 0, height = 24, onCommand }) {
+  const theme = useTheme();
+  const ic = useIcons();
+  const MARK_TONE = markToneFor(theme);
+  // Status marks follow the icon set, so tier D keeps 7-bit output.
+  const MARKS = lessonMarks(ic);
   useKeymap('module', (id) => onCommand?.(id));
 
   // Self-sufficient by default: resolve the module + stats from services when
@@ -30,7 +37,7 @@ export function ModuleScreen({ vm: vmProp, mod: modProp, moduleId, statsEntry, s
     () => vmProp || moduleViewModel({ mod, statsEntry: entry, store }),
     [vmProp, mod, entry, store],
   );
-  if (!vm) return <Text color="red">unknown module</Text>;
+  if (!vm) return <Text color={theme.bad}>unknown module</Text>;
 
   const rowsForLessons = Math.max(1, height - 10);
   const visible = vm.lessons.slice(0, rowsForLessons);
@@ -39,56 +46,57 @@ export function ModuleScreen({ vm: vmProp, mod: modProp, moduleId, statsEntry, s
   return (
     <Box flexDirection="column">
       <Text>
-        <Text backgroundColor="cyan" color="black" bold> {vm.badge} </Text>
+        <Text backgroundColor={theme.accent} color={theme.bg} bold> {vm.badge} </Text>
         <Text bold>  {vm.title}</Text>
-        <Text color="gray">   {vm.tagline}</Text>
+        <Text color={theme.muted}>   {vm.tagline}</Text>
       </Text>
-      <Text color="gray">
+      <Text color={theme.muted}>
         {'  '}{vm.course}   ~{vm.hours}h of source material
       </Text>
 
       <Box marginTop={1} flexDirection="column">
         {vm.why.split('\n').filter((l) => l.trim()).slice(0, 3).map((line, i) => (
-          <Text key={i} color="gray">  {line.trim()}</Text>
+          <Text key={i} color={theme.muted}>  {line.trim()}</Text>
         ))}
       </Box>
 
       <Box marginTop={1}>
         <Text>
-          <Text color="cyan">{'─'.repeat(meter.filled)}</Text>
-          <Text color="gray">{'·'.repeat(meter.open)}</Text>
-          <Text color="gray">   {vm.meter.done}/{vm.meter.total} challenges</Text>
-          <Text color="gray">   {vm.lessonsRead}/{vm.lessonsCount} lessons read</Text>
-          <Text color={vm.meter.percent === 100 ? 'green' : 'cyan'} bold>   {vm.meter.percent}%</Text>
+          <Text color={theme.accent}>{ic.meterFull.repeat(meter.filled)}</Text>
+          <Text color={theme.muted}>{ic.meterEmpty.repeat(meter.open)}</Text>
+          <Text color={theme.muted}>   {vm.meter.done}/{vm.meter.total} challenges</Text>
+          <Text color={theme.muted}>   {vm.lessonsRead}/{vm.lessonsCount} lessons read</Text>
+          <Text color={vm.meter.percent === 100 ? theme.good : theme.accent} bold>   {vm.meter.percent}%</Text>
         </Text>
       </Box>
 
       <Box marginTop={1} flexDirection="column">
         <Text>
-          <Text color="cyan" bold> Lessons </Text>
-          <Text color="gray"> Enter opens the highlighted row </Text>
+          <Text color={theme.accent} bold> Lessons </Text>
+          <Text color={theme.muted}> Enter opens the highlighted row </Text>
         </Text>
         {visible.map((l) => {
           const active = l.index === cursor;
+          const mark = MARKS[l.status]?.mark || l.mark;
           return (
-            <Text key={l.index} color={active ? 'white' : 'gray'} bold={active}>
+            <Text key={l.index} color={active ? theme.text : theme.muted} bold={active}>
               {' '}
-              {active ? '▸' : ' '} <Text color={MARK_TONE[l.status]} bold>{l.mark}</Text>
+              {active ? ic.select : ' '} <Text color={MARK_TONE[l.status]} bold>{mark}</Text>
               {' '}{String(l.index + 1).padStart(2, '0')}  {l.title.slice(0, 34).padEnd(34)}
-              <Text color="gray"> {l.minutes} min  {l.challenges} ch</Text>
-              <Text color={l.passed === l.challenges ? 'green' : 'gray'}>  {l.passed}/{l.challenges} done</Text>
+              <Text color={theme.muted}> {l.minutes} min  {l.challenges} ch</Text>
+              <Text color={l.passed === l.challenges ? theme.good : theme.muted}>  {l.passed}/{l.challenges} done</Text>
             </Text>
           );
         })}
         {vm.project ? (() => {
           const active = vm.lessons.length === cursor; // classic convention: project row follows the lessons
           return (
-            <Text color={active ? 'white' : 'gray'} bold={active}>
+            <Text color={active ? theme.text : theme.muted} bold={active}>
               {' '}
-              {active ? '▸' : ' '} <Text color="yellow" bold>★</Text> CP{'  '}
+              {active ? ic.select : ' '} <Text color={theme.warn} bold>{ic.star}</Text> CP{'  '}
               {vm.project.title.slice(0, 38).padEnd(38)}
-              <Text color="gray"> {vm.project.minutes} min   capstone</Text>
-              <Text color={vm.project.done && vm.project.done === vm.project.total ? 'green' : 'gray'}>
+              <Text color={theme.muted}> {vm.project.minutes} min   capstone</Text>
+              <Text color={vm.project.done && vm.project.done === vm.project.total ? theme.good : theme.muted}>
                 {'   '}{vm.project.done}/{vm.project.total} ticked
               </Text>
             </Text>

@@ -14,6 +14,9 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { clampScroll, wrapText } from './screenModel.js';
+import { useTheme, useIcons } from '../theme/context.jsx';
+import { midnight } from '../theme/themes.js';
+import { ICON_SETS } from '../theme/icons.js';
 
 /** Markdown-ish prose → wrapped display lines (indent applied per line). */
 export function proseLines(text, width, indent = '  ') {
@@ -47,10 +50,22 @@ export function proseLines(text, width, indent = '  ') {
   return out;
 }
 
-const TONE = { heading: 'cyan', quote: 'gray', bullet: undefined, prose: undefined, code: 'green' };
+const toneFor = (theme) => ({
+  heading: theme.accent,
+  quote: theme.muted,
+  bullet: undefined,
+  prose: undefined,
+  code: theme.good,
+});
 
-/** Flatten a lesson into renderable rows + the row index of each challenge. */
-export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
+/**
+ * Flatten a lesson into renderable rows + the row index of each challenge.
+ *
+ * Pure and theme-parameterised (a `useTheme()` read here would make the helper
+ * a hook); the default keeps direct callers — tests — rendering as before.
+ */
+export function lessonLines({ mod, lesson, store, focus = 0, width = 80, theme = midnight, icons = ICON_SETS.unicode }) {
+  const TONE = toneFor(theme);
   const lines = [];
   const challengeRows = [];
   const push = (el) => lines.push(el);
@@ -60,26 +75,26 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
   push(
     <Text>
       {'  '}
-      <Text backgroundColor="cyan" color="black" bold> {mod.badge} </Text>
-      <Text color="gray">  {mod.title}</Text>
-      <Text color="gray">  /  </Text>
+      <Text backgroundColor={theme.accent} color={theme.bg} bold> {mod.badge} </Text>
+      <Text color={theme.muted}>  {mod.title}</Text>
+      <Text color={theme.muted}>  /  </Text>
       <Text>{lesson.title}</Text>
     </Text>,
   );
   push(
     <Text>
       {'  '}
-      <Text color="gray">~{lesson.minutes} minutes</Text>
+      <Text color={theme.muted}>~{lesson.minutes} minutes</Text>
       {read
-        ? <Text color="green">   ✓ marked read</Text>
-        : <Text color="gray">   press m when you have finished reading</Text>}
+        ? <Text color={theme.good}>   {icons.check} marked read</Text>
+        : <Text color={theme.muted}>   press m when you have finished reading</Text>}
     </Text>,
   );
   push(<Text> </Text>);
 
   if (lesson.objectives && lesson.objectives.length) {
-    push(<Text><Text color="cyan" bold> What you will be able to do</Text></Text>);
-    for (const o of lesson.objectives) push(<Text><Text color="cyan">    → </Text>{o}</Text>);
+    push(<Text><Text color={theme.accent} bold> What you will be able to do</Text></Text>);
+    for (const o of lesson.objectives) push(<Text><Text color={theme.accent}>    {icons.arrowRight} </Text>{o}</Text>);
     push(<Text> </Text>);
   }
 
@@ -87,8 +102,8 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
   sections.forEach((section, i) => {
     push(
       <Text>
-        <Text color="cyan" bold> {section.heading} </Text>
-        {i === sections.length - 1 ? <Text color="gray"> worked example</Text> : null}
+        <Text color={theme.accent} bold> {section.heading} </Text>
+        {i === sections.length - 1 ? <Text color={theme.muted}> worked example</Text> : null}
       </Text>,
     );
     for (const line of proseLines(section.body, width - 4)) {
@@ -96,9 +111,9 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
     }
     push(<Text> </Text>);
     if (section.code && section.code.source) {
-      if (section.code.caption) push(<Text color="gray">  {section.code.caption}</Text>);
+      if (section.code.caption) push(<Text color={theme.muted}>  {section.code.caption}</Text>);
       for (const l of String(section.code.source).split('\n')) {
-        push(<Text color="green">{`    ${l}`.replace(/\s+$/, '')}</Text>);
+        push(<Text color={theme.good}>{`    ${l}`.replace(/\s+$/, '')}</Text>);
       }
       push(<Text> </Text>);
     }
@@ -107,23 +122,23 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
   if (lesson.pitfalls && lesson.pitfalls.length) {
     push(
       <Text>
-        <Text color="cyan" bold> Common mistakes </Text>
-        <Text color="gray"> every one of these has cost someone an afternoon</Text>
+        <Text color={theme.accent} bold> Common mistakes </Text>
+        <Text color={theme.muted}> every one of these has cost someone an afternoon</Text>
       </Text>,
     );
     for (const p of lesson.pitfalls) {
       for (const line of proseLines(p, width - 6, '    ')) {
-        push(<Text color="red">    ✗ {line.text.trim()}</Text>);
+        push(<Text color={theme.bad}>    {icons.cross} {line.text.trim()}</Text>);
       }
     }
     push(<Text> </Text>);
   }
 
   if (lesson.keyPoints && lesson.keyPoints.length) {
-    push(<Text><Text color="cyan" bold> Cheat sheet</Text></Text>);
+    push(<Text><Text color={theme.accent} bold> Cheat sheet</Text></Text>);
     for (const k of lesson.keyPoints) {
       for (const line of proseLines(k, width - 6, '    ')) {
-        push(<Text color="magenta">    • {line.text.trim()}</Text>);
+        push(<Text color={theme.secondary}>    {icons.bullet} {line.text.trim()}</Text>);
       }
     }
     push(<Text> </Text>);
@@ -133,16 +148,16 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
   const passed = challenges.filter((c) => store && store.isPassed(`${lesson.id}.${c.id}`)).length;
   push(
     <Text>
-      <Text color="cyan" bold> Practice </Text>
-      <Text color="gray"> Tab then Enter, or just press Enter</Text>
+      <Text color={theme.accent} bold> Practice </Text>
+      <Text color={theme.muted}> Tab then Enter, or just press Enter</Text>
     </Text>,
   );
   push(
     <Text>
       {'  '}
-      <Text color="cyan">{'█'.repeat(Math.round((challenges.length ? passed / challenges.length : 0) * 10))}</Text>
-      <Text color="gray">{'░'.repeat(10 - Math.round((challenges.length ? passed / challenges.length : 0) * 10))}</Text>
-      <Text color="gray">   {passed}/{challenges.length} solved here</Text>
+      <Text color={theme.accent}>{icons.meterFull.repeat(Math.round((challenges.length ? passed / challenges.length : 0) * 10))}</Text>
+      <Text color={theme.muted}>{icons.meterEmpty.repeat(10 - Math.round((challenges.length ? passed / challenges.length : 0) * 10))}</Text>
+      <Text color={theme.muted}>   {passed}/{challenges.length} solved here</Text>
     </Text>,
   );
   push(<Text> </Text>);
@@ -153,31 +168,31 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
     const active = i === focus;
     challengeRows.push(lines.length);
     push(
-      <Text color={active ? 'white' : 'gray'} bold={active}>
-        {active ? ' ▸ ' : '   '}
-        <Text color={solved ? 'green' : 'gray'} bold>{solved ? '✓ ' : '· '}</Text>
-        <Text color={ch.kind === 'debug' ? 'yellow' : 'cyan'} bold>{ch.kind === 'debug' ? 'DEBUG ' : 'WRITE '}</Text>
+      <Text color={active ? theme.text : theme.muted} bold={active}>
+        {active ? ` ${icons.select} ` : '   '}
+        <Text color={solved ? theme.good : theme.muted} bold>{solved ? `${icons.check} ` : `${icons.bullet} `}</Text>
+        <Text color={ch.kind === 'debug' ? theme.warn : theme.accent} bold>{ch.kind === 'debug' ? 'DEBUG ' : 'WRITE '}</Text>
         <Text>{String(ch.id).padEnd(22).slice(0, 22)}</Text>
-        <Text color="gray">{String(ch.difficulty || '').padEnd(8)}</Text>
-        <Text color="gray">{ch.minutes ? `${ch.minutes}m` : ''}</Text>
-        <Text color="gray">{solved ? '   solved' : '   not solved yet'}</Text>
+        <Text color={theme.muted}>{String(ch.difficulty || '').padEnd(8)}</Text>
+        <Text color={theme.muted}>{ch.minutes ? `${ch.minutes}m` : ''}</Text>
+        <Text color={theme.muted}>{solved ? '   solved' : '   not solved yet'}</Text>
       </Text>,
     );
     const firstLine = String(ch.prompt || '').split('\n')[0].replace(/\*\*/g, '');
     for (const line of proseLines(firstLine, width - 8, '       ')) {
-      push(<Text color="gray">{line.text}</Text>);
+      push(<Text color={theme.muted}>{line.text}</Text>);
     }
     push(<Text> </Text>);
   });
 
   if (lesson.resources && lesson.resources.length) {
-    push(<Text><Text color="cyan" bold> Go deeper</Text></Text>);
+    push(<Text><Text color={theme.accent} bold> Go deeper</Text></Text>);
     for (const r of lesson.resources) {
       push(
         <Text>
           {'    '}
           {r.label}
-          <Text color="gray">   {r.url}</Text>
+          <Text color={theme.muted}>   {r.url}</Text>
         </Text>,
       );
     }
@@ -189,6 +204,8 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80 }) {
 export function LessonScreen({ lines = [], height = 24, scroll = 0 }) {
   // Key handling lives in LessonRoute (it owns focus + scroll); this is a
   // windowing presenter, which keeps the row math in exactly one place.
+  const theme = useTheme();
+  const icons = useIcons();
   const view = Math.max(1, height - 2);
   const offset = clampScroll(scroll, lines.length, view);
   const shown = lines.slice(offset, offset + view);
@@ -196,8 +213,8 @@ export function LessonScreen({ lines = [], height = 24, scroll = 0 }) {
     <Box flexDirection="column">
       <Text>
         {'  '}
-        <Text color="gray">{lines.length ? offset + 1 : 0}-{Math.min(lines.length, offset + view)} of {lines.length}</Text>
-        <Text color="gray">  j/k scroll · Tab focus · Enter open · m read · n next</Text>
+        <Text color={theme.muted}>{lines.length ? offset + 1 : 0}-{Math.min(lines.length, offset + view)} of {lines.length}</Text>
+        <Text color={theme.muted}>  j/k scroll {icons.bullet} Tab focus {icons.bullet} Enter open {icons.bullet} m read {icons.bullet} n next</Text>
       </Text>
       {shown.map((el, i) => <React.Fragment key={offset + i}>{el}</React.Fragment>)}
     </Box>

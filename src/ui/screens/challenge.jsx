@@ -16,9 +16,13 @@ import { Box, Text } from 'ink';
 import { ResizableSplit } from '../components/ResizableSplit.jsx';
 import { clampSplit } from '../components/splitClamp.js';
 import { CodeEditor } from '../components/CodeEditor.jsx';
+import { CompletionPopup } from '../components/CompletionPopup.jsx';
+import { CelebrateLine } from '../components/overlays.jsx';
 import { useKeymap } from '../useKeymap.js';
 import { cursorShape } from '../multimedia.js';
 import { docFromText } from '../../editor/document.js';
+import { footerLine, modeBadge, NUDGE_TEXT } from '../hints.js';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
 /** The editor pane: CodeEditor normally, DiffView when the solution is shown. */
 function EditorPane({
@@ -29,23 +33,25 @@ function EditorPane({
   width,
   height,
   language,
-  theme,
+  theme: themeProp = null,
   tabSize,
   showSolution,
   solutionRows,
   mouseHandlers,
   mouseSink,
 }) {
+  // Explicit prop wins (tests/previews); otherwise the app-wide theme tokens.
+  const theme = themeProp || useTheme();
   if (showSolution || !doc) {
     return (
       <Box flexDirection="column" width={width}>
         <Box flexDirection="row" width={width}>
-          <Text bold inverse color="cyan">{' solution '}</Text>
-          <Text color="gray">  your code vs the reference — Ctrl+G hides</Text>
+          <Text bold inverse color={theme.accent}>{' solution '}</Text>
+          <Text color={theme.muted}>  your code vs the reference — Ctrl+G hides</Text>
         </Box>
         {solutionRows.slice(0, height).map((r, i) => (
           <Box key={i} flexDirection="row">
-            <Text bold color={r.kind === 'add' || r.kind === 'mod-ref' ? 'green' : r.kind === 'del' || r.kind === 'mod-cur' ? 'red' : undefined}>
+            <Text bold color={r.kind === 'add' || r.kind === 'mod-ref' ? theme.good : r.kind === 'del' || r.kind === 'mod-cur' ? theme.bad : undefined}>
               {r.marker}
             </Text>
             <Text>
@@ -95,7 +101,9 @@ export function ChallengeScreen({
   solutionRows = [],
   logs = null,
   showLogs = false,
-  theme = null,
+  popup = null, // completion list (task 2.7); the route owns its state
+  popupSignature = null, // signature help for the call at the caret
+  theme: themeProp = null,
   tabSize = 2,
   mouseHandlers = null,
   mouseSink = null,
@@ -104,7 +112,12 @@ export function ChallengeScreen({
   registerInput = true, // false when the ROUTE owns input (task 2.9); keeps
   // standalone test mounts working by registering the screen themselves
   onModeChange,
+  nudge = false, // §9: one-time "press i to start typing" guardrail
+  vimEnabled, // vim on? the footer's nudge line only makes sense then
+  celebrate = null, // §7.3 motion: {key} while the pass flourish shows
 }) {
+  const theme = themeProp || useTheme();
+  const ic = useIcons();
   const leftWidth = leftWidthProp ?? Math.round(width * 0.42);
 
   // M0: block cursor in normal mode, bar in insert (unchanged from Phase 1).
@@ -147,31 +160,31 @@ export function ChallengeScreen({
         dragging={dragging}
         left={(
           <Box flexDirection="column">
-            <Text bold color="cyan"> {title || 'untitled challenge'}</Text>
+            <Text bold color={theme.accent}> {title || 'untitled challenge'}</Text>
             <Text> </Text>
             {brief.split('\n').map((line, i) => (
-              <Text key={i} color="gray"> {line}</Text>
+              <Text key={i} color={theme.muted}> {line}</Text>
             ))}
             {results ? (
               <Box flexDirection="column" marginTop={1}>
-                <Text bold color={results.passed ? 'green' : 'red'}>
+                <Text bold color={results.passed ? theme.good : theme.bad}>
                   {' '}CHECKS  {results.results.filter((r) => r.ok).length}/{results.results.length}
-                  {Number.isFinite(results.durationMs) ? `   ·   ${results.durationMs} ms` : ''}
+                  {Number.isFinite(results.durationMs) ? `   ${ic.bullet}   ${results.durationMs} ms` : ''}
                 </Text>
                 {(results.notes || []).map((n, i) => (
-                  <Text key={i} color={n.kind === 'warn' ? 'yellow' : n.kind === 'honesty' ? 'cyan' : 'gray'}>
-                    {' '}· {n.text}
+                  <Text key={i} color={n.kind === 'warn' ? theme.warn : n.kind === 'honesty' ? theme.accent : theme.muted}>
+                    {' '}{ic.bullet} {n.text}
                   </Text>
                 ))}
               </Box>
             ) : null}
             {showLogs && logs ? (
               <Box flexDirection="column" marginTop={1}>
-                <Text bold color="magenta"> CONSOLE</Text>
-                {logs.length === 0 ? <Text color="gray"> · (no output)</Text> : null}
+                <Text bold color={theme.secondary}> CONSOLE</Text>
+                {logs.length === 0 ? <Text color={theme.muted}> {ic.bullet} (no output)</Text> : null}
                 {logs.slice(-12).map((l, i) => (
-                  <Text key={i} color={l.kind === 'error' ? 'red' : l.kind === 'warn' ? 'yellow' : 'gray'}>
-                    {' '}· {l.text}
+                  <Text key={i} color={l.kind === 'error' ? theme.bad : l.kind === 'warn' ? theme.warn : theme.muted}>
+                    {' '}{ic.bullet} {l.text}
                   </Text>
                 ))}
               </Box>
@@ -179,38 +192,42 @@ export function ChallengeScreen({
           </Box>
         )}
         right={(
-          <EditorPane
-            document={doc}
-            selection={selection}
-            tabs={tabs}
-            activeTab={activeTab}
-            width={textWidth}
-            height={editorHeight}
-            language={language}
-            theme={theme}
-            tabSize={tabSize}
-            showSolution={showSolution}
-            solutionRows={solutionRows}
-            mouseHandlers={mouseHandlers}
-            mouseSink={mouseSink}
-          />
+          <Box flexDirection="column">
+            <EditorPane
+              document={doc}
+              selection={selection}
+              tabs={tabs}
+              activeTab={activeTab}
+              width={textWidth}
+              height={editorHeight}
+              language={language}
+              theme={theme}
+              tabSize={tabSize}
+              showSolution={showSolution}
+              solutionRows={solutionRows}
+              mouseHandlers={mouseHandlers}
+              mouseSink={mouseSink}
+            />
+            <CompletionPopup popup={popup} signature={popupSignature} width={textWidth} />
+          </Box>
         )}
       />
-      <Text color={busy ? 'yellow' : status ? 'cyan' : 'gray'}>
-        {' '}{(status || (lastCommandText(mode))).split('\n')[0]}
+      <Text color={busy ? theme.warn : status ? theme.accent : theme.muted}>
+        {' '}{status ? status.split('\n')[0] : footerLine()}
       </Text>
       {status && status.includes('\n')
         ? status.split('\n').slice(1).map((line, i) => (
-          <Text key={i} color="red"> {line}</Text>
+          <Text key={i} color={theme.bad}> {line}</Text>
         ))
         : null}
-      {mode === 'insert' ? <Text color="green"> -- INSERT --</Text> : null}
+      {celebrate ? <CelebrateLine key={celebrate.key} /> : null}
+      {nudge ? (
+        <Text color={theme.warn}> {NUDGE_TEXT}</Text>
+      ) : null}
+      {(() => {
+        const badge = modeBadge(mode);
+        return badge ? <Text color={theme.good} bold>{badge}</Text> : null;
+      })()}
     </Box>
   );
-}
-
-function lastCommandText(mode) {
-  return mode === 'insert'
-    ? '-- INSERT -- · Esc back to normal · Ctrl+S check'
-    : 'Ctrl+S check · Ctrl+H hint · Ctrl+G solution · Ctrl+T console · Esc back';
 }

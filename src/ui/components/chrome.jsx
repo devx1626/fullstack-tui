@@ -1,24 +1,28 @@
 /**
  * Core chrome components (overhaul Phase 1, task 1.1 — first slice).
- * Unicode-tier decoration; Nerd-Font variants arrive with the icon pass.
+ * Decoration reads the active icon set (nerd/unicode/ascii, §7.1), so the same
+ * components render rounded+Nerd on Tier A and `+--`/ASCII on Tier D.
  */
 import React from 'react';
 import { Box, Text } from 'ink';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
 /** Decorated top bar: wordmark, subtitle, right-aligned progress, tab strip. */
 export function Header({ title, subtitle, right, tabs, activeTab }) {
+  const theme = useTheme();
+  const ic = useIcons();
   return (
     <Box flexDirection="column" marginBottom={0}>
       <Box>
-        <Text bold color="cyan"> ◈ {title}</Text>
-        {subtitle ? <Text color="gray"> — {subtitle}</Text> : null}
+        <Text bold color={theme.accent}> {ic.brand} {title}</Text>
+        {subtitle ? <Text color={theme.muted}> — {subtitle}</Text> : null}
         {right ? <Box flexGrow={1} /> : null}
-        {right ? <Text color="cyan">{right}</Text> : null}
+        {right ? <Text color={theme.accent}>{right}</Text> : null}
       </Box>
       {tabs && tabs.length ? (
         <Box>
           {tabs.map((t, i) => (
-            <Text key={t} inverse={i === activeTab} color={i === activeTab ? undefined : 'gray'}>
+            <Text key={t} inverse={i === activeTab} color={i === activeTab ? undefined : theme.muted}>
               {' '}{t}{' '}
             </Text>
           ))}
@@ -30,18 +34,20 @@ export function Header({ title, subtitle, right, tabs, activeTab }) {
 
 /** Rounded panel with a title in the border; focus ring optional. */
 export function Panel({ title, focused = false, width, height, children }) {
+  const theme = useTheme();
+  const ic = useIcons();
   return (
     <Box
       flexDirection="column"
       width={width}
       height={height}
-      borderStyle="round"
-      borderColor={focused ? 'cyan' : 'gray'}
+      borderStyle={ic.borderStyle}
+      borderColor={focused ? theme.accent : theme.muted}
       paddingX={1}
     >
       {title ? (
         <Box marginBottom={0}>
-          <Text bold color={focused ? 'cyan' : 'gray'}> {title}</Text>
+          <Text bold color={focused ? theme.accent : theme.muted}> {title}</Text>
         </Box>
       ) : null}
       {children}
@@ -49,8 +55,10 @@ export function Panel({ title, focused = false, width, height, children }) {
   );
 }
 
-/** Selectable list rows: ▸ marker, active highlight, optional right hint. */
+/** Selectable list rows: select marker, active highlight, optional right hint. */
 export function List({ items, selected, height }) {
+  const theme = useTheme();
+  const ic = useIcons();
   const visible = items.slice(Math.max(0, selected - (height ?? items.length) + 1), (Math.max(0, selected - (height ?? items.length) + 1)) + (height ?? items.length));
   return (
     <Box flexDirection="column">
@@ -59,8 +67,8 @@ export function List({ items, selected, height }) {
         const active = index === selected;
         return (
           <Box key={index}>
-            <Text inverse={active} bold={active} color={active ? undefined : 'gray'}>
-              {' '}{active ? '▸' : ' '} {item.label}
+            <Text inverse={active} bold={active} color={active ? undefined : theme.muted}>
+              {' '}{active ? ic.select : ' '} {item.label}
               {item.right ? `  ${item.right}` : ''}
             </Text>
           </Box>
@@ -85,14 +93,16 @@ export function ScrollPane({ height, offset, children }) {
 
 /** Keybind hint footer: <C-s> check · j/k move … */
 export function Footer({ hints, notice }) {
+  const theme = useTheme();
+  const ic = useIcons();
   return (
     <Box flexDirection="column">
-      {notice ? <Text color={notice.kind === 'good' ? 'green' : notice.kind === 'bad' ? 'red' : 'gray'} bold={!!notice.bold}> {notice.text}</Text> : null}
+      {notice ? <Text color={notice.kind === 'good' ? theme.good : notice.kind === 'bad' ? theme.bad : theme.muted} bold={!!notice.bold}> {notice.text}</Text> : null}
       <Box>
         {hints.map(([key, label], i) => (
-          <Text key={`${key}${label}`} color="gray">
-            {i > 0 ? ' · ' : ''}
-            <Text bold color="white">{key}</Text>
+          <Text key={`${key}${label}`} color={theme.muted}>
+            {i > 0 ? ` ${ic.bullet} ` : ''}
+            <Text bold color={theme.text}>{key}</Text>
             {' '}
             {label}
           </Text>
@@ -103,19 +113,22 @@ export function Footer({ hints, notice }) {
 }
 
 /** Small filled badge. */
-export function Badge({ label, color = 'cyan' }) {
-  return <Text inverse color={color} bold> {label} </Text>;
+export function Badge({ label, color = null }) {
+  const theme = useTheme();
+  return <Text inverse color={color || theme.accent} bold> {label} </Text>;
 }
 
-/** ASCII progress meter: ██████░░░░ 62% */
+/** Progress meter: ██████░░░░ 62% (unicode) / ######.... (ascii). */
 export function Meter({ done, total, width = 12 }) {
+  const theme = useTheme();
+  const ic = useIcons();
   const filled = total > 0 ? Math.round((done / total) * width) : 0;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   return (
     <Text>
-      <Text color="cyan">{'█'.repeat(filled)}</Text>
-      <Text color="gray">{'░'.repeat(Math.max(0, width - filled))}</Text>
-      <Text color="gray"> {pct}%</Text>
+      <Text color={theme.accent}>{ic.meterFull.repeat(filled)}</Text>
+      <Text color={theme.muted}>{ic.meterEmpty.repeat(Math.max(0, width - filled))}</Text>
+      <Text color={theme.muted}> {pct}%</Text>
     </Text>
   );
 }

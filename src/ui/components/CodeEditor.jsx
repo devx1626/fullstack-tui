@@ -22,7 +22,7 @@
  * document, this component displays it. That split is what keeps the component
  * render-only and therefore snapshot-safe.
  */
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { memo, useEffect, useMemo, useRef } from 'react';
 import { Box, Text, useCursor } from 'ink';
 import {
   cursorPoint,
@@ -31,6 +31,7 @@ import {
   visibleRows,
 } from '../../editor/viewport.js';
 import { highlightWindow, createHighlightCache } from '../../editor/highlight.js';
+import { useTheme } from '../theme/context.jsx';
 
 /** Normalize a doc-like value (full document or raw text) into a document. */
 function toDoc(docOrText) {
@@ -98,15 +99,87 @@ export function useEditorMouse({ onDocClick, onDocDrag, onDocWheel, stripRows = 
   };
 }
 
+const EMPTY_TOKENS = [];
+
+/** The props CodeRow is memoized on — all primitives or stable cached refs. */
+const ROW_PROP_KEYS = ['segs', 'line', 'startCol', 'width', 'selFrom', 'selTo'];
+function sameRowProps(a, b) {
+  for (const k of ROW_PROP_KEYS) if (!Object.is(a[k], b[k])) return false;
+  return true;
+}
+
+/**
+ * Collapse runs of pieces that share a style into one piece.
+ *
+ * Ink re-tokenizes every text node on every paint (its `Output` caches are
+ * per-render, see the note in the perf section of `tools/check.js`), and the
+ * tokenizer's cost scales with the number of SGR sequences — so two adjacent
+ * nodes that paint identically are pure overhead. `rowPieces` already splits at
+ * token, window and selection edges, which can leave neighbours with identical
+ * style (a whole-line selection, a block comment, a wide-char cut).
+ */
+function mergePieces(pieces) {
+  if (pieces.length < 2) return pieces;
+  const out = [pieces[0]];
+  for (let i = 1; i < pieces.length; i += 1) {
+    const prev = out[out.length - 1];
+    const cur = pieces[i];
+    if (prev.color === cur.color && prev.bold === cur.bold && prev.italic === cur.italic && prev.inverse === cur.inverse) {
+      out[out.length - 1] = { ...prev, text: prev.text + cur.text };
+    } else {
+      out.push(cur);
+    }
+  }
+  return out;
+}
+
+/**
+ * One rendered code row, memoized.
+ *
+ * The keystroke-to-paint cost of a frame scales with the number of Ink nodes in
+ * it, so re-rendering all ~24 visible rows for a one-character edit is what
+ * dominates typing cost (measured: h4 ≈ 15 ms vs h24 ≈ 50 ms p50). `segs` is
+ * the LRU-cached token array, whose IDENTITY is stable for every line that did
+ * not change — so memo lets React skip those subtrees entirely and only the
+ * edited row re-renders. Kept at module scope on purpose: a component defined
+ * inside CodeEditor would be a new type on every render and remount each row.
+ */
+const CodeRow = memo(function CodeRow({ segs, line, startCol, width, selFrom, selTo }) {
+  const pieces = useMemo(
+    () => mergePieces(rowPieces(segs || EMPTY_TOKENS, line, { startCol, width, selFrom, selTo })),
+    [segs, line, startCol, width, selFrom, selTo],
+  );
+  return (
+    <Box flexDirection="row">
+      <Text>
+        {pieces.length === 0
+          ? ' '
+          : pieces.map((s, j) => (
+            <Text
+              key={j}
+              color={s.color || undefined}
+              bold={s.bold || undefined}
+              italic={s.italic || undefined}
+              inverse={s.inverse || undefined}
+            >
+              {s.text}
+            </Text>
+          ))}
+      </Text>
+    </Box>
+  );
+});
+
 /** One visible row of the tab strip. */
 function TabStrip({ tabs, active, width }) {
+  const theme = useTheme();
   return (
     <Box flexDirection="row" width={width}>
       {tabs.map((tab, i) => {
         const isActive = i === active;
         const label = ` ${tab.name}${tab.dirty ? ' •' : ''} `;
         return (
-          <Text key={`${tab.name}.${i}`} bold={isActive} inverse={isActive} color={isActive ? 'cyan' : 'gray'}>
+          <Text key={`${tab.name}.${i}`} bold={isActive} inverse={isActive} color={isActive ? theme.accent : theme.muted}>
             {label}
           </Text>
         );
@@ -122,7 +195,8 @@ function TabStrip({ tabs, active, width }) {
  * @param {number} [props.width=60]           content width in columns
  * @param {number} [props.height=20]          visible text rows
  * @param {string} [props.language='js']      highlight language ('js', 'py', …)
- * @param {object} [props.theme]              theme with comment/keyword/string/… roles
+ * @param {object} [props.theme]              explicit theme override; defaults
+ *                                            to the app-wide `useTheme()` tokens
  * @param {number} [props.tabSize=2]
  * @param {boolean} [props.relativeNumbers]   vim-style relative line numbers
  * @param {Array}  [props.tabs]               `[{name, dirty}]` — draws the strip when present
@@ -139,7 +213,7 @@ export function CodeEditor({
   width = 60,
   height = 20,
   language = 'js',
-  theme = null,
+  theme: themeProp = null,
   tabSize = 2,
   relativeNumbers = false,
   tabs = null,
@@ -148,6 +222,9 @@ export function CodeEditor({
   mouseHandlers = null,
   mouseSink = null,
 }) {
+  // Syntax colours come from the app-wide theme unless a caller overrides it —
+  // the route no longer has to thread tokens down through every pane.
+  const theme = themeProp || useTheme();
   const doc = useMemo(() => toDoc(docProp), [docProp]);
   const view = doc.view || { scrollTop: 0, scrollX: 0 };
   const { setCursorPosition } = useCursor();
@@ -155,6 +232,9 @@ export function CodeEditor({
   // Per-instance LRU (see highlight.js): typing re-tokenises exactly one line.
   const cacheRef = useRef(null);
   if (!cacheRef.current) cacheRef.current = createHighlightCache({ capacity: 2048 });
+  // Per-instance row-element cache (see the reuse note at the render site).
+  const rowCacheRef = useRef(null);
+  if (!rowCacheRef.current) rowCacheRef.current = new Map();
 
   const top = Math.max(0, view.scrollTop | 0);
   const rows = useMemo(() => visibleRows(doc, { top, height }), [doc, top, height]);
@@ -206,40 +286,47 @@ export function CodeEditor({
     return `${String(n).padStart(gutterW - 2)}  `;
   };
 
+  // Reuse the ELEMENT of every row whose props are unchanged. React bails out
+  // of a child entirely when the element object is identical, which is the
+  // difference between "memo skipped the render" and "the reconciler never
+  // looked at it": measured, this is what takes a one-character edit from
+  // ~29 ms to ~13 ms p50 on a 24-row frame. Keys are the DOCUMENT row, so
+  // scrolling keeps row identity too. `segs` is the highlight LRU's cached
+  // array, whose identity is stable for unedited lines.
+  const rowCache = rowCacheRef.current;
+  if (rowCache.size > Math.max(64, height * 4)) rowCache.clear();
+  const rowEls = rows.map((r, i) => {
+    const sel = selByRow.get(r.row);
+    const props = {
+      segs: highlighted[i] || EMPTY_TOKENS,
+      line: r.line ?? '',
+      startCol: scrollX,
+      width: textWidth,
+      selFrom: sel ? sel.fromCol : null,
+      // A full-row selection runs to the line's end (MAX_SAFE sentinel from
+      // selectionRows): clamp to the actual text width for rendering.
+      selTo: sel ? Math.min(sel.toCol, scrollX + textWidth) : null,
+    };
+    const cachedEl = rowCache.get(r.row);
+    if (cachedEl && sameRowProps(cachedEl.props, props)) return cachedEl.el;
+    const el = <CodeRow key={r.row} {...props} />;
+    rowCache.set(r.row, { props, el });
+    return el;
+  });
+
+  // The gutter is ONE text node with one line per row, not a node per row:
+  // every Ink node costs reconciliation on every paint, and 24 of them to draw
+  // four columns of digits is the cheapest win in the frame. Line count matches
+  // `rows`, so the two columns stay aligned.
+  const gutterBlock = showGutter ? rows.map((r) => gutterCell(r.row)).join('\n') : null;
+
   return (
     <Box flexDirection="column" width={width}>
       {stripRows ? <TabStrip tabs={tabs} active={activeTab} width={width} /> : null}
-      {rows.map((r, i) => {
-        const sel = selByRow.get(r.row);
-        const pieces = rowPieces(highlighted[i] || [], r.line ?? '', {
-          startCol: scrollX,
-          width: textWidth,
-          selFrom: sel ? sel.fromCol : null,
-          // A full-row selection runs to the line's end (MAX_SAFE sentinel from
-          // selectionRows): clamp to the actual text width for rendering.
-          selTo: sel ? Math.min(sel.toCol, scrollX + textWidth) : null,
-        });
-        return (
-          <Box key={i} flexDirection="row">
-            {showGutter ? <Text>{gutterCell(r.row)}</Text> : null}
-            <Text>
-              {pieces.length === 0
-                ? ' '
-                : pieces.map((s, j) => (
-                  <Text
-                    key={j}
-                    color={s.color || undefined}
-                    bold={s.bold || undefined}
-                    italic={s.italic || undefined}
-                    inverse={s.inverse || undefined}
-                  >
-                    {s.text}
-                  </Text>
-                ))}
-            </Text>
-          </Box>
-        );
-      })}
+      <Box flexDirection="row">
+        {gutterBlock === null ? null : <Text>{gutterBlock}</Text>}
+        <Box flexDirection="column">{rowEls}</Box>
+      </Box>
     </Box>
   );
 }

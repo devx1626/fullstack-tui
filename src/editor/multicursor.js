@@ -132,11 +132,6 @@ export function clearCursors(set, doc) {
   return normaliseCursors({ cursors: [caret], primary: 0 }, doc, caret);
 }
 
-/** A fresh set from an explicit caret (what a screen does after a plain move). */
-export function cursorsAt(doc, caret) {
-  return { cursors: [caret], primary: 0 };
-}
-
 /**
  * Typing at every cursor: one change per cursor, in document order.
  *

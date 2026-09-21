@@ -12,7 +12,7 @@
  * the dev-tools panes can explain why a page looks the way it does.
  */
 
-import { parse, queryAll, textContent, extractStyles, extractScripts } from './html.js';import { Css } from './css.js';
+import { parse, queryAll, textContent, extractStyles, extractScripts, offsetToPos } from './html.js';import { Css } from './css.js';
 
 // ---------------------------------------------------------------------------
 // Preview assembly
@@ -125,8 +125,8 @@ const def = 'inherit';
  * Resolve which rules matched which node. `viewport` is the notional width in
  * characters, used to decide whether a `min-width` media query applies.
  */
-export function styleMap(html, cssSource, viewport = 100) {
-  const root = parse(html);
+export function styleMap(html, cssSource, viewport = 100, rootOverride = null) {
+  const root = rootOverride || parse(html);
   const css = new Css(cssSource || '');
   const map = new Map();
   const viewportPx = viewport * 8;
@@ -241,25 +241,65 @@ const VOID_LABEL = {
 };
 
 /**
+ * Map from an element's source start offset → its row index in
+ * `elementTree`'s flat list. Both this and the layout walk descend in document
+ * order over the same parse, so the indices are consistent by construction.
+ * TEXT rows count too (a non-empty trimmed text node is a tree row) — the map
+ * only records element positions, but the row numbers it produces are indices
+ * into the full list, text rows included.
+ */
+export function elementRowOffsets(html, rootOverride = null) {
+  const root = rootOverride || parse(html);
+  const map = new Map();
+  let index = 0;
+  const visit = (node) => {
+    for (const child of node.children || []) {
+      if (child.tag === '#text') {
+        if (child.text.replace(/\s+/g, ' ').trim()) index += 1;
+        continue;
+      }
+      if (SKIP_TAGS.has(child.tag)) continue;
+      if (child.range) map.set(child.range.start, index);
+      index += 1;
+      visit(child);
+    }
+  };
+  visit(root);
+  return map;
+}
+
+/**
  * Lay an HTML document out as text lines.
  *
  * Returns `{ lines, meta }`; `lines` is an array of fragment arrays
  * (`{ text, bold, italic, underline, fg, bg, dim }`) so the view can style them
  * with the current theme.
+ *
+ * Phase 3 (click-to-inspect): pass `opts.rows` (a Map from
+ * `elementRowOffsets(html)`) and the result also carries `lineElements` — for
+ * each rendered line, the elementTree row index of the element whose content is
+ * on it. The classic view ignores the extra array; the next-UI render pane uses
+ * it to map a click to an element and jump to its source line.
  */
-export function layoutDocument(html, cssSource, width, viewport = 100) {
+export function layoutDocument(html, cssSource, width, viewport = 100, opts = null) {
   const { root, css, map } = styleMap(html, cssSource, viewport);
+  const rows = opts && opts.rows instanceof Map ? opts.rows : null;
   const limit = Math.max(20, width);
   const lines = [];
+  const lineElements = [];
   let cur = [];
   let curW = 0;
   let indent = 0;
   let pre = false;
+  // The tree row of the element currently being walked, stamped onto every
+  // line its content produces. -1 = document-level text (no element).
+  let curElement = -1;
 
   const flush = () => {
     // A newline between tags collapses to a space; drop it if it ended the line.
     while (cur.length && /^\s*$/.test(cur[cur.length - 1].text)) cur.pop();
     lines.push(cur);
+    lineElements.push(curElement);
     cur = [];
     curW = 0;
   };
@@ -269,6 +309,7 @@ export function layoutDocument(html, cssSource, width, viewport = 100) {
     if (!lines.length) return;
     if (lines[lines.length - 1].length === 0) return;
     lines.push([]);
+    lineElements.push(curElement);
   };
 
   const openLine = () => {
@@ -318,8 +359,12 @@ export function layoutDocument(html, cssSource, width, viewport = 100) {
       const style = computeStyle(map, css, child, inherited);
       if (String(style.display) === 'none') continue;
 
+      const previousElement = curElement;
+      curElement = rows && child.range ? (rows.get(child.range.start) ?? -1) : -1;
+
       if (child.tag === 'br') {
         flush();
+        curElement = previousElement;
         continue;
       }
 
@@ -437,8 +482,8 @@ export function layoutDocument(html, cssSource, width, viewport = 100) {
 
   walk(root, baseStyle());
   if (cur.length) flush();
-  while (lines.length && lines[0].length === 0) lines.shift();
-  while (lines.length && lines[lines.length - 1].length === 0) lines.pop();
+  while (lines.length && lines[0].length === 0) { lines.shift(); lineElements.shift(); }
+  while (lines.length && lines[lines.length - 1].length === 0) { lines.pop(); lineElements.pop(); }
 
   const allNodes = [];
   (function collect(n) {
@@ -460,6 +505,7 @@ export function layoutDocument(html, cssSource, width, viewport = 100) {
 
   return {
     lines,
+    lineElements,
     meta: {
       nodes: allNodes.length,
       rules: css.rules.filter((r) => r.selectors && r.selectors.length).length,
@@ -476,9 +522,14 @@ export function layoutDocument(html, cssSource, width, viewport = 100) {
 // Dev tools: element tree + matched styles
 // ---------------------------------------------------------------------------
 
-/** A flat, indented list of element nodes for the Elements pane. */
-export function elementTree(html) {
-  const root = parse(html);
+/**
+ * A flat, indented list of element nodes for the Elements pane.
+ * Pass `root` (from `parse`, or `buildPage`'s page.root) to reuse ONE parse —
+ * node identity only matches within a single parse run, and the Styles pane
+ * looks nodes up in the style map built from that same tree.
+ */
+export function elementTree(html, rootOverride = null) {
+  const root = rootOverride || parse(html);
   const rows = [];
   const visit = (node, depth) => {
     for (const child of node.children || []) {
@@ -496,9 +547,14 @@ export function elementTree(html) {
   return rows;
 }
 
-/** The rules that matched one node, plus its inline declarations. */
-export function stylesFor(html, cssSource, node, viewport = 100) {
-  const { map } = styleMap(html, cssSource, viewport);
+/**
+ * The rules that matched one node, plus its inline declarations.
+ * `node` must come from the SAME parse the lookup runs against — pass the
+ * `root` the node was found in (a fresh parse cannot see it; the classic UI
+ * had exactly that bug, so its Styles pane never matched a rule).
+ */
+export function stylesFor(html, cssSource, node, viewport = 100, rootOverride = null) {
+  const { map } = styleMap(html, cssSource, viewport, rootOverride);
   const entry = map.get(node);
   const out = { matched: entry ? entry.rules : [], inline: [], computed: {} };
   const raw = node && node.attrs ? node.attrs.style : null;
@@ -522,6 +578,81 @@ export function describeNode(node) {
     .map(([k, v]) => (v === '' ? k : `${k}="${String(v).slice(0, 24)}"`))
     .join(' ');
   return `<${node.tag}${attrs ? ' ' + attrs : ''}>`;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 seams (overhaul §5.4 item 1): structured results with SOURCE ranges
+//
+// Click-to-inspect maps a render-tab click to an element and jumps to its
+// source position; that needs (a) element → source line, (b) the mocked-route
+// table for the network panel. Both are pure additions — existing exports are
+// unchanged.
+// ---------------------------------------------------------------------------
+
+/** The element nodes of a document in document order (text nodes excluded). */
+export function elementNodes(html) {
+  const out = [];
+  (function collect(n) {
+    for (const c of n.children || []) {
+      if (c.tag === '#text') continue;
+      out.push(c);
+      collect(c);
+    }
+  })(parse(html));
+  return out;
+}
+
+/**
+ * `{index: {row, col}}` — the 0-based source position of each row of
+ * `elementTree(html)` (text rows included; they have no source position and
+ * are omitted). A click on a tree row reads its position here; a click on a
+ * RENDERED line goes through `elementRowOffsets` → `lineElements` instead.
+ */
+export function elementSourceMap(html, rootOverride = null) {
+  const root = rootOverride || parse(html);
+  const flat = [];
+  const visit = (node, depth) => {
+    for (const child of node.children || []) {
+      if (child.tag === '#text') {
+        const text = child.text.replace(/\s+/g, ' ').trim();
+        if (text) flat.push({ kind: 'text', node: child });
+        continue;
+      }
+      if (SKIP_TAGS.has(child.tag)) continue;
+      flat.push({ kind: 'element', node: child });
+      visit(child, depth + 1);
+    }
+  };
+  visit(root, 0);
+  const out = {};
+  flat.forEach((row, index) => {
+    const range = row.node && row.node.range;
+    if (range) out[index] = offsetToPos(html, range.start);
+  });
+  return out;
+}
+
+/** The source text of one element's open tag, as jump-to-source highlights. */
+export function elementSource(html, node) {
+  const range = node && node.range;
+  if (!range) return null;
+  return String(html ?? '').slice(range.start, range.end);
+}
+
+/**
+ * Extract the `mockFetch`-table routes a challenge declares, for the Network
+ * pane: `[{method, url, status, body}]`. The classic UI shows the table only
+ * implicitly (through what fetch returns); the panel renders it explicitly so
+ * learners can see WHY a request answers the way it does.
+ */
+export function mockRoutes(challenge) {
+  const mock = (challenge && challenge.mockFetch) || {};
+  return Object.entries(mock).map(([url, body]) => ({
+    method: null, // the classic mock table matches on URL fragment only
+    url,
+    status: body === undefined ? 404 : 200,
+    body,
+  }));
 }
 
 export { parse, queryAll, textContent };

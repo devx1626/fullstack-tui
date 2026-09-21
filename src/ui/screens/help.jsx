@@ -14,11 +14,16 @@ import { Box, Text } from 'ink';
 import { HELP_SECTIONS, HELP_NOTES } from '../../core/help.js';
 import { clampScroll, wrapText } from './screenModel.js';
 import { useKeymap } from '../useKeymap.js';
+import { useTheme, useIcons } from '../theme/context.jsx';
+import { midnight } from '../theme/themes.js';
 
 const KEY_W = 14;
 
-/** Flatten the manual into renderable rows (unkeyed; the screen adds keys). */
-export function helpLines(width = 80) {
+/**
+ * Flatten the manual into renderable rows (unkeyed; the screen adds keys).
+ * Theme is a parameter so the helper stays pure and callable from tests.
+ */
+export function helpLines(width = 80, theme = midnight) {
   const lines = [];
   const push = (el) => lines.push(el);
 
@@ -26,15 +31,15 @@ export function helpLines(width = 80) {
     if (i > 0) push(<Text> </Text>);
     push(
       <Text>
-        <Text color="cyan" bold> {s.title} </Text>
-        {s.hint ? <Text color="gray"> {s.hint}</Text> : null}
+        <Text color={theme.accent} bold> {s.title} </Text>
+        {s.hint ? <Text color={theme.muted}> {s.hint}</Text> : null}
       </Text>,
     );
     for (const [key, label] of s.rows) {
       push(
         <Text>
           {'  '}
-          <Text color="cyan" bold>{String(key).padEnd(KEY_W)}</Text>
+          <Text color={theme.accent} bold>{String(key).padEnd(KEY_W)}</Text>
           <Text>{label}</Text>
         </Text>,
       );
@@ -42,21 +47,23 @@ export function helpLines(width = 80) {
   });
 
   push(<Text> </Text>);
-  push(<Text><Text color="cyan" bold> How this works </Text></Text>);
+  push(<Text><Text color={theme.accent} bold> How this works </Text></Text>);
   for (const note of HELP_NOTES) {
     // The classic prose renderer strips the markdown emphasis it understands.
     const plain = note.replace(/\*\*/g, '').replace(/`/g, '');
     for (const line of wrapText(plain, Math.max(20, width - 4), '  ')) {
-      push(<Text color="gray">{line}</Text>);
+      push(<Text color={theme.muted}>{line}</Text>);
     }
   }
   return lines;
 }
 
 export function HelpScreen({ cursor = 0, height = 24, width = 80, onCommand }) {
+  const theme = useTheme();
+  const ic = useIcons();
   useKeymap('help', (id) => onCommand?.(id));
 
-  const lines = helpLines(width);
+  const lines = helpLines(width, theme);
   const view = Math.max(1, height - 3);
   const offset = clampScroll(cursor, lines.length, view);
   const shown = lines.slice(offset, offset + view);
@@ -64,11 +71,11 @@ export function HelpScreen({ cursor = 0, height = 24, width = 80, onCommand }) {
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="cyan" bold> Help </Text>
-        <Text color="gray"> j/k scroll · PgUp/PgDn page · g/G ends · Esc back </Text>
+        <Text color={theme.accent} bold> Help </Text>
+        <Text color={theme.muted}> j/k scroll {ic.bullet} PgUp/PgDn page {ic.bullet} g/G ends {ic.bullet} Esc back </Text>
       </Text>
       {shown.map((el, i) => <React.Fragment key={offset + i}>{el}</React.Fragment>)}
-      <Text color="gray">
+      <Text color={theme.muted}>
         {' '}
         {lines.length ? offset + 1 : 0}-{Math.min(lines.length, offset + view)} of {lines.length}
       </Text>

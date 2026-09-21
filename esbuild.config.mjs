@@ -36,10 +36,16 @@ const base = {
   },
 };
 
-// Named entries keep output paths exact: dist/main.js and dist/spike/*.js.
-// Spikes are opt-in (npm run build -- --spike): production builds ship only
-// the app entry (E3 fix — spike artifacts never leak into a default build).
-const entries = [{ in: 'src/main.jsx', out: 'main' }];
+// Named entries keep output paths exact: dist/main.js, dist/harness.js and
+// dist/spike/*.js. Spikes stay opt-in (npm run build -- --spike): spike
+// artifacts never leak into a default build (E3 fix). The harness is NOT a
+// spike — the unit suites and tools/check.js render the real components through
+// it — so it is always built; otherwise `npm run build && npm test` would run
+// those checks against a missing file and silently skip them.
+const entries = [
+  { in: 'src/main.jsx', out: 'main' },
+  { in: 'src/ui/harness.jsx', out: 'harness' },
+];
 if (process.argv.includes('--spike')) {
   const spikeDir = join(here, 'spike');
   if (existsSync(spikeDir)) {
@@ -47,8 +53,6 @@ if (process.argv.includes('--spike')) {
       if (/\.jsx$/.test(f)) entries.push({ in: `spike/${f}`, out: `spike/${f.replace(/\.jsx$/, '')}` });
     }
   }
-  // Test harness for node:test files that render JSX components.
-  entries.push({ in: 'src/ui/harness.jsx', out: 'harness' });
 }
 
 if (watch) {

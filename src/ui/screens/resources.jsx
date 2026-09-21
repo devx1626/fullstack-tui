@@ -10,6 +10,8 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { clampScroll, wrapText } from './screenModel.js';
 import { useKeymap } from '../useKeymap.js';
+import { useTheme, useIcons } from '../theme/context.jsx';
+import { midnight } from '../theme/themes.js';
 
 export const PRIMARY = '**Dave Gray, Full Course Programming Tutorials** - 88 hours across 14 complete courses, the spine of every module here.';
 
@@ -29,25 +31,25 @@ export const TOOLS = [
 ];
 
 /** Flatten the resources page into renderable rows (unkeyed). */
-export function resourcesLines(curriculum = [], overall = {}, width = 80) {
+export function resourcesLines(curriculum = [], overall = {}, width = 80, theme = midnight) {
   const lines = [];
   const push = (el) => lines.push(el);
 
   push(
     <Text>
-      <Text color="cyan" bold> Primary sources </Text>
-      <Text color="gray"> the curriculum below is a re-sequencing of these</Text>
+      <Text color={theme.accent} bold> Primary sources </Text>
+      <Text color={theme.muted}> the curriculum below is a re-sequencing of these</Text>
     </Text>,
   );
   for (const line of wrapText(PRIMARY.replace(/\*\*/g, ''), Math.max(20, width - 4), '  ')) {
-    push(<Text color="gray">{line}</Text>);
+    push(<Text color={theme.muted}>{line}</Text>);
   }
   for (const [label, url] of SOURCES) {
     push(
       <Text>
         {'  '}
-        <Text color="gray">{label}</Text>
-        <Text color="cyan">  {url}</Text>
+        <Text color={theme.muted}>{label}</Text>
+        <Text color={theme.accent}>  {url}</Text>
       </Text>,
     );
   }
@@ -55,8 +57,8 @@ export function resourcesLines(curriculum = [], overall = {}, width = 80) {
   push(<Text> </Text>);
   push(
     <Text>
-      <Text color="cyan" bold> Per module </Text>
-      <Text color="gray"> {overall.hours || '—'} hours of source material</Text>
+      <Text color={theme.accent} bold> Per module </Text>
+      <Text color={theme.muted}> {overall.hours || '—'} hours of source material</Text>
     </Text>,
   );
   for (const mod of curriculum) {
@@ -64,17 +66,17 @@ export function resourcesLines(curriculum = [], overall = {}, width = 80) {
     push(
       <Text>
         {'  '}
-        <Text color="cyan" bold>{(mod.badge || '').padEnd(4)}</Text>
+        <Text color={theme.accent} bold>{(mod.badge || '').padEnd(4)}</Text>
         <Text bold>{(mod.title || '').padEnd(16)}</Text>
-        <Text color="gray">{src.course || ''}</Text>
+        <Text color={theme.muted}>{src.course || ''}</Text>
       </Text>,
     );
-    push(<Text><Text>      </Text><Text color="cyan">{src.url || ''}</Text></Text>);
+    push(<Text><Text>      </Text><Text color={theme.accent}>{src.url || ''}</Text></Text>);
     push(
       <Text>
         <Text>      </Text>
-        <Text color="magenta">roadmap {src.roadmap || ''}</Text>
-        <Text color="gray">   docs {src.docs || ''}</Text>
+        <Text color={theme.secondary}>roadmap {src.roadmap || ''}</Text>
+        <Text color={theme.muted}>   docs {src.docs || ''}</Text>
       </Text>,
     );
     const extras = (mod.lessons || []).flatMap((l) => l.resources || []).slice(0, 3);
@@ -82,21 +84,21 @@ export function resourcesLines(curriculum = [], overall = {}, width = 80) {
       push(
         <Text>
           <Text>      </Text>
-          <Text color="gray">further: </Text>
-          <Text color="gray">{extras.map((r) => r.label).join(' | ')}</Text>
+          <Text color={theme.muted}>further: </Text>
+          <Text color={theme.muted}>{extras.map((r) => r.label).join(' | ')}</Text>
         </Text>,
       );
     }
     push(<Text> </Text>);
   }
 
-  push(<Text><Text color="cyan" bold> Tools worth installing </Text></Text>);
+  push(<Text><Text color={theme.accent} bold> Tools worth installing </Text></Text>);
   for (const [tool, why] of TOOLS) {
     push(
       <Text>
         {'  '}
         <Text bold>{tool.padEnd(30)}</Text>
-        <Text color="gray">{why}</Text>
+        <Text color={theme.muted}>{why}</Text>
       </Text>,
     );
   }
@@ -104,10 +106,12 @@ export function resourcesLines(curriculum = [], overall = {}, width = 80) {
 }
 
 export function ResourcesScreen({ curriculum: curriculumProp, overall: overallProp, cursor = 0, height = 24, width = 80, onCommand }) {
+  const theme = useTheme();
+  const ic = useIcons();
   useKeymap('resources', (id) => onCommand?.(id));
 
   const curriculum = curriculumProp || [];
-  const lines = resourcesLines(curriculum, overallProp || {}, width);
+  const lines = resourcesLines(curriculum, overallProp || {}, width, theme);
   const view = Math.max(1, height - 3);
   const offset = clampScroll(cursor, lines.length, view);
   const shown = lines.slice(offset, offset + view);
@@ -115,11 +119,11 @@ export function ResourcesScreen({ curriculum: curriculumProp, overall: overallPr
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="cyan" bold> Resources </Text>
-        <Text color="gray"> j/k scroll · PgUp/PgDn page · Esc back</Text>
+        <Text color={theme.accent} bold> Resources </Text>
+        <Text color={theme.muted}> j/k scroll {ic.bullet} PgUp/PgDn page {ic.bullet} Esc back</Text>
       </Text>
       {shown.map((el, i) => <React.Fragment key={offset + i}>{el}</React.Fragment>)}
-      <Text color="gray"> {lines.length ? offset + 1 : 0}-{Math.min(lines.length, offset + view)} of {lines.length} </Text>
+      <Text color={theme.muted}> {lines.length ? offset + 1 : 0}-{Math.min(lines.length, offset + view)} of {lines.length} </Text>
     </Box>
   );
 }

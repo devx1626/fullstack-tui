@@ -15,6 +15,7 @@
  */
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { Text } from 'ink';
+import { useTheme } from './theme/context.jsx';
 
 const RouterContext = createContext(null);
 
@@ -53,10 +54,11 @@ export function useRouter() {
 
 /** Renders the top of the stack. Unknown screens fail loudly in dev. */
 export function RouterView({ fallback = null }) {
+  const theme = useTheme();
   const { top, screens } = useRouter();
   const Screen = screens[top.name];
   if (!Screen) {
-    return fallback ?? <Text color="red">unknown screen: {top.name}</Text>;
+    return fallback ?? <Text color={theme.bad}>unknown screen: {top.name}</Text>;
   }
   return <Screen {...top.params} />;
 }
