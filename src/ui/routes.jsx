@@ -806,7 +806,15 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     // is nobody's (the pane test relies on that: "left to the screen" means
     // unclaimed, so global handlers keep working).
     if (ev && ev.type === 'mouse' && typeof ev.x === 'number' && ev.x - 1 > split.leftWidth) {
-      if (editorSink.current && editorSink.current(ev)) return true;
+      // Rebase x into the editor pane's own 1-based space before handing the
+      // event over: the parser reports TERMINAL-absolute coordinates, but the
+      // sink's mapping (useEditorMouse) subtracts the gutter from a
+      // PANE-relative x. The divider handler above keeps the absolute x it
+      // needs; only the editor's copy is translated — the pane starts at
+      // 0-based column leftWidth + 1, so pane x = absolute x − (leftWidth + 1).
+      // Without this every click landed pane-origin + gutter columns too far
+      // right (caught by the route-level mouse replay, PC-18).
+      if (editorSink.current && editorSink.current({ ...ev, x: ev.x - (split.leftWidth + 1) })) return true;
     }
     return false;
   }, [splitMouse, split.leftWidth]);
