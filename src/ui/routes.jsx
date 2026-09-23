@@ -731,6 +731,36 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
           setStatus(`Reloaded from ${editor}.`);
         } catch {
           setStatus('Could not read the file back.');
+        } finally {
+          // The temp file has served its purpose the moment the buffer is
+          // reloaded (or conclusively failed to); leaving it behind would
+          // litter .workspace with one file per excursion.
+          try { fs.unlinkSync(file); } catch { /* already gone */ }
+        }
+        return;
+      }
+      case 'challenge.preview': {
+        // Ctrl+P (classic parity, app.js openPreview): assemble the same parts
+        // the embedded browser shows, write a standalone document next to the
+        // challenge's other artifacts, and hand it to the OS. Multi-file
+        // challenges synthesize across every file; single-file ones preview
+        // the active buffer. Like every shell-out on this screen, a failure
+        // becomes a status line — never a crash.
+        const { previewParts, synthesisParts } = await import('../core/browser.js');
+        const { writePreview, openExternally } = await import('../core/workspace.js');
+        const texts = sessionTexts(session);
+        try {
+          const parts = target.challenge.files
+            ? synthesisParts(texts)
+            : previewParts(target.challenge, texts[session.active] ?? '');
+          const rel = target.challenge.files
+            ? `${target.moduleId}/${target.lessonId}/${target.challengeId}/preview.html`
+            : `${target.moduleId}/${target.lessonId}/${target.challengeId}.preview.html`;
+          const file = writePreview(rel, { ...parts, title: target.challenge.id });
+          const opened = openExternally(file);
+          setStatus(opened ? `Opening ${file.split('/').pop()} in your browser` : `Preview written to ${file}`);
+        } catch (err) {
+          setStatus(`Preview failed: ${err.message}`);
         }
         return;
       }

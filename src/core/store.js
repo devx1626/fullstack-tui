@@ -18,7 +18,30 @@ import {
 } from './history.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const ROOT = path.resolve(HERE, '..', '..');
+
+/**
+ * The project root, found by walking up to the nearest package.json.
+ *
+ * A hardcoded `resolve(HERE, '..', '..')` is only correct for the unbundled
+ * checkout layout (src/core/ → two levels up). Once this module is BUNDLED —
+ * dist/main.js, dist/harness.js (esbuild inlines everything) — two levels up
+ * from dist/ is the directory ABOVE the project, and every `.data` write and
+ * `.workspace` artifact silently lands outside the repo. Walking up to the
+ * first package.json lands on the project root in both layouts (the route-level
+ * preview/external-editor goldens caught exactly this: artifacts appeared in
+ * the parent directory when driven through dist/harness.js).
+ */
+function projectRoot(from) {
+  let dir = from;
+  for (;;) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return path.resolve(from, '..', '..'); // degenerate: legacy layout
+    dir = parent;
+  }
+}
+
+export const ROOT = projectRoot(HERE);
 const DATA_DIR = path.join(ROOT, '.data');
 const PROGRESS_FILE = path.join(DATA_DIR, 'progress.json');
 

@@ -157,8 +157,8 @@ flip.
    |---|---|---|---|
    | PC-14 | Replay goldens: solve-from-scratch, vim insert/undo/redo, multi-file tabs — with intent assertions beside each golden | `node --test tests/unit/editorReplay.test.js` | ✅ |
    | PC-15 | Burst-typing safety: two printable bytes in one stdin chunk compose in order | `node --test tests/unit/routes.test.js` (two-key-burst subtest) | ✅ |
-   | PC-16 | Ctrl+E external editor: terminal release → edit → restore → buffer reload (P1-6 golden) | write the golden (P1-6); then `node --test tests/unit/editorReplay.test.js` | ⬜ |
-   | PC-17 | Ctrl+P preview round-trip: parts assembly → `.preview.html` write (P1-6 golden) | write the golden (P1-6); then `node --test tests/unit/editorReplay.test.js` | ⬜ |
+   | PC-16 | Ctrl+E external editor: terminal release → edit → restore → buffer reload (P1-6 golden) | `node --test tests/unit/editorReplay.test.js` (external-editor-roundtrip golden: fake shebang $EDITOR, alt-off/alt-on written exactly once, artifact consumed, reloaded buffer) | ✅ |
+   | PC-17 | Ctrl+P preview round-trip: parts assembly → `.preview.html` write (P1-6 golden) | `node --test tests/unit/editorReplay.test.js` (preview-roundtrip golden: live buffer → assembled standalone document on disk; FULLSTACK_NO_OPEN=1 suppresses the OS opener) | ✅ |
    | PC-18 | Mouse end-to-end: click-caret, drag-select, wheel, divider drag, claim protocol — via raw SGR bytes through the real InputDispatcher into the mounted route tree | `node --test tests/unit/mouseReplay.test.js` (5 replays: caret clicks, drag-select+replace, wheel scroll, brief-pane rejection, claim protocol) + `node --test tests/unit/routes.test.js` (divider drag) | ✅ |
    | PC-19 | Autosave debounce flushes on unmount (fast exit loses nothing) | `node --test tests/unit/editorReplay.test.js tests/unit/routes.test.js` | ✅ |
    | PC-20 | Completions E2E: trigger, accept-as-one-undo-step, snippets, signature; popup outranks global Esc | `node --test tests/unit/completionWiring.test.js tests/unit/completions.test.js` | ✅ |
@@ -191,8 +191,8 @@ flip.
    | PC-32 | Classic-only tests deleted (`editor.test.js` classic model, `canvasLinks.test.js`); check §6/§8 classic replay sections removed with every Q-item they covered asserted green on Ink equivalents (`routes.test.js`, `milestoneToasts.test.js`, `checkNotes.test.js`, `recap.test.js`) | `npm run test:unit` + `npm run check` | ⬜ |
    | PC-33 | README flip minimum in the same commit: `npm start` = Ink, `FULLSTACK_UI` note, scripts table, status section | review + `npm run keymap:docs && git diff --exit-code docs/` | ⬜ |
 
-   **Tally & gate rule.** As of 2026-09-23 (post-PC-18): **18 rows verified green** (✅), **15
-   rows carry work** (⬜) — of which 8 are build-test rows (PC-11, PC-12, PC-16, PC-17,
+   **Tally & gate rule.** As of 2026-09-23 (post-PC-16/17): **20 rows verified green** (✅), **13
+   rows carry work** (⬜) — of which 6 are build-test rows (PC-11, PC-12,
    PC-23, PC-26, PC-27, PC-28) and 7 are flip-mechanics rows (PC-29–PC-33, PC-22's
    re-run, PC-05's allowlist edit). **The flip commit is permitted only when every row in
    sections A–E reads ✅ and section F is executed as the commit itself.** Rows are ticked by
@@ -381,7 +381,7 @@ a few rules: no-unused-vars, eqeqeq, no-var, prefer-const; JSX via a minimal con
 flipping to blocking after the first cleanup pass. Deliberately excluded: TypeScript
 (invasive; the zero-TS call was made at project start), plugin sprawl, import sorting.
 
-### P1-6 · Unwritten round-trip goldens
+### P1-6 · Unwritten round-trip goldens — CLOSED 2026-09-23
 
 **Finding.** The 2.9 acceptance named "Ctrl+P/Ctrl+E round-trip goldens" as unwritten; the
 replay goldens cover solve-from-scratch, vim, and multi-file flows, but not the two paths that
@@ -391,6 +391,24 @@ release the terminal (Ctrl+E external editor) or shell out (Ctrl+P preview).
 editor → alt screen on → buffer reloaded) is the riskiest untested path in the challenge flow;
 a pty-driven golden (or a pty-skipped test with the release logic unit-tested against a fake
 release hook) closes the last named gap in the 2.9 acceptance.
+
+**Resolved (both goldens now exist in tests/unit/editorReplay.test.js; rows PC-16/PC-17 ✅).**
+Writing them immediately paid for itself twice:
+
+1. **`challenge.preview` was a dead binding in the next UI** — `<C-p>` was registered in
+   commands.js but neither the route switch nor the host table implemented `openPreview`
+   (classic-only at src/app.js). The route now owns it: classic-parity parts assembly
+   (previewParts for single-file, synthesisParts for multi-file), writePreview to the
+   challenge's workspace path, openExternally hand-off, failure-as-status-line. A new
+   FULLSTACK_NO_OPEN=1 env (same family as FULLSTACK_THEME) forces the "written to …"
+   fallback so headless environments never spawn a desktop opener.
+2. **Bundled-ROOT bug (would have broken the P0-2 flip)**: the goldens drive the BUNDLED
+   route (dist/harness.js), and store.js's hardcoded `ROOT = resolve(HERE, '..', '..')`
+   resolved one directory ABOVE the project from the bundle — every `.data` write and
+   `.workspace` artifact from dist/main.js would land outside the repo. ROOT now walks up
+   to the nearest package.json, which is correct in both the checkout and bundled layouts.
+   The Ctrl+E golden also exposed the edit artifact never being deleted (one orphan file
+   per excursion); the route now consumes it in a finally.
 
 ### P1-7 · Aesthetics & micro-motion (quiet tier)
 

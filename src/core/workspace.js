@@ -57,8 +57,16 @@ function openCommand(target) {
   return { cmd: 'xdg-open', args: [target] };
 }
 
-/** Best-effort "open this file in the user's default app". */
+/**
+ * Best-effort "open this file in the user's default app".
+ *
+ * FULLSTACK_NO_OPEN=1 forces the off path (returns false without spawning):
+ * headless environments — CI, test runners, ssh without X — have no desktop
+ * opener, and spawning one at best warns and at worst hangs the session. The
+ * caller's own fallback ("Preview written to …") is the useful answer there.
+ */
 export function openExternally(target) {
+  if (process.env.FULLSTACK_NO_OPEN) return false;
   try {
     const { cmd, args } = openCommand(target);
     const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
