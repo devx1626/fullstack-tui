@@ -39,7 +39,7 @@ export function projectsLines({ curriculum = [], store, cursor = 0, focus = 'bri
   push(
     <Text>
       {'  '}
-      <Text color={theme.warn} bold>☆ </Text>
+      <Text color={theme.warn} bold>{icons.star} </Text>
       <Text bold>{project.title}</Text>
       <Text color={theme.muted}>   from the {mod.title} module</Text>
     </Text>,

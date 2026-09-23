@@ -217,7 +217,7 @@ export function ChallengeScreen({
         )}
       />
       <Text color={busy ? theme.warn : status ? theme.accent : theme.muted}>
-        {' '}{status ? status.split('\n')[0] : footerLine()}
+        {' '}{status ? status.split('\n')[0] : footerLine(undefined, ` ${ic.sep} `)}
       </Text>
       {status && status.includes('\n')
         ? status.split('\n').slice(1).map((line, i) => (

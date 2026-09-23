@@ -47,19 +47,19 @@ export function tourSteps({ tier = 'A' } = {}) {
         'A 12-module full-stack curriculum you work through in this terminal.',
         'Every lesson ends in challenges you solve by editing real code.',
         '',
-        'Your progress lives in .data/progress.json — plain JSON, safe to back up.',
+        'Your progress lives in .data/progress.json - plain JSON, safe to back up.',
         '',
         'The dashboard keeps a daily goal (3 challenges by default, never enforced).',
-        'Change or switch it off in Settings — s from the dashboard.',
+        'Change or switch it off in Settings - s from the dashboard.',
       ],
     },
     {
       id: 'screen',
       title: 'The screen',
       body: [
-        'Header    — where you are, and the module badges.',
-        'Body      — the list or document you are working in: j/k move, Enter opens.',
-        'Footer    — the keys that work right now, plus the last thing that happened.',
+        'Header    - where you are, and the module badges.',
+        'Body      - the list or document you are working in: j/k move, Enter opens.',
+        'Footer    - the keys that work right now, plus the last thing that happened.',
         '',
         'Esc always goes back. Ctrl+C always quits.',
       ],
@@ -72,7 +72,7 @@ export function tourSteps({ tier = 'A' } = {}) {
         'is for typing. Press i to start typing and Esc to go back to normal.',
         '',
         'Normal mode: h j k l move, :w checks your code, u undoes. Arrow keys always',
-        'work, in both modes — you can ignore everything else until you are ready.',
+        'work, in both modes - you can ignore everything else until you are ready.',
         '',
         'Press v now to switch to simple, modeless keys instead (it is remembered).',
       ],
@@ -99,7 +99,7 @@ export function tourSteps({ tier = 'A' } = {}) {
         'The wheel scrolls. Clicking a list row focuses it, and a pane divider',
         'can be dragged to resize it.',
         '',
-        'Hold Shift while selecting to use your terminal\'s own text selection —',
+        'Hold Shift while selecting to use your terminal\'s own text selection -',
         'the only copy that reaches your system clipboard.',
       ],
     },
@@ -156,7 +156,7 @@ export function TourScreen({ step = 0, total = 1, title, body = [], modeless = f
       ) : null}
       <Text> </Text>
       <Text color={modeless ? theme.good : theme.muted}>
-        {' '}keys: {modeless ? 'simple (no modes) — remembered' : 'vim (i to type, Esc to stop)'}
+        {' '}keys: {modeless ? 'simple (no modes) - remembered' : 'vim (i to type, Esc to stop)'}
       </Text>
       <Text color={theme.muted}> Enter {step >= total - 1 ? 'finish' : 'next'} {ic.bullet} v simple keys {ic.bullet} Esc skip</Text>
     </Box>

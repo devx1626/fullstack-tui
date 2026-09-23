@@ -86,7 +86,9 @@ if (harness) {
     ));
     assert.ok(text.includes('main.js'), 'tab 1 missing');
     assert.ok(text.includes('util.js'), 'tab 2 missing');
-    assert.ok(text.includes('•'), 'dirty marker missing');
+    // The dirty marker comes from the icon registry (`icons.bullet`; the
+    // default unicode set is '·') — never a hardcoded glyph.
+    assert.ok(text.includes('·'), 'dirty marker missing');
   });
 
   test('CodeEditor scrolls: scrollTop shows a later window of the buffer', async () => {

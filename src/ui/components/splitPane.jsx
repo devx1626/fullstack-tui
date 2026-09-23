@@ -11,7 +11,7 @@
 import React, { useLayoutEffect } from 'react';
 import { Box, Text } from 'ink';
 import { clampSplit } from './splitClamp.js';
-import { useTheme } from '../theme/context.jsx';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
 export function SplitPane({
   left,
@@ -24,6 +24,7 @@ export function SplitPane({
   onResize,
 }) {
   const theme = useTheme();
+  const ic = useIcons();
   const clamped = clampSplit(totalWidth, leftWidth, minLeft, minRight);
 
   // Sync parent-clamped width back on mount (terminal-width awareness).
@@ -46,7 +47,7 @@ export function SplitPane({
           {left}
         </Box>
         <Box width={1} flexDirection="column">
-          <Text color={dragging ? theme.accent : theme.muted}>│</Text>
+          <Text color={dragging ? theme.accent : theme.muted}>{ic.rail}</Text>
         </Box>
         <Box width={Math.max(0, totalWidth - clamped - 1)} flexDirection="column" overflow="hidden">
           {right}
@@ -55,7 +56,7 @@ export function SplitPane({
       {/* Drag strip: width-proportional handle map for the mouse parser */}
       <Box>
         {dividerCells.map((cell, i) => (
-          <Text key={i} color={dragging ? theme.accent : theme.muted}>{cell === 'bar' ? '┴' : '─'}</Text>
+          <Text key={i} color={dragging ? theme.accent : theme.muted}>{cell === 'bar' ? ic.cross : ic.dash}</Text>
         ))}
       </Box>
     </Box>

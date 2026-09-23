@@ -78,7 +78,7 @@ function solutionText(challenge) {
   const sol = challenge && challenge.solution;
   if (!sol) return '';
   if (typeof sol === 'string') return sol;
-  return Object.entries(sol).map(([name, text]) => `── ${name} ──\n${text}`).join('\n\n');
+  return Object.entries(sol).map(([name, text]) => `-- ${name} --\n${text}`).join('\n\n');
 }
 
 /** Highlight language for a file name (extension → highlight.js key). */

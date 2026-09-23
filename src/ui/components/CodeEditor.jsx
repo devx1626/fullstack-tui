@@ -34,7 +34,7 @@ import {
 import { highlightWindow, createHighlightCache } from '../../editor/highlight.js';
 import { hexTo256 } from '../../ui/theme/index.js';
 import { squiggleSgr } from '../multimedia.js';
-import { useTheme } from '../theme/context.jsx';
+import { useTheme, useIcons } from '../theme/context.jsx';
 
 /** Normalize a doc-like value (full document or raw text) into a document. */
 function toDoc(docOrText) {
@@ -177,11 +177,12 @@ const CodeRow = memo(function CodeRow({ segs, line, startCol, width, selFrom, se
 /** One visible row of the tab strip. */
 function TabStrip({ tabs, active, width }) {
   const theme = useTheme();
+  const ic = useIcons();
   return (
     <Box flexDirection="row" width={width}>
       {tabs.map((tab, i) => {
         const isActive = i === active;
-        const label = ` ${tab.name}${tab.dirty ? ' •' : ''} `;
+        const label = ` ${tab.name}${tab.dirty ? ` ${ic.bullet}` : ''} `;
         return (
           <Text key={`${tab.name}.${i}`} bold={isActive} inverse={isActive} color={isActive ? theme.accent : theme.muted}>
             {label}

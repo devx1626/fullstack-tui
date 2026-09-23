@@ -28,7 +28,9 @@ if (harness) {
     ));
     assert.ok(text.includes('L'), 'left slot missing');
     assert.ok(text.includes('R'), 'right slot missing');
-    assert.ok(text.includes('┴'), 'divider bar missing');
+    // The drag handle comes from the icon registry (`icons.cross`; the
+    // default unicode set is '✗') riding the `dash` divider cells.
+    assert.ok(text.includes('✗'), 'divider bar missing');
   });
 
   test('SplitPane clamps left width to the minimum', async () => {

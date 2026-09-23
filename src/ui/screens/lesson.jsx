@@ -19,7 +19,7 @@ import { midnight } from '../theme/themes.js';
 import { ICON_SETS } from '../theme/icons.js';
 
 /** Markdown-ish prose → wrapped display lines (indent applied per line). */
-export function proseLines(text, width, indent = '  ') {
+export function proseLines(text, width, indent = '  ', icons = ICON_SETS.unicode) {
   const out = [];
   const paragraphs = String(text || '').split(/\n\s*\n/);
   for (const raw of paragraphs) {
@@ -40,7 +40,7 @@ export function proseLines(text, width, indent = '  ') {
       const bullet = /^[-*]\s+/.test(plain);
       const quote = /^>\s?/.test(plain);
       const bodyText = plain.replace(/^#{1,4}\s+/, '').replace(/^[-*]\s+/, '').replace(/^>\s?/, '');
-      const prefix = heading ? '' : bullet ? '• ' : quote ? '│ ' : '';
+      const prefix = heading ? '' : bullet ? `${icons.bullet} ` : quote ? `${icons.rail} ` : '';
       const wrapped = wrapText(`${prefix}${bodyText}`, Math.max(12, width), indent);
       for (const w of wrapped) {
         out.push({ kind: heading ? 'heading' : quote ? 'quote' : bullet ? 'bullet' : 'prose', text: w });
@@ -106,7 +106,7 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80, theme =
         {i === sections.length - 1 ? <Text color={theme.muted}> worked example</Text> : null}
       </Text>,
     );
-    for (const line of proseLines(section.body, width - 4)) {
+    for (const line of proseLines(section.body, width - 4, '  ', icons)) {
       push(<Text color={TONE[line.kind]}>{line.text}</Text>);
     }
     push(<Text> </Text>);
@@ -127,7 +127,7 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80, theme =
       </Text>,
     );
     for (const p of lesson.pitfalls) {
-      for (const line of proseLines(p, width - 6, '    ')) {
+      for (const line of proseLines(p, width - 6, '    ', icons)) {
         push(<Text color={theme.bad}>    {icons.cross} {line.text.trim()}</Text>);
       }
     }
@@ -137,7 +137,7 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80, theme =
   if (lesson.keyPoints && lesson.keyPoints.length) {
     push(<Text><Text color={theme.accent} bold> Cheat sheet</Text></Text>);
     for (const k of lesson.keyPoints) {
-      for (const line of proseLines(k, width - 6, '    ')) {
+      for (const line of proseLines(k, width - 6, '    ', icons)) {
         push(<Text color={theme.secondary}>    {icons.bullet} {line.text.trim()}</Text>);
       }
     }
@@ -179,7 +179,7 @@ export function lessonLines({ mod, lesson, store, focus = 0, width = 80, theme =
       </Text>,
     );
     const firstLine = String(ch.prompt || '').split('\n')[0].replace(/\*\*/g, '');
-    for (const line of proseLines(firstLine, width - 8, '       ')) {
+    for (const line of proseLines(firstLine, width - 8, '       ', icons)) {
       push(<Text color={theme.muted}>{line.text}</Text>);
     }
     push(<Text> </Text>);

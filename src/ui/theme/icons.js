@@ -39,6 +39,7 @@ export const ICON_SETS = {
     to: '\uF061', // long arrow-right (network direction)
     rail: '│',
     caret: '▏',
+    sep: '·', // inline separator (footer hints, joined metadata)
     dash: '\uF068', // minus
     quote: '\uF10D', // quote-left
     meterFull: '\uF0C8', // square
@@ -68,6 +69,7 @@ export const ICON_SETS = {
     to: '→',
     rail: '│',
     caret: '█',
+    sep: '·', // inline separator (footer hints, joined metadata)
     dash: '—',
     quote: '“',
     meterFull: '█',
@@ -97,6 +99,7 @@ export const ICON_SETS = {
     to: '->',
     rail: '|',
     caret: '_',
+    sep: '-', // inline separator (footer hints, joined metadata)
     dash: '-',
     quote: '"',
     meterFull: '#',

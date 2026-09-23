@@ -65,9 +65,14 @@ export function footerHints(ids = CHALLENGE_HINT_IDS) {
   return out;
 }
 
-/** The joined footer line: "Ctrl+S check · Ctrl+H hint · …" */
-export function footerLine(ids) {
-  return footerHints(ids).map((h) => `${h.key} ${h.word}`).join(' · ');
+/**
+ * The joined footer line: "Ctrl+S check · Ctrl+H hint · …". The separator is
+ * a parameter (default the unicode middle dot) so the caller hands the icon
+ * registry's `sep` role down — tier D renders a 7-bit separator, never a
+ * hardcoded glyph here.
+ */
+export function footerLine(ids, sep = ' · ') {
+  return footerHints(ids).map((h) => `${h.key} ${h.word}`).join(sep);
 }
 
 /** Mode badge: null in normal mode (no noise), " -- INSERT --" etc. otherwise. */

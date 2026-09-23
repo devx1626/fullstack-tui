@@ -1464,6 +1464,68 @@ try {
       process.stdout.write('   ok  tier tour: glyphs/meters degrade A→D, tier D is 7-bit line-oriented, motion gate holds\n');
     }
 
+    // -- 9c. small-size sweep (PC-04, loose-ends-spec.md): every route must
+    //    render — not throw, not blank — at the small end of the window range.
+    //    The classic app had an 11-view × 8-size sweep (check.js §3); this is
+    //    its next-UI successor, sized to the floors that matter: 60×16 (the
+    //    narrow-terminal pane-toggle regime) and 40×12 (the hard floor), at
+    //    tier A for layout and again at tier D for the tiny+colorless
+    //    interaction (glyph/border/wrap decisions made with no color and no
+    //    unicode at minimum width). Tier D frames additionally assert the
+    //    7-bit contract at small width for CHROME routes — a glyph that only
+    //    leaks when the layout squeezes is still a leak. The three
+    //    content-bearing routes (lesson/challenge/projects) are exempt from
+    //    the 7-bit assertion: they render learner material VERBATIM (starters,
+    //    briefs, prose) — a directory tree in a starter is data, not chrome,
+    //    and must not be transcoded behind the learner's back. Content-tier
+    //    fidelity is a content-QA decision (loose-ends-spec.md P0-4), not a
+    //    chrome contract.
+    const CHROME_ROUTES = new Set(['home', 'module', 'stats', 'settings', 'tour', 'help', 'resources', 'workspace', 'browser']);
+    const SMALL_SIZES = [
+      { columns: 60, rows: 16, tier: 'A', label: '60x16/A' },
+      { columns: 40, rows: 12, tier: 'A', label: '40x12/A' },
+      { columns: 40, rows: 12, tier: 'D', label: '40x12/D' },
+    ];
+    const smallFail = [];
+    let smallRendered = 0;
+    for (const size of SMALL_SIZES) {
+      for (const [name, params] of Object.entries(ROUTE_PARAMS)) {
+        let frame = null;
+        try {
+          frame = await renderToText(
+            harness.el(
+              harness.ServicesProvider,
+              { services: uiServices },
+              harness.el(harness.AppRoot, {
+                screens: SCREENS,
+                initial: { name, params },
+                onQuit: () => {},
+                caps: TIERS[size.tier],
+              }),
+            ),
+            { render: harness.render, columns: size.columns, rows: size.rows, settleMs: 25 },
+          );
+        } catch (err) {
+          smallFail.push(`${size.label} ${name}: render threw (${err && err.message ? err.message : err})`);
+          continue;
+        }
+        if (!frame || !frame.length) {
+          smallFail.push(`${size.label} ${name}: rendered nothing`);
+          continue;
+        }
+        smallRendered += 1;
+        if (size.tier === 'D' && CHROME_ROUTES.has(name)) {
+          const bad = [...new Set(nonAscii(frame))];
+          if (bad.length) smallFail.push(`${size.label} ${name}: non-ASCII glyphs at tiny tier D: ${bad.join(' ')}`);
+        }
+      }
+    }
+    if (smallFail.length) {
+      for (const f of smallFail) fail(`small-size sweep: ${f}`);
+    } else {
+      process.stdout.write(`   ok  small-size sweep: 11 routes × 3 window shapes rendered without throwing (${smallRendered} frames incl. 40x12 tier D)\n`);
+    }
+
     fs.rmSync(uiDir, { recursive: true, force: true });
   }
 } catch (err) {
