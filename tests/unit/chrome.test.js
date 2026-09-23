@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 // Components live in src/ui/components (jsx). Test via the harness entry
-// built by esbuild (`npm run build -- --spike` builds it).
+// built by esbuild (`npm run build` builds it).
 const harnessPath = new URL('../../dist/harness.js', import.meta.url).pathname;
 const harness = existsSync(harnessPath)
   ? await import(pathToFileURL(harnessPath).href)

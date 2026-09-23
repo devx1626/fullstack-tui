@@ -15,7 +15,7 @@ const helper = await import(
 );
 
 if (!harness) {
-  test('router tests need built harness (npm run build -- --spike)', () => { assert.ok(true); });
+  test('router tests need built harness (npm run build)', () => { assert.ok(true); });
 } else {
   const renderToText = (el) => helper.renderToText(el, { render: harness.render });
   const strip = helper.stripAnsi;

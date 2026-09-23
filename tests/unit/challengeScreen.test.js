@@ -19,7 +19,7 @@ test('challenge screen slice', async (t) => {
   const helper = await import(pathToFileURL(new URL('../helpers/snapshot.js', import.meta.url).pathname));
 
   if (!harness) {
-    t.skip('needs built harness (npm run build -- --spike)');
+    t.skip('needs built harness (npm run build)');
     return;
   }
 

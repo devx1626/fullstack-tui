@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-// JSX components resolve through the built harness (npm run build -- --spike).
+// JSX components resolve through the built harness (npm run build).
 const harnessPath = new URL('../../dist/harness.js', import.meta.url).pathname;
 const harness = existsSync(harnessPath)
   ? await import(pathToFileURL(harnessPath).href)
@@ -47,7 +47,7 @@ if (harness) {
     assert.ok(typeof result.created === 'boolean');
   });
 } else {
-  test('snapshot scaffolding requires built harness (npm run build -- --spike)', () => {
+  test('snapshot scaffolding requires built harness (npm run build)', () => {
     assert.ok(true, 'skipped: harness not built');
   });
 }

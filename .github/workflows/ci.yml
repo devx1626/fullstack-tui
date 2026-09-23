@@ -24,7 +24,6 @@ jobs:
       # The classic UI runs from source; the Ink tree needs a bundle, and the
       # render tests need the harness bundle (they skip without it).
       - run: npm run build
-      - run: npm run build -- --spike
       - run: npm run test:unit
 
   self-check:

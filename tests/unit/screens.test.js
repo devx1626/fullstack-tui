@@ -46,7 +46,7 @@ test('home + module screens', async (t) => {
   const harness = existsSync(harnessPath) ? await import(pathToFileURL(harnessPath).href) : null;
   const helper = await import(pathToFileURL(new URL('../helpers/snapshot.js', import.meta.url).pathname));
   if (!harness) {
-    t.skip('needs built harness (npm run build -- --spike)');
+    t.skip('needs built harness (npm run build)');
     return;
   }
   const renderToText = (el) => helper.renderToText(el, { render: harness.render });

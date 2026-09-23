@@ -1,13 +1,12 @@
 /**
  * esbuild pipeline for fullstack-tui.
  *
- * Phase 0: builds src/main.jsx → dist/main.js (the FULLSTACK_UI=next entry)
- * and spike/*.jsx → dist/spike/ (Ink feasibility probes). The classic UI
- * (src/index.js) is not bundled — it runs straight from source until the
- * Phase 4 cut-over.
+ * Builds src/main.jsx → dist/main.js (the FULLSTACK_UI=next entry) and
+ * src/ui/harness.jsx → dist/harness.js (the bundle the unit render tests drive
+ * real components through). The classic UI (src/index.js) is not bundled — it
+ * runs straight from source until the Phase 4 cut-over.
  */
 import * as esbuild from 'esbuild';
-import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,24 +35,13 @@ const base = {
   },
 };
 
-// Named entries keep output paths exact: dist/main.js, dist/harness.js and
-// dist/spike/*.js. Spikes stay opt-in (npm run build -- --spike): spike
-// artifacts never leak into a default build (E3 fix). The harness is NOT a
-// spike — the unit suites and tools/check.js render the real components through
-// it — so it is always built; otherwise `npm run build && npm test` would run
-// those checks against a missing file and silently skip them.
+// Named entries keep output paths exact: dist/main.js and dist/harness.js.
+// The harness is always built — the unit suites and tools/check.js render the
+// real components through it; without it those checks silently skip.
 const entries = [
   { in: 'src/main.jsx', out: 'main' },
   { in: 'src/ui/harness.jsx', out: 'harness' },
 ];
-if (process.argv.includes('--spike')) {
-  const spikeDir = join(here, 'spike');
-  if (existsSync(spikeDir)) {
-    for (const f of readdirSync(spikeDir)) {
-      if (/\.jsx$/.test(f)) entries.push({ in: `spike/${f}`, out: `spike/${f.replace(/\.jsx$/, '')}` });
-    }
-  }
-}
 
 if (watch) {
   const ctx = await esbuild.context({ ...base, entryPoints: entries, outdir: join(here, 'dist'), absWorkingDir: here });

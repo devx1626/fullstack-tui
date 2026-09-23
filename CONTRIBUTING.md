@@ -9,8 +9,8 @@ mechanics; for architecture see `README.md` and the specs
 ```bash
 npm install
 npm test             # full integration suite (should pass on a fresh clone)
-npm run build -- --spike   # needed once before test:unit (the render tests
-                          # skip themselves without dist/harness.js)
+npm run build        # needed once before test:unit (the render tests skip
+                     # themselves without dist/harness.js)
 npm run test:unit
 ```
 

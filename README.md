@@ -61,7 +61,7 @@ npm run ui:next    # experimental Ink-based UI (FULLSTACK_UI=next)
 | --- | --- |
 | `npm start` | Launch the app |
 | `npm run ui:next` | Launch the experimental Ink UI |
-| `npm run build` | Bundle the next UI **and the test harness** `dist/harness.js` (`-- --watch` to watch; `-- --spike` adds the Ink probes) |
+| `npm run build` | Bundle the next UI **and the test harness** `dist/harness.js` (`-- --watch` to watch) |
 | `npm test` / `npm run check` | Deep curriculum validation + reference-solution verification + editor/sandbox unit checks |
 | `npm run test:unit` | node:test unit suite (`tests/unit/*.test.js`) |
 | `npm run verify` | Reference-solution + buggy-starter assertions across all 12 modules |

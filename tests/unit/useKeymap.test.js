@@ -12,9 +12,9 @@ const harnessPath = new URL('../../dist/harness.js', import.meta.url).pathname;
 const harness = existsSync(harnessPath) ? await import(pathToFileURL(harnessPath).href) : null;
 
 // The hook and the route registry must come from the same bundle as the
-// components (dual-module hazard). Rebuild with --spike refreshes both.
+// components (dual-module hazard). Rebuilding refreshes both.
 if (!harness) {
-  test('useKeymap tests need built harness (npm run build -- --spike)', () => { assert.ok(true); });
+  test('useKeymap tests need built harness (npm run build)', () => { assert.ok(true); });
 } else {
   const helper = await import(
     pathToFileURL(new URL('../helpers/snapshot.js', import.meta.url).pathname)

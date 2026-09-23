@@ -159,7 +159,6 @@ Follow mode: element selection follows the caret position in markup challenges (
 - Resume: home resume row targets the first unpassed challenge.
 - Artifacts: `.workspace/<module>/<lesson>/<challenge>.<ext>` (or `/` + file names for synthesis; `.preview.html` for previews).
 - `.data/history/<lessonId>.<challengeId>.json` — checkpoint sidecars (Q9: pre-check snapshots, 10-run ring + daily best). Deleting the directory loses only checkpoints.
-- `.data/smoke.json` — self-check scratch (headless App render smoke).
 
 ## 8. Terminal handling
 

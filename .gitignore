@@ -3,7 +3,6 @@ dist/
 .data/
 .workspace/
 *.log
-typescript
 
 # Authoring scratch: `node tools/audit.mjs` reports are local artifacts, not
 # repo state (the CI gate is `npm run check`).

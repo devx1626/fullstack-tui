@@ -63,7 +63,7 @@ async function waitFor(fn, { timeout = 8000, step = 20 } = {}) {
 
 test('browser route: C-b, live re-render, inspect, jump handoff, console', async (t) => {
   if (!harness) {
-    t.skip('needs built harness (npm run build -- --spike)');
+    t.skip('needs built harness (npm run build)');
     return;
   }
   resetConsoleSession();

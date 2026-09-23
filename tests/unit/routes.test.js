@@ -86,7 +86,7 @@ test('next-UI routes + command host', async (t) => {
   const { firstUnpassed } = await import('../../src/core/targets.js');
 
   if (!harness) {
-    t.skip('needs built harness (npm run build -- --spike)');
+    t.skip('needs built harness (npm run build)');
     return;
   }
 
