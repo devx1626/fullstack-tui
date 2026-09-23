@@ -28,9 +28,12 @@ import {
   cursorPoint,
   rowPieces,
   selectionRows,
+  squiggleRows,
   visibleRows,
 } from '../../editor/viewport.js';
 import { highlightWindow, createHighlightCache } from '../../editor/highlight.js';
+import { hexTo256 } from '../../ui/theme/index.js';
+import { squiggleSgr } from '../multimedia.js';
 import { useTheme } from '../theme/context.jsx';
 
 /** Normalize a doc-like value (full document or raw text) into a document. */
@@ -102,7 +105,7 @@ export function useEditorMouse({ onDocClick, onDocDrag, onDocWheel, stripRows = 
 const EMPTY_TOKENS = [];
 
 /** The props CodeRow is memoized on — all primitives or stable cached refs. */
-const ROW_PROP_KEYS = ['segs', 'line', 'startCol', 'width', 'selFrom', 'selTo'];
+const ROW_PROP_KEYS = ['segs', 'line', 'startCol', 'width', 'selFrom', 'selTo', 'sqFrom', 'sqTo', 'sqColor'];
 function sameRowProps(a, b) {
   for (const k of ROW_PROP_KEYS) if (!Object.is(a[k], b[k])) return false;
   return true;
@@ -124,7 +127,8 @@ function mergePieces(pieces) {
   for (let i = 1; i < pieces.length; i += 1) {
     const prev = out[out.length - 1];
     const cur = pieces[i];
-    if (prev.color === cur.color && prev.bold === cur.bold && prev.italic === cur.italic && prev.inverse === cur.inverse) {
+    if (prev.color === cur.color && prev.bold === cur.bold && prev.italic === cur.italic && prev.inverse === cur.inverse
+      && !!prev.squiggle === !!cur.squiggle) {
       out[out.length - 1] = { ...prev, text: prev.text + cur.text };
     } else {
       out.push(cur);
@@ -144,10 +148,10 @@ function mergePieces(pieces) {
  * edited row re-renders. Kept at module scope on purpose: a component defined
  * inside CodeEditor would be a new type on every render and remount each row.
  */
-const CodeRow = memo(function CodeRow({ segs, line, startCol, width, selFrom, selTo }) {
+const CodeRow = memo(function CodeRow({ segs, line, startCol, width, selFrom, selTo, sqFrom, sqTo, sqColor }) {
   const pieces = useMemo(
-    () => mergePieces(rowPieces(segs || EMPTY_TOKENS, line, { startCol, width, selFrom, selTo })),
-    [segs, line, startCol, width, selFrom, selTo],
+    () => mergePieces(rowPieces(segs || EMPTY_TOKENS, line, { startCol, width, selFrom, selTo, sqFrom, sqTo })),
+    [segs, line, startCol, width, selFrom, selTo, sqFrom, sqTo],
   );
   return (
     <Box flexDirection="row">
@@ -162,7 +166,7 @@ const CodeRow = memo(function CodeRow({ segs, line, startCol, width, selFrom, se
               italic={s.italic || undefined}
               inverse={s.inverse || undefined}
             >
-              {s.text}
+              {s.squiggle && squiggleSgr ? `${squiggleSgr.open(sqColor == null ? 1 : sqColor)}${s.text}${squiggleSgr.close()}` : s.text}
             </Text>
           ))}
       </Text>
@@ -206,6 +210,11 @@ function TabStrip({ tabs, active, width }) {
  * @param {{current: Function|null}} [props.mouseSink]
  *                                            route-provided ref; the component
  *                                            publishes its mouse handler there
+ * @param {Array}  [props.diagnostics]        failing-check/browser diagnostics
+ *                                            (`{line?, col?, length?, offset?}`,
+ *                                            the §5.4 seam) painted as M2 SGR
+ *                                            4:3 curly underlines — none at
+ *                                            tier D, where the theme strips
  */
 export function CodeEditor({
   document: docProp,
@@ -221,6 +230,7 @@ export function CodeEditor({
   showGutter = true,
   mouseHandlers = null,
   mouseSink = null,
+  diagnostics = null,
 }) {
   // Syntax colours come from the app-wide theme unless a caller overrides it —
   // the route no longer has to thread tokens down through every pane.
@@ -247,6 +257,24 @@ export function CodeEditor({
     for (const r of selectionRows(doc, selection, { top, height, tabSize })) map.set(r.row, r);
     return map;
   }, [doc, selection, top, height, tabSize]);
+  // M2 squiggles: failing-check ranges under the tokens that failed. The
+  // color code comes from the theme's `bad` token — undefined exactly at tier
+  // D (where the theme strips), so the squiggle degrades with the color tier.
+  const sqByRow = useMemo(() => {
+    const map = new Map();
+    if (diagnostics && theme && theme.bad) {
+      for (const r of squiggleRows(doc, diagnostics, { top, height, tabSize })) map.set(r.row, r);
+    }
+    return map;
+  }, [doc, diagnostics, top, height, tabSize, theme]);
+  const sqColor = useMemo(() => {
+    const v = theme && theme.bad;
+    if (!v) return null;
+    const m = /^ansi256\((\d+)\)$/.exec(String(v));
+    if (m) return Number(m[1]);
+    const idx = hexTo256(String(v));
+    return idx == null ? 1 : idx;
+  }, [theme]);
 
   const stripRows = tabs && tabs.length ? 1 : 0;
   const gutterW = showGutter ? Math.max(2, String(Math.max(1, doc.lines.length)).length + 2) : 0;
@@ -297,6 +325,7 @@ export function CodeEditor({
   if (rowCache.size > Math.max(64, height * 4)) rowCache.clear();
   const rowEls = rows.map((r, i) => {
     const sel = selByRow.get(r.row);
+    const sq = sqByRow.get(r.row);
     const props = {
       segs: highlighted[i] || EMPTY_TOKENS,
       line: r.line ?? '',
@@ -306,6 +335,9 @@ export function CodeEditor({
       // A full-row selection runs to the line's end (MAX_SAFE sentinel from
       // selectionRows): clamp to the actual text width for rendering.
       selTo: sel ? Math.min(sel.toCol, scrollX + textWidth) : null,
+      sqFrom: sq ? sq.fromCol : null,
+      sqTo: sq ? Math.min(sq.toCol, scrollX + textWidth) : null,
+      sqColor,
     };
     const cachedEl = rowCache.get(r.row);
     if (cachedEl && sameRowProps(cachedEl.props, props)) return cachedEl.el;

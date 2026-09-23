@@ -39,6 +39,7 @@ function EditorPane({
   solutionRows,
   mouseHandlers,
   mouseSink,
+  diagnostics,
 }) {
   // Explicit prop wins (tests/previews); otherwise the app-wide theme tokens.
   const theme = themeProp || useTheme();
@@ -79,6 +80,7 @@ function EditorPane({
       tabSize={tabSize}
       mouseHandlers={mouseHandlers}
       mouseSink={mouseSink}
+      diagnostics={diagnostics}
     />
   );
 }
@@ -97,6 +99,7 @@ export function ChallengeScreen({
   status = null,
   busy = false,
   results = null,
+  diagnostics = null, // M2: failing-check ranges for the editor pane
   showSolution = false,
   solutionRows = [],
   logs = null,
@@ -207,6 +210,7 @@ export function ChallengeScreen({
               solutionRows={solutionRows}
               mouseHandlers={mouseHandlers}
               mouseSink={mouseSink}
+              diagnostics={diagnostics}
             />
             <CompletionPopup popup={popup} signature={popupSignature} width={textWidth} />
           </Box>

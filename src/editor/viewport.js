@@ -15,7 +15,7 @@
  *     column INSIDE the text area (gutter and scrollX already subtracted).
  */
 
-import { lineAt, lineCount } from './document.js';
+import { lineAt, lineCount, offsetOf, pos, posOf } from './document.js';
 import {
   indexAtVisualColumn,
   sliceByVisualColumn,
@@ -104,6 +104,73 @@ export function selectionRows(doc, sel, { top, height, tabSize = 2 } = {}) {
 }
 
 /**
+ * Squiggle rows for rendering (M2, docs/multimedia.md): the diagnostic ranges
+ * of failing checks, in the same shape `selectionRows` produces — `[{row,
+ * fromCol, toCol}]` in VISUAL columns (caret-exclusive), one entry per viewport
+ * row a diagnostic touches, clipped and merged per row.
+ *
+ * Diagnostics come from the §5.4 seam (`evaluate()` copies a check's `line`
+ * onto its result) or the browser (offset + length). Ranges are character
+ * counts from the start, resolved through flat offsets so a length past EOL
+ * wraps onto the following rows like any selection would; a diagnostic that
+ * carries only a `line` — the common grader shape — waves the line's trimmed
+ * content; an offset-based diagnostic with no length names nothing and is
+ * skipped. Out-of-viewport and out-of-document rows are clamped away (and an
+ * out-of-document LINE is skipped entirely, not clamped to the last row).
+ */
+export function squiggleRows(doc, diagnostics, { top = 0, height = Infinity, tabSize = 2 } = {}) {
+  if (!doc || !Array.isArray(diagnostics)) return [];
+  const from = Math.max(0, top | 0);
+  const to = Math.min(lineCount(doc) - 1, from + Math.max(0, height) - 1);
+  const byRow = new Map();
+  for (const d of diagnostics) {
+    if (!d) continue;
+    const hasOffset = Number.isFinite(d.offset);
+    if (!hasOffset) {
+      // A line beyond the document is nonsense, not "the last line": skip it
+      // rather than clamping the wave onto an unrelated row.
+      const ln = Number(d.line);
+      if (!Number.isFinite(ln) || ln < 1 || ln > lineCount(doc)) continue;
+    }
+    let start;
+    let end;
+    if (hasOffset) {
+      if (!(d.length > 0)) continue; // offset with no length: nothing named
+      start = posOf(doc, d.offset);
+      end = posOf(doc, d.offset + d.length);
+    } else {
+      const row = d.line - 1;
+      const line = lineAt(doc, row);
+      if (d.length > 0) {
+        start = pos(row, Math.min(Math.max(0, d.col || 0), line.length));
+        end = posOf(doc, offsetOf(doc, start) + d.length);
+      } else {
+        // Line-only diagnostic: wave the line's non-whitespace content.
+        const first = line.search(/\S/);
+        if (first === -1) continue; // blank line: nothing to wave under
+        start = pos(row, first);
+        end = pos(row, line.replace(/\s+$/, '').length);
+      }
+    }
+    const r0 = Math.max(start.row, from);
+    const r1 = Math.min(end.row, to);
+    for (let row = r0; row <= r1; row += 1) {
+      const line = lineAt(doc, row);
+      const startCol = row === start.row ? visualColumn(line, start.col, tabSize) : 0;
+      const endCol = row === end.row ? visualColumn(line, end.col, tabSize) : Number.MAX_SAFE_INTEGER;
+      const prev = byRow.get(row);
+      if (prev) {
+        prev.fromCol = Math.min(prev.fromCol, startCol);
+        prev.toCol = Math.max(prev.toCol, endCol);
+      } else {
+        byRow.set(row, { row, fromCol: startCol, toCol: endCol });
+      }
+    }
+  }
+  return [...byRow.values()].sort((a, b) => a.row - b.row);
+}
+
+/**
  * Cut highlighted segments into renderable pieces for one visible row.
  *
  * - Clipped to the visual window `[startCol, startCol + width)` — pieces never
@@ -111,15 +178,19 @@ export function selectionRows(doc, sel, { top, height, tabSize = 2 } = {}) {
  * - When `selFrom`/`selTo` are given, pieces inside the selection get
  *   `inverse: true`, cut at the selection edges so partial segments render
  *   exactly.
+ * - When `sqFrom`/`sqTo` are given (M2), pieces inside that range get
+ *   `squiggle: true`, cut at the same kind of edges — the renderer wraps those
+ *   pieces in SGR 4:3 curly underline.
  * - `segs` may be empty (no tokens): the raw line becomes one plain piece.
  *
  * Returns `[]` only when the window is empty; callers draw a blank row then.
  */
-export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom = null, selTo = null } = {}) {
+export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom = null, selTo = null, sqFrom = null, sqTo = null } = {}) {
   const from = Math.max(0, Number(startCol) || 0);
   const to = from + Math.max(0, Number(width) || 0);
   const source = Array.isArray(segs) && segs.length > 0 ? segs : (line ? [{ text: String(line) }] : []);
   const hasSel = Number.isFinite(selFrom) && Number.isFinite(selTo) && selTo > selFrom;
+  const hasSq = Number.isFinite(sqFrom) && Number.isFinite(sqTo) && sqTo > sqFrom;
 
   const out = [];
   let col = 0;
@@ -142,6 +213,12 @@ export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom 
       if (selRelFrom > pieceStart && selRelFrom < relTo) edges.push(selRelFrom);
       if (selRelTo > pieceStart && selRelTo < relTo) edges.push(selRelTo);
     }
+    if (hasSq) {
+      const sqRelFrom = sqFrom - segStart;
+      const sqRelTo = sqTo - segStart;
+      if (sqRelFrom > pieceStart && sqRelFrom < relTo) edges.push(sqRelFrom);
+      if (sqRelTo > pieceStart && sqRelTo < relTo) edges.push(sqRelTo);
+    }
     edges.sort((a, b) => a - b);
     for (let e = 0; e < edges.length - 1; e += 1) {
       const a = edges[e];
@@ -155,6 +232,7 @@ export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom 
         bold: !!seg.bold,
         italic: !!seg.italic,
         inverse: hasSel && a >= selFrom - segStart && b <= selTo - segStart,
+        squiggle: hasSq && a >= sqFrom - segStart && b <= sqTo - segStart,
       });
     }
   }

@@ -849,6 +849,26 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
 
   useKeymap('challenge', onCommand, { onMouse: onMouseRoute, onRawKey: applyKey });
 
+  // M2 squiggles: the failing checks of the last run, as diagnostics for the
+  // editor pane. Only failures carrying a location (the §5.4 seam) paint —
+  // deduped so two checks failing on one line share one wave.
+  // Hooks stay above the early returns: this component early-returns while
+  // the session seeds, and a hook below that would change the hook count
+  // between renders (Rules of Hooks).
+  const diagnostics = useMemo(() => {
+    if (!results || results.passed) return [];
+    const seen = new Set();
+    const out = [];
+    for (const r of results.results || []) {
+      if (r.ok || !Number.isFinite(r.line)) continue;
+      const key = `${r.line}:${r.col || 0}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ line: r.line, col: r.col, length: r.length });
+    }
+    return out;
+  }, [results]);
+
   if (!target) return <Text color={theme.bad}>unknown challenge: {challengeId || lessonId || moduleId}</Text>;
   if (!session) return null; // one tick while the session seeds
 
@@ -869,6 +889,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       brief={target.challenge.prompt || ''}
       session={session}
       selection={selection}
+      diagnostics={diagnostics}
       mode={mode}
       width={host.width}
       status={status}

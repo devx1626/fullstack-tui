@@ -66,10 +66,32 @@ export function notify(title, body) {
 
 // ---------------------------------------------------------------- M2: styling
 
-/** SGR 4:3 curly underline (M2): error squiggles under editor tokens. */
+/**
+ * SGR 4:3 curly underline (M2): error squiggles under editor tokens.
+ * `colorCode` is an xterm-256 palette index for SGR 58:5 (underline color).
+ */
 export function squiggle(text, colorCode = 1) {
   return `\x1b[4:3;58:5:${colorCode}m${text}\x1b[24;59m`;
 }
+
+/**
+ * Open/close SGR for a renderer that assembles styled pieces itself (the Ink
+ * CodeEditor): wrap one piece's text, letting the piece's OWN foreground stay
+ * active (no fg inside the sequence, so syntax colors survive under the wave).
+ *
+ * The close is the COLON form `4:0` (+ `59` to clear the underline color),
+ * NOT the legacy `24`/`0` reset — measured on ink 6: its frame tokenizer
+ * parses legacy SGRs and re-emits only what ITS style model thinks is needed,
+ * and that model never saw the 4:3 turn on, so a `\x1b[0m`/`\x1b[24m` close
+ * is dropped and the wave bleeds to end of line. Colon-form sequences are
+ * opaque to it and pass through byte-exact. Terminals that implement colon
+ * syntax read `4:0` as underline-off; terminals too old for colon syntax
+ * ignored the `4:3` open in the first place, so there is nothing to turn off.
+ */
+export const squiggleSgr = {
+  open: (colorCode) => `\x1b[4:3;58:5:${colorCode == null ? 1 : colorCode}m`,
+  close: () => '\x1b[4:0m\x1b[59m',
+};
 
 // ---------------------------------------------------------------- M1: graphics
 
