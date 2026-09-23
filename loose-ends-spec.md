@@ -112,6 +112,21 @@ causes, both environmental rather than product:
   needs the runner-aware path.
 - Acceptance: **two consecutive green runs** on `master` (guards against flaky-pass).
 
+**Status (2026-09-23).** The perf-gates half is implemented in `tools/check.js` §9: the hard
+FAIL ceiling for all four §12 probes (editor typing, palette typing, list navigation,
+browser-tab scrolling) is now `max(10 × same-run ink floor p95, 250 ms backstop)`
+(`PERF_FAIL_MULT`), and the absolute 33/100/250 ms lines remain as informational warns that no
+longer fail the run by themselves. The 250 ms backstop keeps the gate honest if the floor
+probe ever runs implausibly fast (a near-0 floor is clamped to 1 ms before the multiplier).
+The ratio warn (`PERF_WARN_MULT`, 8× floor) sits above the measured steady-state envelope
+(p95 ≈ 2.7–6.4× floor across five runs) so it marks *growth* of the gap to the renderer wall,
+not the product's ordinary shape — the report-only renderer-wall pass stays in P1-1. Verified:
+five consecutive green `npm run check` runs on the dev machine (past the two-run acceptance),
+plus a forced-fail dry run (`PERF_FAIL_MULT=1`, `FAIL_MS=50`) proving all four gates trip with
+the floor-relative message and the run exits non-zero. The load-sensitive-timing half (the
+`CI`-aware `waitFor` default, the animation spinner window) is **still open** — nothing here
+touches it.
+
 ### P0-2 · Phase 4 flip: parity checklist, then big-bang cut-over
 
 **Finding.** The flip is planned (`tui-overhaul-spec.md` §"Cut-over mechanics") and half-prepared
@@ -301,9 +316,9 @@ bursts). Fallback: any guard fails → normal state update path (current behavio
 
 ### P1-1 · Runner-proof CI part 2: noise reduction
 
-While P0-1 makes CI green, the perf story deserves one more pass once floor-relative ceilings
-land: report-only mode for the renderer-wall discussion (the four targets all sit at 3.6–6.3×
-floor because of ink's re-tokenization; the ceiling catches *regressions*, not the wall), and
+While P0-1's floor-relative ceilings are in (check §9), the perf story deserves one more pass:
+report-only mode for the renderer-wall discussion (the four targets sit at ~2.7–6.4× floor
+because of ink's re-tokenization; the ceiling catches *regressions*, not the wall), and
 a CI job ordering that runs `test:unit` first for fast feedback, then `check`. Also: a job
 timeout budget so a hung pty check can't eat the 10-minute default.
 
@@ -500,7 +515,7 @@ lands here.
 
 ### P2-5 · Perf: the ink wall itself
 
-The 3.6–6.3× floor ceiling on all four §12 targets is ink's re-tokenization, not the app's.
+The ~3–6× floor overhead on all four §12 targets is ink's re-tokenization, not the app's.
 If ink 7's renderer changes the equation (P2-2), re-baseline. Until then, the floor-relative
 ceiling from P0-1 is the honest gate.
 
@@ -599,4 +614,6 @@ item, not just at the end. Items are sized to land in one sitting each (decision
 
 ---
 
-*End of spec. Work has not started; the next step is Wave 1 (P0-1, runner-proof CI).*
+*End of spec. Work is under way — parity rows tick in the P0-2 checklist and item status is
+recorded under each finding (see P0-1's status block). Still open from Wave 1: the
+load-sensitive-timing half of P0-1 (`CI`-aware `waitFor`, animation spinner window).*

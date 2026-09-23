@@ -1028,11 +1028,25 @@ try {
     // machine in the same run: a one-line component (no editor at all) is
     // already p50 ~11 ms / p95 ~18 ms at maxFps 120, so the §12 line is below
     // ink 6's own floor here and the editor's number is only meaningful next to
-    // it. The gate therefore reports both, notes above 16 ms, WARNS at the
-    // spec's lines and FAILS only on a genuine regression (>= 250 ms).
+    // it.
+    //
+    // P0-1: an absolute ms ceiling measures the MACHINE, not the product — the
+    // same loaded run that failed these gates at ~400 ms also measured its ink
+    // floor probe at ~400 ms, i.e. the product sat at 1.0× the renderer wall.
+    // The hard regression ceiling is therefore FLOOR-RELATIVE: FAIL past
+    // PERF_FAIL_MULT × the same-run floor p95 (a genuine ratio regression),
+    // with the historical absolute kept only as a backstop against a
+    // degenerate-fast floor probe. The absolute lines stay as informational
+    // warns; they no longer fail the run by themselves.
     const WARN_MS = 33;
     const SPEC_FAIL_MS = 100;
-    const FAIL_MS = 250;
+    const FAIL_MS = 250; // backstop; only binds when the floor probe ran implausibly fast
+    const PERF_FAIL_MULT = 10; // spec P0-1: hard ceiling at 10× the same-run ink floor
+    // Steady state measured on the dev machine (2026-09-23, five runs): the
+    // four probes sit at ~2.7–6.4× the floor p95. The ratio warn is placed above
+    // that envelope so it marks GROWTH of the gap to the renderer wall (the
+    // §12/P0-5 discussion), not the product's ordinary shape.
+    const PERF_WARN_MULT = 8;
     const MAX_FPS = 240; // same cap src/main.jsx ships
     const PERF_FLOOR_KEYS = 20;
     let writeResolve = null;
@@ -1122,7 +1136,7 @@ try {
     // re-renders at all, so this is the cost a stable-frame caret path would
     // avoid entirely.
     const caret = await paintReplay(PerfProbe, perfApi, { keys: PERF_KEYS, op: 'caret' });
-    const { p50, p95, max: maxMs } = editor;
+    const { p50 } = editor;
     const ms = (n) => `${n.toFixed(1)} ms`;
     const over = (v, base) => `${(v / base).toFixed(1)}x the floor`;
     process.stdout.write(`   note  caret-only moves on the same frame: p50 ${ms(caret.p50)}, p95 ${ms(caret.p95)} — ${(caret.p50 / p50).toFixed(2)}x what typing costs, because ink re-renders the whole tree on any update\n`);
@@ -1130,18 +1144,30 @@ try {
       ? "§12's 16 ms p95 is below ink's own floor here, i.e. the target is a property of the renderer rather than of the editor code"
       : "ink's floor is inside §12's 16 ms p95, so any editor overshoot is the editor's own";
     process.stdout.write(`   note  ink floor (one-line component, same run): p50 ${ms(floor.p50)}, p95 ${ms(floor.p95)} — ${floorVerdict}\n`);
-    const summary = `${PERF_LINES}-line buffer, ${PERF_KEYS} keystrokes — p50 ${ms(p50)} (${over(p50, floor.p50)}), p95 ${ms(p95)}, max ${ms(maxMs)}`;
-    if (p95 > FAIL_MS) {
-      fail(`perf: p95 ${ms(p95)} exceeds the ${FAIL_MS} ms regression ceiling (${summary})`);
-    } else if (p95 > SPEC_FAIL_MS) {
-      warn(`perf: p95 ${ms(p95)} is over the spec's ${SPEC_FAIL_MS} ms line (p50 ${ms(p50)}). ${summary}`);
-    } else if (p95 > WARN_MS) {
-      warn(`perf: p95 ${ms(p95)} over the ${WARN_MS} ms warn line — within CI headroom. ${summary}`);
-    } else if (p95 > 16) {
-      process.stdout.write(`   ok  perf replay: ${summary}\n   note  p95 is above the §12 16 ms target but inside the 33 ms CI headroom\n`);
-    } else {
-      process.stdout.write(`   ok  perf replay within the §12 budget: ${summary}\n`);
-    }
+    // -- P0-1 verdict ladder, shared by all four §12 probes. The hard FAIL is
+    //    floor-relative: a loaded machine inflates the floor probe and the
+    //    product together, so a REGRESSION is a change in the ratio, not in the
+    //    absolute number. Absolute lines remain as informational warns.
+    const perfGate = (label, r, { noteTarget = false } = {}) => {
+      const line = `${label} — p50 ${ms(r.p50)} (${over(r.p50, floor.p50)}), p95 ${ms(r.p95)}, max ${ms(r.max)}`;
+      const floorP95 = Math.max(floor.p95, 1); // a 0 ms floor would void the multiplier
+      const ceiling = Math.max(PERF_FAIL_MULT * floorP95, FAIL_MS);
+      const ratio = r.p95 / floorP95;
+      if (r.p95 > ceiling) {
+        fail(`perf: ${label} p95 ${ms(r.p95)} exceeds the floor-relative regression ceiling ${ms(ceiling)} (${PERF_FAIL_MULT}× the same-run ink floor, backstopped at ${FAIL_MS} ms). ${line}`);
+      } else if (ratio >= PERF_WARN_MULT) {
+        warn(`perf: ${label} p95 is ${ratio.toFixed(1)}× the same-run ink floor — renderer-wall regression watch. ${line}`);
+      } else if (r.p95 > SPEC_FAIL_MS) {
+        warn(`perf: ${label} p95 ${ms(r.p95)} is over the spec's ${SPEC_FAIL_MS} ms line (p50 ${ms(r.p50)}). ${line}`);
+      } else if (r.p95 > WARN_MS) {
+        warn(`perf: ${label} p95 ${ms(r.p95)} over the ${WARN_MS} ms warn line — within CI headroom. ${line}`);
+      } else if (noteTarget && r.p95 > 16) {
+        process.stdout.write(`   ok  perf replay: ${line}\n   note  p95 is above the §12 16 ms target but inside the ${WARN_MS} ms CI headroom\n`);
+      } else {
+        process.stdout.write(`   ok  perf replay: ${line}\n`);
+      }
+    };
+    perfGate(`${PERF_LINES}-line buffer, ${PERF_KEYS} keystrokes`, editor, { noteTarget: true });
 
     // -- light-frame replays: §12 names palette typing and list navigation next
     //    to editor typing. They are where ink's render THROTTLE is largest
@@ -1211,11 +1237,7 @@ try {
       ['browser-tab scrolling', await paintReplay(BrowserScrollProbe, browserApi, { keys: LIGHT_KEYS })],
     ];
     for (const [name, r] of lightFrames) {
-      const line = `${name} (${LIGHT_KEYS} keystrokes) — p50 ${ms(r.p50)} (${over(r.p50, floor.p50)}), p95 ${ms(r.p95)}, max ${ms(r.max)}`;
-      if (r.p95 > FAIL_MS) fail(`perf: ${name} p95 ${ms(r.p95)} exceeds the ${FAIL_MS} ms regression ceiling (${line})`);
-      else if (r.p95 > SPEC_FAIL_MS) warn(`perf: ${name} p95 ${ms(r.p95)} is over the spec's ${SPEC_FAIL_MS} ms line (p50 ${ms(r.p50)}). ${line}`);
-      else if (r.p95 > WARN_MS) warn(`perf: ${name} p95 ${ms(r.p95)} over the ${WARN_MS} ms warn line. ${line}`);
-      else process.stdout.write(`   ok  perf replay: ${line}\n`);
+      perfGate(`${name} (${LIGHT_KEYS} keystrokes)`, r);
     }
 
     // -- screen × tier smoke: every screen renders on tiers A–D, and tier D
