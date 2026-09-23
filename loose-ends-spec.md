@@ -169,7 +169,7 @@ flip.
    | ID | Requirement | Verification command | Status |
    |---|---|---|---|
    | PC-22 | Ctrl+C (raw 0x03): clean exit, no lingering process, alt-screen restored (`?1049l`) | `bash tools/repro-e4.sh` → exit 0, "E4 CLEARED" | ⬜ run pre-flip (verified at Phase 0; re-verify on the flip candidate) |
-   | PC-23 | SIGWINCH resize re-renders; min floor 40×16 honored | ⬜ pty resize session via `script(1)` (no automated test yet — add a fake-emitter unit when building PC-04) | ⬜ |
+   | PC-23 | SIGWINCH resize re-renders; min floor 40×16 honored | `node --test tests/unit/sigwinch.test.js` (fake-emitter unit: real listener → snapshot → re-render chain, floor clamp/release, no-op skip, challenge split re-clamp via the mouse gate, listener-leak check) | ✅ |
    | PC-24 | Input parsers: mouse SGR 1006, bracketed paste 2004, escape coalescer, Alt-chars | `node --test tests/unit/input.test.js tests/unit/driver.test.js` | ✅ |
 
    **E. Data & persistence**
@@ -191,9 +191,9 @@ flip.
    | PC-32 | Classic-only tests deleted (`editor.test.js` classic model, `canvasLinks.test.js`); check §6/§8 classic replay sections removed with every Q-item they covered asserted green on Ink equivalents (`routes.test.js`, `milestoneToasts.test.js`, `checkNotes.test.js`, `recap.test.js`) | `npm run test:unit` + `npm run check` | ⬜ |
    | PC-33 | README flip minimum in the same commit: `npm start` = Ink, `FULLSTACK_UI` note, scripts table, status section | review + `npm run keymap:docs && git diff --exit-code docs/` | ⬜ |
 
-   **Tally & gate rule.** As of 2026-09-23 (post-PC-16/17): **20 rows verified green** (✅), **13
-   rows carry work** (⬜) — of which 6 are build-test rows (PC-11, PC-12,
-   PC-23, PC-26, PC-27, PC-28) and 7 are flip-mechanics rows (PC-29–PC-33, PC-22's
+   **Tally & gate rule.** As of 2026-09-23 (post-PC-23): **21 rows verified green** (✅), **12
+   rows carry work** (⬜) — of which 5 are build-test rows (PC-11, PC-12,
+   PC-26, PC-27, PC-28) and 7 are flip-mechanics rows (PC-29–PC-33, PC-22's
    re-run, PC-05's allowlist edit). **The flip commit is permitted only when every row in
    sections A–E reads ✅ and section F is executed as the commit itself.** Rows are ticked by
    running the command cell on the flip-candidate tree, never from memory.
