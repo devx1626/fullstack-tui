@@ -1010,6 +1010,15 @@ try {
     const previousForceColor = process.env.FORCE_COLOR;
     process.env.FULLSTACK_THEME = 'midnight'; // deterministic auto-theme
     process.env.FORCE_COLOR = '3'; // a non-TTY stream would silence chalk entirely
+    // P0-1, same reasoning as tests/helpers/snapshot.js: ink (is-in-ci) decides
+    // at module load whether to stream frames or buffer them until exit. This
+    // section's replays and tier smokes measure/read STREAMED frames against a
+    // fake stdout, so the runner's CI variable must not switch ink into its
+    // buffer-until-exit mode before the bundle initializes.
+    for (const key of ['CI', 'CONTINUOUS_INTEGRATION']) {
+      const v = process.env[key];
+      if (v !== undefined && v !== '0' && v !== 'false') delete process.env[key];
+    }
     const harness = await import(pathToFileURL(harnessPath).href);
     const helper = await import('../tests/helpers/snapshot.js');
     const { renderToText, fakeStdin } = helper;

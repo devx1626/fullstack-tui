@@ -18,17 +18,9 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { animationAllowed, framesFor, frameAt, createAnimator } from '../../src/ui/animation.js';
+import { detectCapabilities } from '../../src/ui/capabilities.js';
 import { ICON_SETS } from '../../src/ui/theme/icons.js';
-
-async function waitFor(fn, { timeout = 2000, step = 20 } = {}) {
-  const start = Date.now();
-  for (;;) {
-    const value = fn();
-    if (value) return value;
-    if (Date.now() - start > timeout) return null;
-    await new Promise((r) => { setTimeout(r, step); });
-  }
-}
+import { waitFor } from '../helpers/snapshot.js';
 
 const capsA = { isTTY: true, tty: true, unicode: true, colorDepth: 24, tier: 'A' };
 const capsB = { isTTY: true, tty: true, unicode: true, colorDepth: 8, tier: 'B' };
@@ -137,9 +129,21 @@ test('motion: gate, frames, animator and components', async (t) => {
     }
   });
 
-  await t.test('the animator advances a mounted BusyLine and stops on unmount', async () => {
-    const prevCI = process.env.CI;
-    delete process.env.CI;
+  // -- Motion is allowed ONLY where the design allows it (no CI, TTY, tiers
+  //    A/B): forcing it by deleting CI raced a 2 s wall on loaded runners
+  //    (P0-1) and tested the environment override, not the product. Where the
+  //    gate says static, this subtest skips — the deterministic-frame contract
+  //    is what the render test above pins. Where motion runs, the CI-aware
+  //    waitFor default (8 s) outlasts any runner's first-frame latency, and
+  //    TWO distinct frames prove the interval advances (the old assert passed
+  //    on the static first frame alone, verifying neither motion nor the
+  //    unmount stop).
+  await t.test('the animator advances a mounted BusyLine and stops on unmount', async (st) => {
+    if (!animationAllowed(detectCapabilities(), process.env)) {
+      st.skip('motion is disabled by design in this environment (CI / TTY-less) — static contract is pinned above');
+      return;
+    }
+    const prev = process.env.NO_ANIMATION;
     delete process.env.NO_ANIMATION;
     try {
       const out = helper.fakeStdout(80, 10);
@@ -150,16 +154,24 @@ test('motion: gate, frames, animator and components', async (t) => {
         patchConsole: false,
       });
       try {
-        assert.ok(
-          await waitFor(() => out.chunks.join('').split('\u280b').length > 1 || out.chunks.join('').includes('⠋')),
-          'spinner frames reach the stream when motion is allowed',
-        );
+        const painted = () => out.chunks.join('');
+        const distinct = (s) => framesFor(ICON_SETS.unicode).spinner.filter((f) => s.includes(f)).length;
+        await waitFor(() => distinct(painted()) >= 2, 'two distinct spinner frames');
+        const frameCount = distinct(painted());
+        // Absence-of-effect assertions get an explicit short window — long
+        // enough that a still-running animator (20 ms tick) cannot hide.
+        inst.unmount();
+        await new Promise((r) => { setTimeout(r, 120); });
+        const afterUnmount = distinct(painted());
+        await new Promise((r) => { setTimeout(r, 240); });
+        assert.equal(distinct(painted()), afterUnmount, 'unmount stops the animator — no frames after');
+        assert.ok(frameCount >= 2, 'the interval painted more than one frame before unmount');
       } finally {
         inst.unmount();
       }
     } finally {
-      if (prevCI === undefined) delete process.env.CI;
-      else process.env.CI = prevCI;
+      if (prev === undefined) delete process.env.NO_ANIMATION;
+      else process.env.NO_ANIMATION = prev;
     }
   });
 });

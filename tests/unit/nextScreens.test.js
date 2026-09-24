@@ -11,6 +11,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { waitFor as waitForCondition } from '../helpers/snapshot.js';
+
+// A fixed sleep races the renderer under load; wait for the state we are about
+// to assert instead. Adapter over the shared CI-aware helper so failure
+// messages keep the human label.
+const waitFor = (predicate, label) => waitForCondition(predicate).then(
+  () => true,
+  () => { throw new Error(`timed out waiting for ${label} (8 s window)`); },
+);
 
 const CURRICULUM = [
   {
@@ -244,15 +253,6 @@ test('phase 1 screens + palette', async (t) => {
     );
     const out = helper.fakeStdout(120, 60);
     const inst = harness.render(tree, { stdout: out, exitOnCtrlC: false, patchConsole: false });
-    // A single fixed sleep races the renderer under load; wait for the state we
-    // are about to assert instead.
-    const waitFor = async (predicate, label) => {
-      for (let i = 0; i < 100; i += 1) {
-        if (predicate()) return true;
-        await new Promise((r) => { setTimeout(r, 10); });
-      }
-      throw new Error(`timed out waiting for ${label}`);
-    };
     try {
       await waitFor(() => harness.getCurrentRoute().screen === 'home', 'the home screen');
 
@@ -370,13 +370,6 @@ test('phase 1 screens + palette', async (t) => {
       })),
       { stdout: out, exitOnCtrlC: false, patchConsole: false },
     );
-    const waitFor = async (predicate, label) => {
-      for (let i = 0; i < 100; i += 1) {
-        if (predicate()) return true;
-        await new Promise((r) => { setTimeout(r, 10); });
-      }
-      throw new Error(`timed out waiting for ${label}`);
-    };
     try {
       await waitFor(() => harness.getCurrentRoute().screen === 'home', 'the home screen');
       harness.getGlobalCommandSink()('home.openProjects');
@@ -442,13 +435,6 @@ test('phase 1 screens + palette', async (t) => {
       })),
       { stdout: out, exitOnCtrlC: false, patchConsole: false },
     );
-    const waitFor = async (predicate, label) => {
-      for (let i = 0; i < 100; i += 1) {
-        if (predicate()) return true;
-        await new Promise((r) => { setTimeout(r, 10); });
-      }
-      throw new Error(`timed out waiting for ${label}`);
-    };
     try {
       await waitFor(() => harness.getCurrentRoute().screen === 'home', 'the home screen');
       // dispatchGlobal is exactly what main.jsx's dispatcher calls for keys no

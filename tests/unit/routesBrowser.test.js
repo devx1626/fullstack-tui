@@ -13,6 +13,7 @@ import { rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import '../helpers/runner-env.js';
 
 const harnessPath = new URL('../../dist/harness.js', import.meta.url).pathname;
 const harness = existsSync(harnessPath) ? await import(pathToFileURL(harnessPath).href) : null;

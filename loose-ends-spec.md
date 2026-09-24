@@ -123,9 +123,38 @@ The ratio warn (`PERF_WARN_MULT`, 8× floor) sits above the measured steady-stat
 not the product's ordinary shape — the report-only renderer-wall pass stays in P1-1. Verified:
 five consecutive green `npm run check` runs on the dev machine (past the two-run acceptance),
 plus a forced-fail dry run (`PERF_FAIL_MULT=1`, `FAIL_MS=50`) proving all four gates trip with
-the floor-relative message and the run exits non-zero. The load-sensitive-timing half (the
-`CI`-aware `waitFor` default, the animation spinner window) is **still open** — nothing here
-touches it.
+the floor-relative message and the run exits non-zero.
+
+**Status (2026-09-23, timing half complete — P0-1 CLOSED).** The load-sensitive-timing half is
+done, and its root cause turned out to be **not machine speed**: `ink` decides at module load
+(via the `is-in-ci` package, `env.CI` truthiness) whether to stream frames to stdout or buffer
+them until exit. With a CI variable set, ink never writes intermediate frames — so every test
+waiting for painted content waited forever, and *no timeout could ever have fixed it*. The
+findings above attributed the red runs to loaded runners; the real fix is environmental
+neutrality, not generosity:
+
+- `tests/helpers/runner-env.js` — a side-effect module, imported statically by every
+  harness-importing test (and by `tests/helpers/snapshot.js`), that deletes truthy
+  `CI`/`CONTINUOUS_INTEGRATION` before ink's module graph initializes (mirroring `is-in-ci`'s
+  rule, `'0'`/`'false'` stay honest). Static imports evaluate before dynamic harness imports,
+  so the fixup is order-proof.
+- `tests/helpers/snapshot.js` exports the one shared `waitFor` (8 s default, **rejecting**, and
+  refusing a false-follows-true condition) — replacing four stale 2 s local copies (animation,
+  icons, themePicker, phase1Rest) and three inline 1 s loops in nextScreens. The old
+  null-returning, assert-wrapped idiom could `assert.ok(null)`-pass nothing; rejecting makes a
+  timeout a loud failure everywhere.
+- The animation spinner test no longer deletes `CI` and races a 2 s wall: it skips where the
+  gate says static (`t.skip` under CI / TTY-less — motion is disabled *by design* there), and
+  where motion runs it now asserts **two distinct spinner frames** plus a quiet window after
+  unmount. The old assertion passed on the static first frame alone — it verified neither
+  motion nor the unmount stop. The `routes.test.js` `G`-clamp sleep became a wait-for-state.
+- `tools/check.js` §9 applies the same env neutrality before its harness import (its replays
+  read streamed frames).
+
+Verified: two consecutive green `test:unit` runs under `CI=true` **and** two clean-env runs
+(834 tests: 833 pass + 1 by-design skip), `check` green in both environments. The
+snapshot/deterministic-frames contract holds under CI: BusyLine's static frame is what the
+gate produces, and the unit tests pin it.
 
 ### P0-2 · Phase 4 flip: parity checklist, then big-bang cut-over
 
@@ -615,5 +644,5 @@ item, not just at the end. Items are sized to land in one sitting each (decision
 ---
 
 *End of spec. Work is under way — parity rows tick in the P0-2 checklist and item status is
-recorded under each finding (see P0-1's status block). Still open from Wave 1: the
-load-sensitive-timing half of P0-1 (`CI`-aware `waitFor`, animation spinner window).*
+recorded under each finding. Wave 1 (P0-1, runner-proof CI) is closed: perf gates are
+floor-relative and the suite is green under `CI=true` twice consecutively.*

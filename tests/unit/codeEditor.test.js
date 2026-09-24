@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import '../helpers/runner-env.js';
 
 const harnessPath = new URL('../../dist/harness.js', import.meta.url).pathname;
 const harness = existsSync(harnessPath) ? await import(pathToFileURL(harnessPath).href) : null;

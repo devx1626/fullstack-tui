@@ -36,6 +36,7 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import '../helpers/runner-env.js';
 
 const ROOT = process.cwd();
 const STORE_FILE = path.join(ROOT, '.data', 'mouse-replay-test.json');

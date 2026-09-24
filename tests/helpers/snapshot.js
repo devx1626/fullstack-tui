@@ -12,6 +12,7 @@
  */
 import { Writable, Readable } from 'node:stream';
 import assert from 'node:assert/strict';
+import './runner-env.js';
 
 /**
  * A fake stdin so ink's useInput never touches the real terminal.
@@ -68,6 +69,40 @@ export function renderToText(element, { render, columns = 80, rows = 24, settleM
       instance.unmount();
       setTimeout(() => resolve(out.chunks.join('')), 20);
     }, settleMs);
+  });
+}
+
+/**
+ * CI-aware wait defaults (spec P0-1): the timeout must outlast a loaded CI
+ * runner, not a laptop. `waitFor` polls a predicate and REJECTS on expiry (a
+ * null-returning poll invites `assert.ok(null)` passing nothing); a shared
+ * false-follows-true predicate never passes spuriously. Tests that verify an
+ * ABSENCE of effect pass an explicit short window — never rely on the default.
+ */
+export function waitFor(fn, { timeout = 8000, step = 20 } = {}) {
+  const start = Date.now();
+  let first = undefined;
+  return new Promise((resolve, reject) => {
+    const poll = () => {
+      let value;
+      try {
+        value = fn();
+      } catch (err) {
+        reject(err);
+        return;
+      }
+      if (value) {
+        resolve(value);
+        return;
+      }
+      if (first === undefined) first = value;
+      if (Date.now() - start > timeout) {
+        reject(new Error(`waitFor: condition did not become true within ${timeout} ms`));
+        return;
+      }
+      setTimeout(poll, step);
+    };
+    poll();
   });
 }
 

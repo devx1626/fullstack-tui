@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import '../helpers/runner-env.js';
 
 const ROOT = process.cwd();
 

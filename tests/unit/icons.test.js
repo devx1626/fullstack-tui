@@ -7,7 +7,7 @@
  *
  * Structure note: subtests via `await t.test(...)` inside one parent (see
  * CONTRIBUTING). Run: node --test tests/unit/icons.test.js  (integration needs
- * dist/harness.js).
+ * dist/harness.js). Waiting uses the shared CI-aware waitFor helper.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,16 +21,7 @@ import {
 import { detectCapabilities } from '../../src/ui/capabilities.js';
 import { preferenceRows, togglePreference, stepIcons } from '../../src/ui/preferences.js';
 import { buildRenderRows, buildConsoleRows, buildNetworkRows, tabHint } from '../../src/ui/screens/browserModel.js';
-
-async function waitFor(fn, { timeout = 2000, step = 20 } = {}) {
-  const start = Date.now();
-  for (;;) {
-    const value = fn();
-    if (value) return value;
-    if (Date.now() - start > timeout) return null;
-    await new Promise((r) => { setTimeout(r, step); });
-  }
-}
+import { waitFor } from '../helpers/snapshot.js';
 
 test('icon sets: parity, heuristic, picker and live preview', async (t) => {
   await t.test('the three sets carry the same roles and real glyphs', () => {

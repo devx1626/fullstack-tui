@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import '../helpers/runner-env.js';
 
 const ROOT = process.cwd();
 const STORE_FILE = path.join(ROOT, '.data', 'routes-test.json');
@@ -185,8 +186,10 @@ test('next-UI routes + command host', async (t) => {
       assert.ok(await waitFor(() => app.cursor() === 1), 'j moves the cursor down');
 
       app.onKey({ name: 'char', char: 'G' });
-      await new Promise((r) => setTimeout(r, 120));
-      assert.equal(app.cursor(), 1, 'G clamps to the last module');
+      // P0-1: wait for the asserted state itself instead of a fixed sleep
+      // racing the renderer — the resolve IS the assert, and it also orders the
+      // following `g` press strictly after G has applied.
+      assert.ok(await waitFor(() => app.cursor() === 1), 'G clamps to the last module');
 
       app.onKey({ name: 'char', char: 'g' });
       assert.ok(await waitFor(() => app.cursor() === 0), 'g jumps back to the first module');

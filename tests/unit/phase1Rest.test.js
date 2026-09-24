@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { waitFor } from '../helpers/snapshot.js';
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, '.data', 'phase1-rest');
@@ -23,17 +24,6 @@ const CURRICULUM = [
     lessons: [{ id: '01-html.l1', title: 'Skeleton', minutes: 10, challenges: [{ id: 'c1', kind: 'debug' }] }],
   },
 ];
-
-/** Poll until `fn()` is truthy (or time out and return null). */
-async function waitFor(fn, { timeout = 2000, step = 20 } = {}) {
-  const start = Date.now();
-  for (;;) {
-    const value = fn();
-    if (value) return value;
-    if (Date.now() - start > timeout) return null;
-    await new Promise((r) => { setTimeout(r, step); });
-  }
-}
 
 test('phase 1: settings, tour and pane persistence', async (t) => {
   const harnessPath = new URL('../../dist/harness.js', import.meta.url).pathname;

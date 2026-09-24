@@ -22,16 +22,7 @@ import {
   THEME_NAMES, THEME_CYCLE, normalizeTheme, themeLabel, nextTheme, stepTheme,
   preferenceRows, togglePreference,
 } from '../../src/ui/preferences.js';
-
-async function waitFor(fn, { timeout = 2000, step = 20 } = {}) {
-  const start = Date.now();
-  for (;;) {
-    const value = fn();
-    if (value) return value;
-    if (Date.now() - start > timeout) return null;
-    await new Promise((r) => { setTimeout(r, step); });
-  }
-}
+import { waitFor } from '../helpers/snapshot.js';
 
 test('theme picker: cycling, persistence and live preview', async (t) => {
   await t.test('the cycle table is Auto first, then every palette once', () => {
