@@ -191,8 +191,8 @@ flip.
    | PC-08 | All 33 vim bindings resolve through the real `reduceKey`; footer hints resolve on the challenge screen | `npm run check` (§7) | ✅ |
    | PC-09 | `docs/keymap.md` + `docs/vim.md` regenerate with no diff | `npm run keymap:docs && git diff --exit-code docs/keymap.md docs/vim.md` | ✅ |
    | PC-10 | Help screen renders `src/core/help.js` (shared content, both UIs pre-flip) | `node --test tests/unit/nextScreens.test.js` | ✅ |
-   | PC-11 | Multi-cursor bindings reachable from the challenge route (P1-2) — the registry must not ship unreachable bindings once classic dies | `node --test tests/unit/multicursor.test.js tests/unit/routes.test.js` (after P1-2 lands) | ⬜ |
-   | PC-12 | `%` bracket match live in vim mode (P1-10); modeless stays palette-only | `node --test tests/unit/vim.test.js tests/unit/brackets.test.js` + docs regen (PC-09) | ⬜ |
+   | PC-11 | Multi-cursor bindings reachable from the challenge route (P1-2) — the registry must not ship unreachable bindings once classic dies | `node --test tests/unit/multicursor.test.js tests/unit/viewport.test.js tests/unit/editorReplay.test.js tests/unit/routes.test.js` (registry→route→engine round-trip, collapse, C-d next-match, rowPieces caret cells, add-cursor-and-type golden) | ✅ |
+   | PC-12 | `%` bracket match live in vim mode (P1-10); modeless stays palette-only | `node --test tests/unit/vim.test.js tests/unit/brackets.test.js tests/unit/routes.test.js` (routes.test drives `%` through the real route in BOTH modes: vim motion lands on the partner bracket, modeless it types) + docs regen (PC-09) | ✅ |
    | PC-13 | Palette lists screen commands + Go-to targets; `keymap.json` overrides merge with diagnostics | `node --test tests/unit/palette.test.js tests/unit/keymap.test.js tests/unit/useKeymap.test.js` | ✅ |
 
    **C. Editor & challenge flows**
@@ -221,9 +221,9 @@ flip.
    | ID | Requirement | Verification command | Status |
    |---|---|---|---|
    | PC-25 | Progress store: multi-writer additive merge; corrupt file falls back to writer state | `node --test tests/unit/storeMerge.test.js` | ✅ |
-   | PC-26 | `keymap.json` corrupt/unknown ids warn-not-fatal; `settings.json` corrupt recovers to defaults | `node --test tests/unit/keymap.test.js` (keymap ✅); ⬜ verify a settings-corrupt test exists, add one to `phase1Rest.test.js` if not | ⬜ |
-   | PC-27 | Checkpoint sidecars (Q9: 10-run ring + daily best) restorable from the NEXT-UI palette (`history.restore`) — classic replays cover it today; confirm the Ink path | ⬜ route-level restore test; then `node --test tests/unit/routes.test.js` | ⬜ |
-   | PC-28 | Pass saves artifacts to `.workspace/` (multi-file folders included) from the Ink route | ⬜ confirm existing coverage in `routes.test.js`; extend if only the classic replay asserts it | ⬜ |
+   | PC-26 | `keymap.json` corrupt/unknown ids warn-not-fatal; `settings.json` corrupt recovers to defaults | `node --test tests/unit/keymap.test.js tests/unit/phase1Rest.test.js` (corrupt settings.json → defaults, file stays writable, healed on next save) | ✅ |
+   | PC-27 | Checkpoint sidecars (Q9: 10-run ring + daily best) restorable from the NEXT-UI palette (`history.restore`) — classic replays cover it today; confirm the Ink path | `node --test tests/unit/routes.test.js` (Ctrl+S captures the pre-run snapshot + outcome annotation; `history.restore` opens the overlay list, Enter restores the labeled checkpoint, Esc pops again after close) | ✅ |
+   | PC-28 | Pass saves artifacts to `.workspace/` (multi-file folders included) from the Ink route | `node --test tests/unit/routes.test.js` (pass path writes `<module>/<lesson>/<challenge>.<ext>`; Ctrl+O writes every tab under the challenge folder) | ✅ |
 
    **F. Flip-commit mechanics (verify the deletion itself)**
 
@@ -235,9 +235,9 @@ flip.
    | PC-32 | Classic-only tests deleted (`editor.test.js` classic model, `canvasLinks.test.js`); check §6/§8 classic replay sections removed with every Q-item they covered asserted green on Ink equivalents (`routes.test.js`, `milestoneToasts.test.js`, `checkNotes.test.js`, `recap.test.js`) | `npm run test:unit` + `npm run check` | ⬜ |
    | PC-33 | README flip minimum in the same commit: `npm start` = Ink, `FULLSTACK_UI` note, scripts table, status section | review + `npm run keymap:docs && git diff --exit-code docs/` | ⬜ |
 
-   **Tally & gate rule.** As of 2026-09-23 (post-PC-23): **21 rows verified green** (✅), **12
-   rows carry work** (⬜) — of which 5 are build-test rows (PC-11, PC-12,
-   PC-26, PC-27, PC-28) and 7 are flip-mechanics rows (PC-29–PC-33, PC-22's
+   **Tally & gate rule.** As of 2026-09-25 (post-PC-11/12/26/27/28): **26 rows verified green** (✅), **7
+   rows carry work** (⬜) — the 5 build-test rows are done; what remains is the
+   flip-mechanics rows (PC-29–PC-33, PC-22's
    re-run, PC-05's allowlist edit). **The flip commit is permitted only when every row in
    sections A–E reads ✅ and section F is executed as the commit itself.** Rows are ticked by
    running the command cell on the flip-candidate tree, never from memory.
@@ -367,6 +367,21 @@ secondary caret rendering (the engine returns the cursor set; the component draw
   lint passing with the new bindings surfaced.
 - **Must precede the flip (P0-2)** so the registry never ships unreachable bindings once
   classic is gone.
+
+**Status (2026-09-25, CLOSED).** Wired in ChallengeRoute: `editor.cursorAbove/Below`
+(`<C-A-↑/↓>`) stack cursors per row of the active document (normalised into the live doc
+first), `editor.cursorNextMatch` (`<C-d>`) delegates to the vim machine while vim keys are
+on (it is vim's scroll-half-down there — the registry must not shadow it) and modeless it
+selects the word at the caret and adds a cursor at the next match (wrap-around, like `n`);
+while a multi set exists, typing/backspace/delete/return batch through `insertAtCursors`/
+`deleteAtCursors` → one `commit`, arrows (global `nav.up/down` ids) collapse to the
+primary caret, Esc folds the set instead of leaving the screen. Rendering: secondary
+carets draw as one inverse cell each via `rowPieces(…, { carets })`, projected to visual
+columns in CodeEditor and threaded route → ChallengeScreen → EditorPane. Tests:
+route-level round-trip + collapse + single-undo batch (routes.test.js), caret-cell cutting
+(viewport.test.js), render contract (squiggles.test.js), and the add-cursor-and-type
+golden `editor-replay-multi-cursor-column-type`. The 50-cap notice is engine-level
+(multicursor.test.js) and surfaces through the status line.
 
 ### P1-3 · Motivation systems: finish the half-built, extend gently
 
