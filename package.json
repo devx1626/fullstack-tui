@@ -1,7 +1,7 @@
 {
   "name": "fullstack-tui",
   "version": "1.0.0",
-  "description": "An interactive terminal curriculum for learning fullstack web development: lessons, hands-on code challenges, debug hunts and capstone projects.",
+  "description": "An interactive terminal curriculum (Ink-based TUI) for learning fullstack web development: lessons, hands-on code challenges, debug hunts and capstone projects in a real editor with a built-in browser.",
   "type": "module",
   "bin": {
     "fullstack": "./bin/fullstack.js"
@@ -11,7 +11,6 @@
     "fullstack": "node bin/fullstack.js",
     "build": "node esbuild.config.mjs",
     "dev": "node esbuild.config.mjs --watch",
-    "ui:next": "FULLSTACK_UI=next node bin/fullstack.js",
     "check": "node tools/check.js",
     "test": "node tools/check.js",
     "test:unit": "node --test tests/unit/*.test.js",
@@ -23,6 +22,8 @@
   "keywords": [
     "tui",
     "terminal",
+    "ink",
+    "react",
     "learning",
     "fullstack",
     "roadmap",
@@ -30,7 +31,6 @@
     "css",
     "javascript",
     "typescript",
-    "react",
     "node"
   ],
   "license": "MIT",

@@ -66,14 +66,9 @@ test('milestone helpers: labels, toast line, icon-awareness', async (t) => {
   });
 });
 
-test('the classic pass path uses the same shared helper', async (t) => {
-  const src = readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
-  await t.test('no ad-hoc milestone formatting left behind', () => {
-    assert.ok(src.includes("from './ui/milestones.js'"), 'app.js imports the shared module');
-    assert.ok(src.includes('milestoneToast('), 'app.js builds its note text through milestoneToast');
-    assert.ok(!src.includes("startsWith('streak-')"), 'the inline streak/best/module formatting is gone');
-  });
-});
+// (The "classic pass path uses the same shared helper" source-read replay
+// died with the classic UI in the Phase 4 flip — the Ink route subtest below
+// pins the toast end-to-end through the real route.)
 
 test('Ink route: a passing check fires the milestone toast exactly once', async (t) => {
   const harnessPath = path.join(ROOT, 'dist', 'harness.js');

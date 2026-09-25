@@ -448,36 +448,7 @@ test('phase 1 screens + palette', async (t) => {
     }
   });
 
-  await t.test('classic UI accepts Ctrl+K too, so the shared help text is true', async () => {
-    const path = await import('node:path');
-    const fs = await import('node:fs');
-    const { App } = await import('../../src/app.js');
-    const { darkTheme } = await import('../../src/tui/ansi.js');
-    const { Store } = await import('../../src/core/store.js');
-    const { Settings } = await import('../../src/ui/settings.js');
-
-    const dir = path.join(process.cwd(), '.data', 'check-ck');
-    fs.rmSync(dir, { recursive: true, force: true });
-    try {
-      const app = new App({
-        theme: darkTheme,
-        store: new Store(path.join(dir, 'progress.json')),
-        settings: new Settings(path.join(dir, 'settings.json')),
-      });
-      app.w = 100;
-      app.h = 30;
-      app.screen.out = { write: () => {} };
-      app.goHome();
-
-      app.onKey({ name: 'ctrl-k' });
-      assert.equal(app.current.name, 'palette', 'Ctrl+K opens the palette');
-      app.onKey({ name: 'escape' });
-
-      // Ctrl+P keeps working as before (it is the classic binding).
-      app.onKey({ name: 'ctrl-p' });
-      assert.equal(app.current.name, 'palette', 'Ctrl+P still opens the palette off-challenge');
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
+  // (The "classic UI accepts Ctrl+K too" replay died with the classic UI in
+  // the Phase 4 flip — there is only one UI now, so the shared help text is
+  // trivially true and the registry lint in check §7 keeps it honest.)
 });

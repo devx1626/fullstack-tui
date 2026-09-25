@@ -454,15 +454,16 @@ test('editor replay goldens', async (t) => {
 
       // Terminal release is observable: withTerminalReleased writes the alt-off
       // sequence to process.stdout directly (not ink's stream), so patching it
-      // records the release/restore ORDER the golden pins.
-      const seq = await import('../../src/tui/ansi.js');
+      // records the release/restore ORDER the golden pins. The sequences are
+      // inlined here (the module they came from, src/tui/ansi.js, died in the
+      // Phase 4 flip) — the golden is byte-exact on purpose.
       const released = [];
       const restored = [];
       const realWrite = process.stdout.write.bind(process.stdout);
       process.stdout.write = (chunk, ...rest) => {
         const s = String(chunk);
-        if (s.includes(seq.seq.altOff)) released.push(s);
-        if (s.includes(seq.seq.altOn)) restored.push(s);
+        if (s.includes('\x1b[?1049l')) released.push(s);
+        if (s.includes('\x1b[?1049h')) restored.push(s);
         return realWrite(chunk, ...rest);
       };
 

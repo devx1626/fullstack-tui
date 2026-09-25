@@ -1089,7 +1089,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       }
       case 'challenge.externalEditor': {
         // Round-trip through $EDITOR with the terminal released (classic parity).
-        const { withTerminalReleased } = await import('../tui/term.js');
+        const { withTerminalReleased } = await import('./terminalShell.js');
         const { saveArtifact } = await import('../core/workspace.js');
         const fs = await import('node:fs');
         const name = session.active;

@@ -57,10 +57,10 @@ function ChromeFrame({ theme, tier, input }) {
   return (
     <Box flexDirection="column">
       <Text color={theme.accent}>╭{line}╮</Text>
-      <Text color={theme.text}>  ◈ fullstack-tui — next UI (Phase 1 complete)</Text>
+      <Text color={theme.text}>  ◈ fullstack-tui — the Ink UI</Text>
       <Text color={theme.muted}>  theme: {theme.name} · tier: {tier}</Text>
-      <Text color={theme.muted}>  every screen of the phase is ported; the Phase 2 editor is next</Text>
-      <Text color={theme.muted}>  run it on a real terminal for the interactive UI (classic stays the default)</Text>
+      <Text color={theme.muted}>  12 modules · 56 lessons · 125 graded challenges</Text>
+      <Text color={theme.muted}>  run it on a real terminal for the interactive UI</Text>
       <Text color={theme.accent}>╰{line}╯</Text>
       <Text color={theme.faint}>  ctrl+c quit · input: {input}</Text>
     </Box>

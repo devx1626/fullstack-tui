@@ -32,21 +32,28 @@ $ npm start
 
 ```bash
 npm install
-npm start          # classic UI (default)
-npm run ui:next    # experimental Ink-based UI (FULLSTACK_UI=next)
+npm run build      # bundle dist/main.js (one-time; the TUI runs from the bundle)
+npm start          # the Ink UI — the only UI
 ```
+
+`npm start` launches the Ink UI directly — the `FULLSTACK_UI` env var and the
+classic canvas UI are gone (Phase 4 flip). The plain-text side doors work
+without a build: `npm run list`, `npm run verify`, `npm run reset`.
 
 | Key | Action |
 | --- | --- |
 | `j` / `k`, arrows | Move · `Enter` open · `Esc` back |
 | `Ctrl+S` | Check my code (challenge screen) |
 | `Ctrl+H` | Reveal a hint |
-| `Ctrl+P` | Preview in browser (classic: also the palette off-challenge) |
-| `Ctrl+K` | Command palette (next UI; classic accepts it too) |
+| `Ctrl+P` | Preview in the OS browser |
+| `Ctrl+K` | Command palette |
 | `Alt+1..5` | Top-level tabs: Dashboard · Projects · Progress · Resources · Workspace (`Alt+h`/`Alt+l` cycle) |
 | `Ctrl+←` / `Ctrl+→` | Resize the challenge split (drag the divider, or `Ctrl+K` → reset) |
 | `s` | Settings, from the dashboard (`Space` toggles the focused row) |
 | `?` | Help manual · `q` or `Ctrl+C` quit |
+
+The full key table (77 commands, incl. multi-cursor and vim mode) lives in
+`docs/keymap.md`; vim mode is documented in `docs/vim.md`.
 
 ## Requirements
 
@@ -59,9 +66,8 @@ npm run ui:next    # experimental Ink-based UI (FULLSTACK_UI=next)
 
 | Script | What it does |
 | --- | --- |
-| `npm start` | Launch the app |
-| `npm run ui:next` | Launch the experimental Ink UI |
-| `npm run build` | Bundle the next UI **and the test harness** `dist/harness.js` (`-- --watch` to watch) |
+| `npm start` | Launch the Ink UI (needs `npm run build` first) |
+| `npm run build` | Bundle the TUI **and the test harness** `dist/harness.js` (`-- --watch` to watch) |
 | `npm test` / `npm run check` | Deep curriculum validation + reference-solution verification + editor/sandbox unit checks |
 | `npm run test:unit` | node:test unit suite (`tests/unit/*.test.js`) |
 | `npm run verify` | Reference-solution + buggy-starter assertions across all 12 modules |
@@ -73,16 +79,15 @@ npm run ui:next    # experimental Ink-based UI (FULLSTACK_UI=next)
 
 ```
 src/
-  app.js            classic UI: the App class, key routing, screen plumbing
-  views/            one renderer per screen (canvas-drawn)
+  main.jsx          the Ink entry point (bundled to dist/main.js)
+  index.js          CLI layer: the TUI launch + the plain-text side doors
   core/             engines: grading, editor, completions, emmet, format,
                     SQL/git/python sandboxes, progress store
   content/          the curriculum (01-html … 12-deploy-and-devops)
-  tui/              canvas + widgets (boxes, meters, code blocks)
-  ui/               the next (Ink) UI: dispatcher, router, screens, components
+  ui/               the Ink UI: dispatcher, router, screens, components
   ui/theme/         semantic colour tokens (`themes.js`), hex→256 down-mapping
                     (`index.js`), and the `ThemeProvider`/`useTheme` context
-  editor/           the next UI's editor engine (pure: document, history, vim,
+  editor/           the editor engine (pure: document, history, vim,
                     search, multi-cursor, completions, highlight, diff)
 tests/
   unit/             node:test suite
@@ -99,52 +104,48 @@ recover to defaults if corrupt.
 
 ## Status
 
-The classic UI is the stable, default experience. The Ink-based UI
-(`npm run ui:next`) is under active development — **Phases 0 and 1 are
-complete and Phase 2 (the editor) is largely landed**: every screen is ported
-(dashboard, module, lesson, projects, challenge, help, resources, workspace,
-progress, settings), the command palette runs on `Ctrl+K`, a first launch opens
-on the welcome tour, and split panes remember their width per screen (drag the
-divider, or `<C-left>`/`<C-right>`).
+**The Phase 4 flip is done (2026-09-25): the Ink UI is the only UI.** The
+classic canvas app (`src/app.js`, `src/views/`, `src/tui/`, `src/index.js`)
+and the `FULLSTACK_UI` switch were deleted; `npm start` launches the Ink UI
+from the built bundle directly.
 
-The editor is real now: `src/editor/` holds a pure engine (document model with
-one `applyEdit` chokepoint, undo/redo, selection + registers + OSC52, a vim
-state machine with a 137-row acceptance table, search/replace, multi-cursor,
-completions, highlighting, a line-level LCS diff), and the challenge screen
-binds it — `CodeEditor` with a virtualized viewport and mouse, the completion
-popup (`Ctrl+Space`, snippet tab stops, signature help), registry-derived
-footer hints, a vim mode badge and the one-time "press i to type" nudge.
+Every screen is ported (dashboard, module, lesson, projects, challenge with
+the full editor, help, resources, workspace, progress, settings, browser), the
+command palette runs on `Ctrl+K`, a first launch opens on the welcome tour,
+and split panes remember their width per screen (drag the divider, or
+`<C-left>`/`<C-right>`).
+
+The editor engine lives in `src/editor/`: a pure document model with one
+`applyEdit` chokepoint, undo/redo, selection + registers + OSC52, a vim state
+machine, search/replace, multi-cursor, completions, Emmet abbreviations,
+highlighting, and a line-level LCS diff. The challenge screen binds it —
+`CodeEditor` with a virtualized viewport and mouse, the completion popup
+(`Ctrl+Space`, snippet tab stops, signature help), registry-derived footer
+hints, a vim mode badge and the one-time "press i to type" nudge.
 
 Colour comes from the theme module (`src/ui/theme/`): screens and chrome read
 semantic tokens through `ThemeProvider`/`useTheme`, so `FULLSTACK_THEME=paper`
 repaints the whole UI (not just the frame) and colorless terminals (tier C/D)
 render with no colour at all. Glyphs come from the same module: three complete
 sets (`nerd`/`unicode`/`ascii`) are selected by `FULLSTACK_ICONS` or the saved
-setting, degrade with the tier, and are live-switchable from Settings — see
-`src/ui/theme/icons.js`. The check run (`npm test`) enforces both, along with a
-keystroke-to-paint replay and a screen × tier render smoke.
+setting, degrade with the tier, and are live-switchable from Settings.
 
-`tests/unit/editorReplay.test.js` pins the editor's behaviour as replay goldens —
-solve-from-scratch, vim insert/undo/redo and a multi-file tab flow, each driven
-through the real route. The 2.12 delete pass has landed its sweep half: five
-dead exports are gone and `npm test` §10 now fails on any export in the Ink UI
-or editor engine that nothing references, or on a module nothing imports (with
-one allowlisted seam, `probeGraphicsTTY`, documented in `docs/multimedia.md`).
-Deleting the classic model itself waits for the Phase 4 flip — `src/app.js` is
-still the default entry and imports it, so it is not dead yet.
+`tests/unit/editorReplay.test.js` pins the editor's behaviour as replay
+goldens — solve-from-scratch, vim insert/undo/redo, a multi-file tab flow, the
+external-editor round-trip and multi-cursor typing — each driven through the
+real route. The browser & dev tools (Render/Elements/Styles/Console/Network,
+live re-render, click-to-inspect, jump-to-source, a warmed console session and
+an opt-in screenshot action) are covered by `tests/unit/routesBrowser.test.js`.
+
 The keystroke-to-paint p95 remains above the spec's 16 ms target, and the perf
-job now measures *why*: the same replay runs against a one-line control probe,
+gate measures *why*: the same replay runs against a one-line control probe,
 and ink 6's own floor on this machine (p50 8–10 ms, p95 16–23 ms) already sits
 on 16 ms, so the target is a property of the renderer rather than of this UI's
-code (spec §12 records the measured deviation). The job prints that floor
-beside the editor number — the editor tracks it at ~4–7x — and warns there
-instead. **Phase 3 (browser & tools) has landed**: Render/Elements/Styles/
-Console/Network, live re-render, click-to-inspect and jump-to-source, and a
-warmed console session — driven through the real route by
-`tests/unit/routesBrowser.test.js`, with browser-tab scrolling now measured by
-the same perf gate. The Phase 4 cut-over — which makes this UI the default and
-deletes `src/tui/` — follows. See `tui-overhaul-spec.md` and
-`errors-and-qol-spec.md` for the plan and progress tables.
+code (spec §12 records the measured deviation). The hard gate is
+floor-relative (a regression is a change in the ratio, not the absolute
+number); the absolute 100 ms line prints as an informational warn.
+See `tui-overhaul-spec.md`, `errors-and-qol-spec.md` and `loose-ends-spec.md`
+for the plan, the progress tables and the parity checklist.
 
 ## License
 
