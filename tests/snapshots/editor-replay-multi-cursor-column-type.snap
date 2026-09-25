@@ -1,0 +1,16 @@
+# editor replay: multi-cursor-column-type
+
+## app.js
+Xlet a = 1;
+Xlet b = 2;
+Xlet c = 3;
+
+## viewport
+1  Xlet a = 1;
+2  Xlet b = 2;
+3  Xlet c = 3;
+4
+5
+6
+7
+8

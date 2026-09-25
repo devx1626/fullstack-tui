@@ -32,6 +32,7 @@ import {
   visibleRows,
 } from '../../editor/viewport.js';
 import { highlightWindow, createHighlightCache } from '../../editor/highlight.js';
+import { visualColumn } from '../../editor/width.js';
 import { hexTo256 } from '../../ui/theme/index.js';
 import { squiggleSgr } from '../multimedia.js';
 import { useTheme, useIcons } from '../theme/context.jsx';
@@ -105,7 +106,7 @@ export function useEditorMouse({ onDocClick, onDocDrag, onDocWheel, stripRows = 
 const EMPTY_TOKENS = [];
 
 /** The props CodeRow is memoized on — all primitives or stable cached refs. */
-const ROW_PROP_KEYS = ['segs', 'line', 'startCol', 'width', 'selFrom', 'selTo', 'sqFrom', 'sqTo', 'sqColor'];
+const ROW_PROP_KEYS = ['segs', 'line', 'startCol', 'width', 'selFrom', 'selTo', 'sqFrom', 'sqTo', 'sqColor', 'caretCols'];
 function sameRowProps(a, b) {
   for (const k of ROW_PROP_KEYS) if (!Object.is(a[k], b[k])) return false;
   return true;
@@ -148,10 +149,10 @@ function mergePieces(pieces) {
  * edited row re-renders. Kept at module scope on purpose: a component defined
  * inside CodeEditor would be a new type on every render and remount each row.
  */
-const CodeRow = memo(function CodeRow({ segs, line, startCol, width, selFrom, selTo, sqFrom, sqTo, sqColor }) {
+const CodeRow = memo(function CodeRow({ segs, line, startCol, width, selFrom, selTo, sqFrom, sqTo, sqColor, caretCols }) {
   const pieces = useMemo(
-    () => mergePieces(rowPieces(segs || EMPTY_TOKENS, line, { startCol, width, selFrom, selTo, sqFrom, sqTo })),
-    [segs, line, startCol, width, selFrom, selTo, sqFrom, sqTo],
+    () => mergePieces(rowPieces(segs || EMPTY_TOKENS, line, { startCol, width, selFrom, selTo, sqFrom, sqTo, carets: caretCols })),
+    [segs, line, startCol, width, selFrom, selTo, sqFrom, sqTo, caretCols],
   );
   return (
     <Box flexDirection="row">
@@ -216,6 +217,11 @@ function TabStrip({ tabs, active, width }) {
  *                                            the §5.4 seam) painted as M2 SGR
  *                                            4:3 curly underlines — none at
  *                                            tier D, where the theme strips
+ * @param {Map}    [props.cursors]            PC-11: secondary carets, keyed by
+ *                                            document row → array of columns
+ *                                            (the PRIMARY cursor is the real
+ *                                            terminal caret and never in here);
+ *                                            each draws as one inverse cell
  */
 export function CodeEditor({
   document: docProp,
@@ -232,6 +238,7 @@ export function CodeEditor({
   mouseHandlers = null,
   mouseSink = null,
   diagnostics = null,
+  cursors = null,
 }) {
   // Syntax colours come from the app-wide theme unless a caller overrides it —
   // the route no longer has to thread tokens down through every pane.
@@ -281,6 +288,24 @@ export function CodeEditor({
   const gutterW = showGutter ? Math.max(2, String(Math.max(1, doc.lines.length)).length + 2) : 0;
   const textWidth = Math.max(1, width - gutterW);
   const scrollX = Math.max(0, view.scrollX | 0);
+
+  // PC-11: this row's secondary carets, projected to VISUAL columns (tabs
+  // widen left of a caret) and clamped to the visible window. Rows with none
+  // are absent from the map, so the CodeRow memo never churns on them.
+  const caretsByRow = useMemo(() => {
+    const map = new Map();
+    if (!cursors || !(cursors instanceof Map) || cursors.size === 0) return map;
+    for (const [row, cols] of cursors) {
+      const line = doc.lines[row];
+      if (!line) continue;
+      const vis = cols
+        .map((c) => visualColumn(line, c, tabSize))
+        .filter((c) => c >= scrollX && c < scrollX + textWidth)
+        .sort((a, b) => a - b);
+      if (vis.length) map.set(row, vis);
+    }
+    return map;
+  }, [cursors, doc, tabSize, scrollX, textWidth]);
 
   // Terminal cursor: the caret's cell inside this box, or hidden when scrolled
   // away. Coordinates are relative to this component's output origin.
@@ -339,6 +364,7 @@ export function CodeEditor({
       sqFrom: sq ? sq.fromCol : null,
       sqTo: sq ? Math.min(sq.toCol, scrollX + textWidth) : null,
       sqColor,
+      caretCols: caretsByRow.get(r.row) || null,
     };
     const cachedEl = rowCache.get(r.row);
     if (cachedEl && sameRowProps(cachedEl.props, props)) return cachedEl.el;

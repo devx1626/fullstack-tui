@@ -90,6 +90,17 @@ const CURRICULUM = [
             minutes: 5,
           },
           {
+            id: 'cursor',
+            title: 'Cursor column',
+            prompt: 'Edit all three lines at once.',
+            lang: 'js',
+            files: { 'app.js': 'let a = 1;\nlet b = 2;\nlet c = 3;\n' },
+            hints: [],
+            checks: [],
+            difficulty: 'easy',
+            minutes: 5,
+          },
+          {
             id: 'roundtrip',
             title: 'Round trip',
             prompt: 'Leave, edit outside, come back.',
@@ -383,6 +394,41 @@ test('editor replay goldens', async (t) => {
         app.inst.unmount();
       }
     });
+    // PC-11 / P1-2 acceptance: "a replay golden for an add-cursor-and-type
+    // sequence". <C-A-down> stacks a cursor per row of the ACTIVE file; one
+    // typed char then lands on every row in ONE committed batch.
+    await t.test('replay: multi-cursor column edit (PC-11)', async () => {
+      const storeFile = path.join(ROOT, '.data', 'editor-replay-cursor.json');
+      rmSync(storeFile, { force: true });
+      const app = mountChallenge('cursor', { storeFile });
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'challenge'));
+        assert.ok(await waitFor(() => app.frame().includes('Cursor column')), 'the challenge rendered');
+
+        // The caret seeds at (0,0); two stacks of <C-A-down> put a cursor on
+        // every row. ('x' is deliberately absent from the text: it would be
+        // consumed by the multi path anyway, but the vim deleteChar reading
+        // of a bare 'x' is exactly the kind of drift a golden pins.)
+        app.onKey({ name: 'ctrl-alt-down' });
+        app.onKey({ name: 'ctrl-alt-down' });
+        await new Promise((r) => setTimeout(r, 80));
+        app.type('X');
+
+        const expected = 'Xlet a = 1;\nXlet b = 2;\nXlet c = 3;\n';
+        assert.ok(
+          await waitFor(() => draftOf(app, 'cursor')?.['app.js'] === expected, { timeout: 4000 }),
+          `the batch edit reached every row (got ${JSON.stringify(draftOf(app, 'cursor'))})`,
+        );
+
+        await writeGolden('multi-cursor-column-type', {
+          drafts: { 'app.js': expected },
+          view: await viewportOf(expected, 'js'),
+        });
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
     await t.test('replay: Ctrl+E round-trip through $EDITOR (PC-16)', async () => {
       const storeFile = path.join(ROOT, '.data', 'editor-replay-roundtrip.json');
       rmSync(storeFile, { force: true });

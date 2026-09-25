@@ -18,12 +18,15 @@ import { browserJumpHandoff } from './routesBrowser.jsx';
 import { detectCapabilities } from './capabilities.js';
 import { nextIndex } from './nav.js';
 import { findChallenge, firstUnpassedIn } from '../core/targets.js';
-import { CelebrateLine } from './components/overlays.jsx';
+import { CelebrateLine, Modal } from './components/overlays.jsx';
 import { ICON_SETS } from './theme/icons.js';
 import { milestoneToast } from './milestones.js';
 import { nextLesson } from '../content/index.js';
-import { preferenceRows, vimPreferenceRow, togglePreference, stepTheme, stepIcons } from './preferences.js';import { applyEdit } from '../editor/document.js';
-import { createSession,
+import { preferenceRows, vimPreferenceRow, togglePreference, stepTheme, stepIcons } from './preferences.js';
+import {
+  applyEdit,
+  docFromText,
+  createSession,
   sessionDoc,
   sessionFocus,
   sessionText,
@@ -54,6 +57,22 @@ import { typeText, typeBackspace, typeDelete, typeNewline, moveArrow } from '../
 import { createRegisters } from '../editor/registers.js';
 import { copySequence as clipboardSequence } from '../editor/osc52.js';
 import { clickToPos } from '../editor/viewport.js';
+import {
+  addCursorAbove,
+  addCursorAtNextMatch,
+  addCursorBelow,
+  caretAfter,
+  clearCursors,
+  createCursorSet,
+  cursorCount,
+  deleteAtCursors,
+  insertAtCursors,
+  normaliseCursors,
+  primaryCursor,
+} from '../editor/multicursor.js';
+import { createSearchState, stepMatch } from '../editor/search.js';
+import { snapshotLabel } from '../core/history.js';
+import { openOverlay, closeOverlay } from './input/overlayStack.js';
 import { diffRows } from '../editor/diff.js';
 import { effectiveKeymap } from './keymap.js';
 import { resolveKey } from './commands.js';
@@ -282,6 +301,80 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
 
   const [mode, setModeState] = useState('normal');
   const modeRef = useRef('normal');
+
+  // PC-11: the multi-cursor set. Starts as the plain caret (createCursorSet
+  // seeds [doc.caret]); the ref reads the LATEST set because a burst of keys
+  // must compose the same way the session does.
+  const [cursors, setCursorsState] = useState(() => createCursorSet(docFromText('')));
+  const cursorsRef = useRef(cursors);
+  const setCursors = useCallback((next) => { cursorsRef.current = next; setCursorsState(next); }, []);
+
+  // PC-27: open checkpoint restore list (the palette's history.restore). The
+  // list itself is keyed through the overlay stack (openOverlay below), so
+  // keys the list does not claim are DROPPED — the buffer underneath is
+  // protected while it shows, the same rule the palette obeys.
+  const [restoreList, setRestoreList] = useState(null);
+  const restoreListRef = useRef(null);
+  restoreListRef.current = restoreList;
+
+  // PC-27: keys while the restore list is open (the classic palette's
+  // paletteMode 'history': up/down/j/k move, Enter or 1-9 restore, Esc/q
+  // closes). Handled through the overlay stack — see the registration effect
+  // below — and re-stamped every render so the closure always reads fresh refs.
+  const restoreKeyRef = useRef(null);
+  useEffect(() => {
+    restoreKeyRef.current = (ev) => {
+      const list = restoreListRef.current;
+      if (!list) return false;
+      const name = ev && ev.name;
+      const ch = ev && ev.name === 'char' ? ev.char : null;
+      const close = () => { restoreListRef.current = null; setRestoreList(null); };
+      const pick = (snap) => { close(); if (snap) restoreSnapshot(snap); };
+      if (name === 'escape' || ch === 'q') { close(); return true; }
+      if (name === 'up' || ch === 'k') { setRestoreList({ ...list, index: Math.max(0, list.index - 1) }); return true; }
+      if (name === 'down' || ch === 'j') { setRestoreList({ ...list, index: Math.min(list.snaps.length - 1, list.index + 1) }); return true; }
+      if (name === 'return' || name === 'enter') { pick(list.snaps[list.index] || null); return true; }
+      if (ch && /[1-9]/.test(ch)) { pick(list.snaps[Number(ch) - 1] || null); return true; }
+      return false; // anything else is DROPPED while the list shows (overlays outrank the screen)
+    };
+  });
+  // The overlay registration follows the LIST, not the render that opened it:
+  // the list can change in the same tick that opened it, so each change closes
+  // the previous 'restore' entry before opening the fresh one (idempotent).
+  useEffect(() => {
+    if (!restoreList) return undefined;
+    closeOverlay('restore');
+    return openOverlay({ id: 'restore', onKey: (ev) => restoreKeyRef.current(ev) === true });
+  }, [restoreList]);
+
+  // PC-27: put a checkpoint's buffers back, tab by tab (Q9). Restoring never
+  // touches attempts, streaks or the draft (Appendix A); files the challenge
+  // no longer has are reported instead of invented — classic parity
+  // (app.js restoreSnapshot).
+  const restoreSnapshot = useCallback((snap) => {
+    const current = sessionRef.current;
+    if (!current) return;
+    const files = snap.files || {};
+    let restored = 0;
+    const absent = [];
+    let next = current;
+    for (const [name, text] of Object.entries(files)) {
+      if (current.files[name]) {
+        next = sessionSetText(next, name, String(text ?? ''), null, { coalesce: false, label: 'restore' });
+        restored += 1;
+      } else {
+        absent.push(name);
+      }
+    }
+    if (!restored) {
+      setStatus('That checkpoint only holds files this challenge no longer has.');
+      return;
+    }
+    setSession(next);
+    const extra = absent.length ? ` (${absent.join(', ')} skipped — not in this challenge)` : '';
+    setStatus(`Restored ${snapshotLabel(snap)}${extra}`);
+  }, []);
+
   const setMode = useCallback((next) => { modeRef.current = next; setModeState(next); }, []);
 
   // §9 one-time normal-mode nudge. The deadline lives in a ref (typing must
@@ -382,10 +475,14 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       ? Object.fromEntries(Object.entries(target.challenge.files).map(([n, s]) => [n, rec.lastCode?.[n] ?? s ?? '']))
       : { [target.challenge.lang || 'js']: (typeof rec.lastCode === 'string' ? rec.lastCode : null) ?? target.challenge.starter ?? '' };
     const names = Object.keys(files);
-    setSession(createSession(files, {
+    const seeded = createSession(files, {
       order: names,
       languages: Object.fromEntries(names.map((n) => [n, langOf(n)])),
-    }));
+    });
+    setSession(seeded);
+    // PC-11: the cursor set belongs to the DOCUMENT — a challenge switch must
+    // re-seed it, or the first cursor command would act on stale positions.
+    setCursors(createCursorSet(seeded.files[seeded.active].doc));
     setVim(createVimState({ enabled: !!services?.settings?.data?.editor?.vimMode }));
     setSelection(null);
     setMode('normal');
@@ -464,6 +561,14 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     const mode = modeRef.current;
     if (!session) return true;
 
+    // PC-27: while the checkpoint list shows, it owns the keyboard. The live
+    // dispatcher already gives overlays first claim and DROPS what they
+    // decline; this guard keeps a same-tick burst routed straight at the
+    // screen (and tests driving onKey) from editing the buffer under the list.
+    if (restoreListRef.current) {
+      return restoreKeyRef.current ? restoreKeyRef.current(ev) === true : true;
+    }
+
     // Task 2.7: while the completion popup is open it owns ↑/↓/Tab/Enter/Esc
     // (§10.3 row 1 — overlays outrank vim and the screen). Anything it declines
     // falls through, which is what lets typing refilter the list.
@@ -481,6 +586,49 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
 
     const name = session.active;
     const doc = sessionDoc(session, name);
+
+    // PC-11: multi-cursor editing. Keyed on the CURSOR SET (not a key): the
+    // add/remove bindings live in the command executor below, and while more
+    // than one cursor exists typing/backspace/delete/return edit EVERY cursor
+    // as one committed transaction (one undo step, like the engine tests pin).
+    // Arrows collapse back to the caret under the primary cursor.
+    if (cursorsRef.current && cursorCount(cursorsRef.current) > 1) {
+      const set = cursorsRef.current;
+      const finishMulti = (result, label) => {
+        const caret = caretAfter(result.changes, result.carets, set.primary);
+        const applied = applyEdit(doc, result.changes, caret);
+        const nextSession = commit(session, name, applied.doc, { coalesce: false, label });
+        setCursors(normaliseCursors(set, applied.doc, caret));
+        if (selection) setSelection(null);
+        setSession(nextSession);
+        return true;
+      };
+      if (ev && ev.name === 'char' && ev.char && !ev.ctrl && !ev.alt) {
+        return finishMulti(insertAtCursors(doc, set, ev.char), 'type');
+      }
+      if (ev && ev.name === 'backspace') {
+        return finishMulti(deleteAtCursors(doc, set, { count: 1, backward: true }), 'backspace');
+      }
+      if (ev && ev.name === 'delete') {
+        return finishMulti(deleteAtCursors(doc, set, { count: 1, backward: false }), 'delete');
+      }
+      if (ev && (ev.name === 'return' || ev.name === 'enter')) {
+        return finishMulti(insertAtCursors(doc, set, '\n'), 'newline');
+      }
+      if (ev && ['left', 'right', 'up', 'down', 'home', 'end'].includes(ev.name)) {
+        const p = moveArrow(doc, ev.name);
+        const nextSession = commit(session, name, moveCaret(doc, p), { history: false });
+        setCursors(createCursorSet(sessionDoc(nextSession, name)));
+        setSession(nextSession);
+        return true;
+      }
+      if (ev && ev.name === 'escape') {
+        setCursors(normaliseCursors(clearCursors(set, doc), doc, doc.caret));
+        return true;
+      }
+      // Everything else (ctrl combos, F-keys, …) falls through to the paths
+      // below — the multi set only owns direct text keys and collapse keys.
+    }
 
     // §9 guardrail: text typed in NORMAL mode with no edit for >2 s raises a
     // one-time footer nudge (beginners type before they press i). Text keys
@@ -532,6 +680,12 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       setMode(isVisual(nextMode) ? 'visual' : nextMode === 'insert' || nextMode === 'replace' ? 'insert' : 'normal');
       if (res.changed && ev && ev.name === 'char' && ev.char) completeFrom(next, ev.char);
       else if (ev && (ev.name === 'backspace' || ev.name === 'escape')) { setPopup(null); stopsRef.current = null; }
+      // A vim edit under a multi-cursor set would leave stale cursors: clamp
+      // the set into the edited document (vim motions are not multi-aware, so
+      // the set survives only clamped — PC-11 safety net).
+      if (next !== session && cursorCount(cursorsRef.current) > 1) {
+        setCursors(normaliseCursors(cursorsRef.current, sessionDoc(next, name), primaryCursor(cursorsRef.current)));
+      }
       if (next !== session) setSession(next);
       if (res.status) setStatus(res.status);
       return res.consumed !== false;
@@ -562,6 +716,12 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     } else {
       consumed = false; // escape, ctrl combos, F-keys … → global handlers
     }
+    // PC-11: a single-caret edit moves the caret — keep the cursor set in sync
+    // so the next multi op normalises from where the buffer actually is. (The
+    // multi path above keeps its own set; this only runs when one cursor.)
+    if (consumed && next !== session && cursorCount(cursorsRef.current) <= 1 && !restoreListRef.current) {
+      setCursors(createCursorSet(sessionDoc(next, name)));
+    }
     if (selection && consumed) setSelection(null); // typing collapses the drag
     if (consumed && key === 'char' && ev.char) completeFrom(next, ev.char);
     else if (consumed && (key === 'backspace' || key === 'delete')) { setPopup(null); stopsRef.current = null; }
@@ -570,7 +730,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   }, [completeFrom, copyText, popupHandles, setMode, setRegisters, setSelection, setSession, setVim]);
 
   /** Registry commands (resolved keys, palette, host) — the id decides. */
-  const onCommand = useCallback(async (id) => {
+  const onCommand = useCallback(async (id, ev) => {
     // Same ref rule as applyKey: a command reached right after a keystroke must
     // act on the state that keystroke produced, not on the last render's.
     const session = sessionRef.current;
@@ -590,8 +750,25 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         return;
       }
     }
+    // PC-11: with a multi-cursor set, ↑/↓ arrive as the GLOBAL nav ids (the
+    // registry binds them before the editor's raw path) — collapse to the
+    // primary caret and move it, exactly like the other motions the multi set
+    // hands back to the editor.
+    if (cursorCount(cursorsRef.current) > 1 && (id === 'nav.up' || id === 'nav.down')) {
+      applyKey({ name: id === 'nav.up' ? 'up' : 'down' });
+      return;
+    }
     if (nextIndex(0, id, 0) !== null) return; // no list on this screen
     if (!target) return;
+    // PC-27: the checkpoint list outranks the screen. The live dispatcher
+    // already gives the overlay every key and drops what it declines; this
+    // guard makes the route behave the same for keys that reach it directly
+    // (palette dispatches, replay drivers) — Esc closes the list instead of
+    // popping the screen underneath it.
+    if (restoreListRef.current) {
+      if (restoreKeyRef.current) restoreKeyRef.current(ev);
+      return;
+    }
     switch (id) {
       case 'challenge.check': {
         if (busy) return;
@@ -601,6 +778,19 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
           const { evaluate } = await import('../core/grade.js');
           const started = Date.now();
           const code = sessionText(session);
+          // Q9 parity (PC-27): snapshot BEFORE the run — the pre-check state is
+          // what the learner wants back, and the outcome below annotates it.
+          // Same shape as the classic checkChallenge (app.js snapshotCheckpoint).
+          const checkpoint = typeof services.store.saveCheckpoint === 'function'
+            ? services.store.saveCheckpoint(challengeKey, sessionTexts(session), {
+              kind: 'check',
+              passed: null,
+              meta: {
+                attemptNo: (services.store.challengeRecord(challengeKey).attempts || 0) + 1,
+                checksTotal: (target.challenge.checks || []).length,
+              },
+            })
+            : null;
           const result = await evaluate(target.challenge, code);
           result.durationMs = Date.now() - started;
           const { checkNotes } = await import('../core/checkNotes.js');
@@ -615,10 +805,39 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
           setResults(result);
           const passed = result.results.filter((r) => r.ok).length;
           const total = result.results.length;
+          // Annotate the pre-run snapshot with the outcome (both paths, classic
+          // parity), and let the first pass of the day take the sidecar's ★.
+          if (checkpoint && typeof services.store.updateSnapshot === 'function') {
+            services.store.updateSnapshot(challengeKey, checkpoint.id, {
+              passed: result.passed,
+              meta: { checksPassed: passed, checksTotal: total },
+            });
+            if (result.passed && typeof services.store.promoteDailyBest === 'function') {
+              services.store.promoteDailyBest(challengeKey, checkpoint);
+            }
+          }
           if (result.passed) {
             // Q13 accounting + workspace parity with the classic pass path.
             if (services.sessionState) services.sessionState.passed.add(challengeKey);
             services.store.recordAttempt(challengeKey, code, true);
+            // PC-28 (parity): the status line below says "Saved to your
+            // workspace" — the classic pass path really does it
+            // (saveToWorkspace(false), app.js), so this one must too. Multi-file
+            // challenges write EVERY tab under the challenge folder so the
+            // folder runs on its own; single-file writes one artifact. A failed
+            // save must not fail the pass.
+            try {
+              const { saveArtifact } = await import('../core/workspace.js');
+              if (target.challenge.files) {
+                const base = `${target.moduleId}/${target.lessonId}/${target.challengeId}/`;
+                for (const [fname, text] of Object.entries(sessionTexts(session))) {
+                  saveArtifact(`${base}${fname}`, text ?? '');
+                }
+              } else {
+                const ext = { html: 'html', css: 'css', js: 'js', ts: 'ts', sql: 'sql', sh: 'sh', jsx: 'jsx' }[target.challenge.lang] || 'txt';
+                saveArtifact(`${target.moduleId}/${target.lessonId}/${target.challengeId}.${ext}`, code);
+              }
+            } catch { /* artifact save is best-effort; the pass stands */ }
             // Q5 (Phase 4 parity): milestone toasts on Ink. takeMilestones
             // marks each seen, so a milestone fires exactly once — the same
             // single-fire contract the classic pass path has. Guarded like
@@ -679,8 +898,27 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         return;
       }
       case 'challenge.save': {
+        // Ctrl+O (classic parity, app.js saveToWorkspace): the draft persists
+        // in the progress store AND the artifact lands in .workspace —
+        // multi-file challenges write every tab so the folder runs on its
+        // own. A failed save becomes a status line, never a crash.
         const texts = sessionTexts(session);
         services.store.saveDraft(challengeKey, target.challenge.files ? texts : texts[session.active]);
+        try {
+          const { saveArtifact } = await import('../core/workspace.js');
+          if (target.challenge.files) {
+            const base = `${target.moduleId}/${target.lessonId}/${target.challengeId}/`;
+            for (const [fname, text] of Object.entries(texts)) {
+              saveArtifact(`${base}${fname}`, text ?? '');
+            }
+          } else {
+            const ext = { html: 'html', css: 'css', js: 'js', ts: 'ts', sql: 'sql', sh: 'sh', jsx: 'jsx' }[target.challenge.lang] || 'txt';
+            saveArtifact(`${target.moduleId}/${target.lessonId}/${target.challengeId}.${ext}`, texts[session.active] ?? '');
+          }
+        } catch (err) {
+          setStatus(`Could not save: ${err && err.message ? err.message : err}`);
+          return;
+        }
         setStatus('Saved to your workspace.');
         return;
       }
@@ -709,6 +947,56 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       case 'editor.redo':
         setSession(sessionRedo(session));
         return;
+      // PC-11: the multi-cursor bindings. The engine (src/editor/multicursor.js)
+      // is pure; the route owns WHEN it runs — like every other command on
+      // this screen, applied to the LATEST session via the ref rule above.
+      case 'editor.cursorBelow':
+      case 'editor.cursorAbove': {
+        const docNow = sessionDoc(session, session.active);
+        // Normalise the set into the LIVE document first: a set that predates
+        // the latest edit (or the seed) must never feed the engine stale rows.
+        const set = normaliseCursors(cursorsRef.current, docNow);
+        const res = id === 'editor.cursorBelow'
+          ? addCursorBelow(set, docNow)
+          : addCursorAbove(set, docNow);
+        setCursors(res.set);
+        if (res.notice) setStatus(res.notice);
+        return;
+      }
+      // <C-d> is vim's scroll-half-down (vim.js binds ctrl-d), and the
+      // registry would otherwise shadow it — so while vim keys are on this
+      // delegates to the editor's raw path; modeless it selects the word under
+      // the caret and adds a cursor at its next match.
+      case 'editor.cursorNextMatch': {
+        if (vim && vim.enabled) { applyKey(ev); return; }
+        const docNow = sessionDoc(session, session.active);
+        const at = primaryCursor(normaliseCursors(cursorsRef.current, docNow));
+        const word = (lineWord(sessionText(session), offsetOf(docNow, at)) || '').trim();
+        if (!word) { setStatus('no word under the cursor'); return; }
+        const search = createSearchState({ pattern: word, smartCase: false, highlight: false });
+        const findNext = (d, from) => {
+          const hit = stepMatch(d, from, search, { dir: 1, strict: true });
+          return hit.found ? { row: hit.caret.row, col: hit.caret.col } : null;
+        };
+        const res = addCursorAtNextMatch(cursorsRef.current, docNow, { findNext });
+        setCursors(res.set);
+        if (res.added) setSelection(null);
+        if (res.notice) setStatus(res.notice);
+        return;
+      }
+      // PC-27: the palette's restore command opens the checkpoint list for the
+      // challenge underneath (classic parity, app.js openHistoryPalette). The
+      // list is keyed through the overlay stack, so keys it declines are
+      // dropped while it shows.
+      case 'history.restore': {
+        const snaps = services.store.checkpoints(challengeKey);
+        if (!snaps.length) {
+          setStatus('No checkpoints yet — one is taken every time you run a check (Ctrl+S).');
+          return;
+        }
+        setRestoreList({ snaps, index: 0 });
+        return;
+      }
       case 'challenge.externalEditor': {
         // Round-trip through $EDITOR with the terminal released (classic parity).
         const { withTerminalReleased } = await import('../tui/term.js');
@@ -807,11 +1095,14 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         // toggle's own message promises). While the editor is mid-mode Esc
         // belongs to the editor; in normal mode it still leaves the screen.
         const s = vimRef.current;
-        const editorMidMode = !!(s && s.enabled) && (
+        const editorMidMode = (!!s && s.enabled && (
           modeRef.current !== 'normal'
           || !!s.operator || !!s.pending || !!s.input || !!s.confirm
           || s.count !== '' || !!s.blockInsert
-        );
+        ))
+        // PC-11: a multi-cursor set is mid-edit too — Esc folds the extra
+        // cursors back into the primary before it may leave the screen.
+        || cursorCount(cursorsRef.current) > 1;
         if (editorMidMode) {
           applyKey({ name: 'escape' });
           return;
@@ -822,7 +1113,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       default:
         host.run(id);
     }
-  }, [activeName, applyKey, busy, challengeKey, hintIndex, host, narrow, openCompletions, resetPanes, services, setPopup, setRegisters, setSelection, setSession, setVim, showSolution, target, widen]);
+  }, [activeName, applyKey, busy, challengeKey, hintIndex, host, narrow, openCompletions, resetPanes, services, setPopup, setRegisters, setRestoreList, setSelection, setSession, setVim, showSolution, target, widen]);
 
   // Raw keys: resolved commands first (registry wins), then the editor.
   // The mouse composition (divider first, editor sink second) is registered
@@ -907,6 +1198,21 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     return out;
   }, [results]);
 
+  // PC-11: secondary carets (every cursor but the primary, which is the
+  // terminal cursor) go down to the editor as an inverse cell each, grouped
+  // by document row. A hook like the rest — it must stay ABOVE the early
+  // returns below (Rules of Hooks).
+  const cursorByRow = useMemo(() => {
+    const map = new Map();
+    if (!session || !cursors || cursors.cursors.length < 2) return map;
+    for (let i = 0; i < cursors.cursors.length; i += 1) {
+      if (i === cursors.primary) continue;
+      const p = cursors.cursors[i];
+      map.set(p.row, [...(map.get(p.row) || []), p.col]);
+    }
+    return map;
+  }, [session, cursors]);
+
   if (!target) return <Text color={theme.bad}>unknown challenge: {challengeId || lessonId || moduleId}</Text>;
   if (!session) return null; // one tick while the session seeds
 
@@ -922,6 +1228,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   const popupSignature = popup ? signatureAt(sessionDoc(session)) : null;
 
   return (
+    <>
     <ChallengeScreen
       title={target.challenge.title || target.challenge.id}
       brief={target.challenge.prompt || ''}
@@ -948,7 +1255,28 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       popup={popup}
       popupSignature={popupSignature}
       celebrate={celebrate}
+      cursors={cursorByRow}
     />
+    <Modal
+      title="Restore a checkpoint"
+      open={!!restoreList}
+      width={64}
+      onKey={restoreKeyRef.current || (() => false)}
+    >
+      {restoreList
+        ? restoreList.snaps.slice(0, 10).map((s, i) => (
+          <Text
+            key={s.id || i}
+            bold={i === restoreList.index}
+            inverse={i === restoreList.index}
+            color={i === restoreList.index ? undefined : theme.muted}
+          >
+            {' '}{i + 1}. {snapshotLabel(s)}
+          </Text>
+        ))
+        : null}
+    </Modal>
+    </>
   );
 }
 

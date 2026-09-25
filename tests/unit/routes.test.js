@@ -45,7 +45,15 @@ const CURRICULUM = [
           { id: 'c2', title: 'Second heading', prompt: 'Two headings.', lang: 'html', starter: '', hints: ['Use h2.'], checks: [], difficulty: 'easy', minutes: 5 },
         ],
       },
-      { id: 'm1.l2', title: 'Lists', minutes: 12, challenges: [{ id: 'c3', title: 'A list', prompt: 'Make a list.', lang: 'html', starter: '', hints: ['ul + li'], checks: [], difficulty: 'easy', minutes: 6 }] },
+      // c3 carries one real (source-regex) check so the PASS path — workspace
+      // artifacts (PC-28) and checkpoint annotation (PC-27) — is drivable.
+      // c4 is the multi-file challenge: its pass must write every tab under
+      // the challenge folder (PC-28), and its two rows anchor the multi-cursor
+      // typing test (PC-11).
+      { id: 'm1.l2', title: 'Lists', minutes: 12, challenges: [
+        { id: 'c3', title: 'A list', prompt: 'Make a list.', lang: 'html', starter: '', hints: ['ul + li'], checks: [{ kind: 'src', label: 'has a list', re: '<ul' }], difficulty: 'easy', minutes: 6 },
+        { id: 'c4', title: 'Two files', prompt: 'Markup plus styles.', lang: 'html', files: { 'index.html': '<p>hi</p>\n', 'style.css': 'p {}\n' }, hints: [], checks: [], difficulty: 'easy', minutes: 6 },
+      ] },
     ],
     project: { id: 'm1.p', title: 'Portfolio page', minutes: 45, checks: [{ id: 'k1' }, { id: 'k2' }] },
   },
@@ -429,6 +437,257 @@ test('next-UI routes + command host', async (t) => {
         }
         assert.ok(clean, 'undo restores the starter and the clean draft is cleared');
       } finally {
+        app.inst.unmount();
+      }
+    });
+
+    // ---- PC-11 (P1-2): the multi-cursor engine, wired for real ------------
+    await t.test('challenge: multi-cursor bindings type on two lines and collapse (PC-11)', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        // A single file is the multi-cursor canvas: cursors stack per ROW of
+        // the ACTIVE document (the engine is per-document, like every editor).
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l1', challengeId: 'c1' });
+        assert.ok(await waitFor(() => app.frame().includes('First heading')), 'the challenge rendered');
+        // The starter painted in the frame proves the session has seeded (the
+        // title alone renders before the seed tick — keys would be dropped).
+        assert.ok(await waitFor(() => app.frame().includes('<h1')), 'the editor painted the starter');
+
+        const draft = () => services.store.challengeRecord('m1.l1.c1').lastCode;
+
+        // Build a three-row buffer modeless: Enter inserts the newline BEFORE
+        // the caret's text, so two Enters give '\n\n<h1' with the caret on
+        // row 2. ↑-stacking walks UP from the outermost cursor and the PRIMARY
+        // follows the top cursor (the engine's sorted-first rule), so two
+        // stacks cover rows 2, 1 and 0 with the primary on row 0. (The
+        // rendering — inverse cells — is pinned by the rowPieces/editor unit
+        // tests; the STATE is the proof here: one keystroke lands on every
+        // row at once.)
+        app.onKey({ name: 'return' });
+        app.onKey({ name: 'return' });
+        assert.ok(
+          await waitFor(() => draft() === '\n\n<h1', { timeout: 4000 }),
+          'the three-row buffer is in place (caret on row 2)',
+        );
+        app.onKey({ name: 'ctrl-alt-up' });
+        app.onKey({ name: 'ctrl-alt-up' });
+        await new Promise((r) => setTimeout(r, 60));
+
+        app.onKey({ name: 'char', char: 'X' });
+        assert.ok(
+          await waitFor(() => draft() === 'X\nX\nX<h1', { timeout: 4000 }),
+          'the typed char landed on all three cursor rows at once',
+        );
+
+        // ↓ folds the set back to ONE caret: the terminal caret was on the
+        // bottom row (2), so ↓ keeps it there and the next char edits ONE
+        // row — row 2 — while rows 0/1 stop receiving keys. (The registry
+        // binds ↓ to the global nav ids; the route routes them to the editor
+        // while a multi set exists.)
+        app.onKey({ name: 'down' });
+        await new Promise((r) => setTimeout(r, 60));
+        app.onKey({ name: 'char', char: 'Y' });
+        assert.ok(
+          await waitFor(() => draft() === 'X\nX\nXY<h1', { timeout: 4000 }),
+          'after the collapse the caret edits one line only',
+        );
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    await t.test('challenge: <C-d> adds a cursor at the next word match (PC-11)', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c3' });
+        assert.ok(await waitFor(() => app.frame().includes('A list')), 'the challenge rendered');
+
+        const draft = () => services.store.challengeRecord('m1.l2.c3').lastCode;
+        await new Promise((r) => setTimeout(r, 250)); // let the session seed
+        for (const ch of 'x x') app.onKey({ name: 'char', char: ch });
+        assert.ok(await waitFor(() => draft() === 'x x', { timeout: 4000 }), 'buffer ready');
+
+        // The caret rests after the LAST 'x' (col 3) — modeless typing always
+        // ends there (bare ←/→ resolve to global nav ids, so this is the only
+        // reachable spot). Ctrl+D takes the word ENDING at the caret ('x') and
+        // adds a cursor at its next match — none forward, so the search WRAPS
+        // to (0,0), the engine's documented `n`-style behaviour. One 'Y' then
+        // inserts at BOTH carets in one batch.
+        app.onKey({ name: 'ctrl-d' });
+        await new Promise((r) => setTimeout(r, 60));
+        app.onKey({ name: 'char', char: 'Y' });
+        assert.ok(
+          await waitFor(() => draft() === 'Yx xY', { timeout: 4000 }),
+          'typing edited both match positions at once',
+        );
+        // One undo step for the whole batch (the multi contract).
+        app.onKey({ name: 'ctrl-z' });
+        assert.ok(
+          await waitFor(() => draft() === 'x x', { timeout: 4000 }),
+          'the batch is a single undo step',
+        );
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    // ---- PC-12: % is a vim MOTION on the next UI --------------------------
+    await t.test('challenge: vim % moves the caret to the matching bracket (PC-12)', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c3' });
+        assert.ok(await waitFor(() => app.frame().includes('A list')), 'the challenge rendered');
+
+        // Modeless sanity (Q12): % is a plain typable char — no vim motion.
+        app.onKey({ name: 'char', char: '%' });
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === '%', { timeout: 4000 }),
+          'modeless: % typed into the buffer',
+        );
+
+        // Turn vim ON through the real toggle (the palette's settings.vimToggle).
+        assert.equal(harness.dispatchToScreen('settings.vimToggle'), true, 'the vim toggle dispatches to the focused screen');
+        assert.ok(await waitFor(() => app.frame().includes('Vim keys on'), { timeout: 4000 }), 'the toggle reported');
+
+        // Build a real bracket pair in INSERT mode (vim cc clears the '%'
+        // line and leaves insert mode). Then 0 → col 0 ('('), and % must
+        // land ON the ')' at col 3: inserting there (i X Esc) rewrites the
+        // buffer to '(abX)' — text that only exists if the caret MOVED.
+        app.onKey({ name: 'char', char: 'c' });
+        app.onKey({ name: 'char', char: 'c' });
+        await new Promise((r) => setTimeout(r, 60));
+        for (const ch of '(ab)') app.onKey({ name: 'char', char: ch });
+        app.onKey({ name: 'escape' });
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === '(ab)', { timeout: 4000 }),
+          'insert-mode retyping produced the bracket pair',
+        );
+        app.onKey({ name: 'char', char: '0' });
+        app.onKey({ name: 'char', char: '%' });
+        await new Promise((r) => setTimeout(r, 80));
+        app.onKey({ name: 'char', char: 'i' });
+        app.onKey({ name: 'char', char: 'X' });
+        app.onKey({ name: 'escape' });
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === '(abX)', { timeout: 4000 }),
+          'vim: % moved the caret onto the matching bracket before the insert',
+        );
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    // ---- PC-27: checkpoints are captured and restorable on the next UI ----
+    await t.test('challenge: checkpoints are taken and restorable from history.restore (PC-27)', async () => {
+      rmSync(STORE_FILE, { force: true });
+      // Checkpoint sidecars outlive the progress store on disk (that is their
+      // point) — clear THIS challenge's sidecar so the run sees exactly what
+      // it creates.
+      rmSync(path.join(ROOT, '.data', 'history', 'm1.l2.c3.json'), { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c3' });
+        assert.ok(await waitFor(() => app.frame().includes('A list')), 'the challenge rendered');
+
+        // Type a marker and run a check ('z' fails the <ul check — fine: the
+        // checkpoint is about the PRE-RUN state, and the outcome annotates it).
+        app.onKey({ name: 'char', char: 'z' });
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === 'z', { timeout: 4000 }),
+          'the marker landed in the buffer',
+        );
+        app.onKey({ name: 'ctrl-s' });
+        await waitFor(() => app.frame().includes('CHECKS'), { timeout: 20000 });
+        const snaps = services.store.checkpoints('m1.l2.c3');
+        assert.equal(snaps.length, 1, 'a check run captured a checkpoint');
+        assert.equal(snaps[0].files.html, 'z', 'the snapshot holds the pre-run buffer');
+        assert.equal(snaps[0].passed, false, 'the outcome was annotated onto the snapshot');
+
+        // Now edit away from it and restore through the command id.
+        app.onKey({ name: 'char', char: 'q' });
+        await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === 'zq', { timeout: 4000 });
+        assert.equal(harness.dispatchToScreen('history.restore'), true, 'the restore command dispatches');
+        await waitFor(() => app.frame().includes('Restore a checkpoint'), { timeout: 4000 });
+        assert.ok(app.frame().includes('just now'), 'the snapshot label rendered');
+
+        // Enter restores the highlighted row (the overlay owns the keys).
+        app.onKey({ name: 'return' });
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === 'z', { timeout: 4000 }),
+          'the checkpoint buffer came back',
+        );
+        assert.ok(
+          await waitFor(() => app.frame().includes('Restored just now'), { timeout: 4000 }),
+          'the restore was reported with the snapshot label',
+        );
+        // The overlay closed: Esc pops the screen again (no mid-modal leak).
+        app.onKey({ name: 'escape' });
+        assert.ok(
+          await waitFor(() => app.screen() !== 'challenge', { timeout: 4000 }),
+          'after the list closed, Esc works on the screen again',
+        );
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    // ---- PC-28: a pass writes the real artifact(s) to .workspace ----------
+    await t.test('challenge: passing a check writes workspace artifacts (PC-28)', async () => {
+      const { readArtifact } = await import('../../src/core/workspace.js');
+      rmSync(STORE_FILE, { force: true });
+      rmSync(path.join(ROOT, '.workspace', 'm1'), { recursive: true, force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c3' });
+        assert.ok(await waitFor(() => app.frame().includes('A list')), 'the challenge rendered');
+        await new Promise((r) => setTimeout(r, 250)); // let the session seed
+
+        // '<ul>' satisfies c3's one check. The fix under test: the pass path
+        // says "Saved to your workspace" AND means it — the artifact exists
+        // on disk with the buffer's bytes (the classic pass path parity).
+        for (const ch of '<ul>') app.onKey({ name: 'char', char: ch });
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === '<ul>', { timeout: 4000 }),
+          'the passing buffer is in place',
+        );
+        app.onKey({ name: 'ctrl-s' });
+        assert.ok(
+          await waitFor(() => /1\/1 checks passed/.test(app.frame()), { timeout: 20000 }),
+          'the check passed',
+        );
+        assert.equal(readArtifact('m1/m1.l2/c3.html'), '<ul>', 'single-file: the artifact carries the buffer');
+
+        // Multi-file: Ctrl+O (the same save block as the pass path) writes
+        // EVERY tab under the challenge folder, so the folder runs on its own.
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c4' });
+        assert.ok(await waitFor(() => app.frame().includes('Two files')), 'the multi-file challenge rendered');
+        // The editor painting the starter proves the c4 session has seeded —
+        // a Ctrl+O that arrives one tick earlier would hit a null session.
+        assert.ok(await waitFor(() => app.frame().includes('<p>hi</p>')), 'the c4 buffers painted');
+        app.onKey({ name: 'ctrl-o' });
+        assert.ok(
+          await waitFor(() => readArtifact('m1/m1.l2/c4/index.html') === '<p>hi</p>\n', { timeout: 4000 }),
+          'multi-file: every tab written under the challenge folder',
+        );
+        assert.ok(
+          await waitFor(() => readArtifact('m1/m1.l2/c4/style.css') === 'p {}\n', { timeout: 4000 }),
+          'multi-file: the second tab landed too',
+        );
+      } finally {
+        rmSync(path.join(ROOT, '.workspace', 'm1'), { recursive: true, force: true });
         app.inst.unmount();
       }
     });

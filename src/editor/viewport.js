@@ -181,16 +181,21 @@ export function squiggleRows(doc, diagnostics, { top = 0, height = Infinity, tab
  * - When `sqFrom`/`sqTo` are given (M2), pieces inside that range get
  *   `squiggle: true`, cut at the same kind of edges — the renderer wraps those
  *   pieces in SGR 4:3 curly underline.
+ * - When `carets` is given (PC-11), it is an array of visual columns holding a
+ *   secondary cursor on this row: each marks the single cell it sits on with
+ *   `inverse: true`, the way a block caret draws. The PRIMARY cursor is the
+ *   terminal caret and never appears here.
  * - `segs` may be empty (no tokens): the raw line becomes one plain piece.
  *
  * Returns `[]` only when the window is empty; callers draw a blank row then.
  */
-export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom = null, selTo = null, sqFrom = null, sqTo = null } = {}) {
+export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom = null, selTo = null, sqFrom = null, sqTo = null, carets = null } = {}) {
   const from = Math.max(0, Number(startCol) || 0);
   const to = from + Math.max(0, Number(width) || 0);
   const source = Array.isArray(segs) && segs.length > 0 ? segs : (line ? [{ text: String(line) }] : []);
   const hasSel = Number.isFinite(selFrom) && Number.isFinite(selTo) && selTo > selFrom;
   const hasSq = Number.isFinite(sqFrom) && Number.isFinite(sqTo) && sqTo > sqFrom;
+  const caretCols = Array.isArray(carets) ? [...new Set(carets)].sort((a, b) => a - b) : null;
 
   const out = [];
   let col = 0;
@@ -219,6 +224,15 @@ export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom 
       if (sqRelFrom > pieceStart && sqRelFrom < relTo) edges.push(sqRelFrom);
       if (sqRelTo > pieceStart && sqRelTo < relTo) edges.push(sqRelTo);
     }
+    if (caretCols) {
+      // caretCols are absolute visual columns; the edge walk below is
+      // segment-relative, so translate once (same as the sel/sq edges above).
+      for (const c of caretCols) {
+        const rel = c - segStart;
+        if (rel > pieceStart && rel < relTo) edges.push(rel);
+        if (rel + 1 > pieceStart && rel + 1 < relTo) edges.push(rel + 1);
+      }
+    }
     edges.sort((a, b) => a - b);
     for (let e = 0; e < edges.length - 1; e += 1) {
       const a = edges[e];
@@ -231,7 +245,8 @@ export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom 
         color: seg.color ?? null,
         bold: !!seg.bold,
         italic: !!seg.italic,
-        inverse: hasSel && a >= selFrom - segStart && b <= selTo - segStart,
+        inverse: (hasSel && a >= selFrom - segStart && b <= selTo - segStart)
+          || (caretCols !== null && caretCols.some((c) => a <= c - segStart && c - segStart < b)),
         squiggle: hasSq && a >= sqFrom - segStart && b <= sqTo - segStart,
       });
     }

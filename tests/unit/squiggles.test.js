@@ -201,4 +201,24 @@ test('Ink CodeEditor paints M2 waves, gated by the theme tier', async (t) => {
     const frame = await renderFrame({ theme: stripped, diagnostics: [{ line: 2, col: 12, length: 2 }] });
     assert.ok(!frame.includes('4:3'), 'tier D: the squiggle is dropped, not drawn plain');
   });
+
+  // PC-11: secondary multi-cursor carets ride the SAME inverse mechanism as
+  // selections. (The harness's fake stdout is not a TTY, so ink's chalk runs
+  // at level 0 and prop-based SGR never appears in frames — the inverse
+  // DECISION itself is pinned by the rowPieces unit tests; here we pin that
+  // a cursor set renders harmlessly: no crash, no stray text, and rows
+  // without a secondary caret are byte-identical.)
+  await t.test('PC-11: secondary carets render without artifacts', async () => {
+    const plain = await renderFrame({});
+    const withCursors = await renderFrame({
+      cursors: new Map([[1, [13], ]]),
+      document: 'const a = 1;\nlet total = xx + 1;\nconsole.log(a);',
+    });
+    const row = withCursors.split('\n').find((l) => l.includes('let total'));
+    assert.ok(row, 'the caret row rendered');
+    assert.ok(row.replace(/\x1b\[[0-9;:]*m/g, '').includes('let total = xx + 1;'), 'the line text is intact under the styling');
+    const other = withCursors.split('\n').find((l) => l.includes('const a'));
+    const plainOther = plain.split('\n').find((l) => l.includes('const a'));
+    assert.equal(other, plainOther, 'rows without a secondary caret render identically');
+  });
 });

@@ -149,6 +149,14 @@ export const COMMANDS = [
   // `width: 50%`); the vim binding lands with the Phase 2 editor.
   { id: 'editor.bracketMatch', title: 'Jump to the matching bracket', screen: 'challenge', keys: { default: [] }, run: 'jumpToMatchingBracket' },
 
+  // Multi-cursor (PC-11, P1-2). <C-d> is vim's scroll-half-down, so while vim
+  // keys are on the route delegates this id back to the vim machine — a
+  // registry binding must never shadow a vim binding silently (the route owns
+  // the hand-off; vim.js keeps its own ctrl-d entry in VIM_BINDINGS).
+  { id: 'editor.cursorAbove', title: 'Add a cursor on the line above', screen: 'challenge', keys: { default: ['<C-A-up>'] }, run: 'addCursorAbove' },
+  { id: 'editor.cursorBelow', title: 'Add a cursor on the line below', screen: 'challenge', keys: { default: ['<C-A-down>'] }, run: 'addCursorBelow' },
+  { id: 'editor.cursorNextMatch', title: 'Add a cursor at the next match (Ctrl+D)', screen: 'challenge', keys: { default: ['<C-d>'] }, run: 'addCursorAtNextMatch' },
+
   // Projects (capstone checklists). Shift+Tab toggles the focus back on the
   // lesson screen, but the projects list has one focus target, so Tab cycles.
   { id: 'projects.focusToggle', title: 'Focus the checklist', screen: 'projects', keys: { default: ['<Tab>'] }, run: 'projects.focusToggle' },

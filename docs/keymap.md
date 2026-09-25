@@ -4,7 +4,7 @@
 `src/ui/commands.js` — do not edit by hand. `npm run check` fails when this
 file drifts from the registry; regenerate with `npm run keymap:docs`.*
 
-74 commands. User overrides live in `.data/keymap.json` and are
+77 commands. User overrides live in `.data/keymap.json` and are
 merged over these defaults; unknown ids are reported, never fatal. `Screen`
 shows where a binding applies (`any` = global).
 
@@ -89,6 +89,9 @@ shows where a binding applies (`any` = global).
 | `editor.format` | `<C-f>` | `challenge` | Format code (Prettier-style; CSS formats the enclosing rule) |
 | `editor.jumpToLine` | `<C-j>` | `challenge` | Jump to the failing check's line (Q4) |
 | `editor.bracketMatch` | — *(palette only)* | `challenge` | Jump to the matching bracket |
+| `editor.cursorAbove` | `<C-A-up>` | `challenge` | Add a cursor on the line above |
+| `editor.cursorBelow` | `<C-A-down>` | `challenge` | Add a cursor on the line below |
+| `editor.cursorNextMatch` | `<C-d>` | `challenge` | Add a cursor at the next match (Ctrl+D) |
 
 ## Checkpoints
 

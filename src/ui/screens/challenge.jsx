@@ -40,6 +40,7 @@ function EditorPane({
   mouseHandlers,
   mouseSink,
   diagnostics,
+  cursors,
 }) {
   // Explicit prop wins (tests/previews); otherwise the app-wide theme tokens.
   const theme = themeProp || useTheme();
@@ -81,6 +82,7 @@ function EditorPane({
       mouseHandlers={mouseHandlers}
       mouseSink={mouseSink}
       diagnostics={diagnostics}
+      cursors={cursors}
     />
   );
 }
@@ -118,6 +120,7 @@ export function ChallengeScreen({
   nudge = false, // §9: one-time "press i to start typing" guardrail
   vimEnabled, // vim on? the footer's nudge line only makes sense then
   celebrate = null, // §7.3 motion: {key} while the pass flourish shows
+  cursors = null, // PC-11: secondary carets (row → cols Map) for the editor
 }) {
   const theme = themeProp || useTheme();
   const ic = useIcons();
@@ -211,6 +214,7 @@ export function ChallengeScreen({
               mouseHandlers={mouseHandlers}
               mouseSink={mouseSink}
               diagnostics={diagnostics}
+              cursors={cursors}
             />
             <CompletionPopup popup={popup} signature={popupSignature} width={textWidth} />
           </Box>

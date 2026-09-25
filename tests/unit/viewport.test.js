@@ -176,6 +176,39 @@ test('rowPieces: selection sets inverse only inside its range', () => {
   assert.equal(pieces.map((p) => p.text).join(''), 'const x = 1;', 'pieces reassemble the line');
 });
 
+// PC-11: secondary multi-cursor carets draw as one inverse cell each.
+test('rowPieces: a secondary caret marks exactly its own cell inverse', () => {
+  const pieces = rowPieces([], 'hello', { startCol: 0, width: 80, carets: [2] });
+  assert.deepEqual(pieces.map((p) => [p.text, p.inverse]), [['he', false], ['l', true], ['lo', false]]);
+});
+
+test('rowPieces: two carets on one row inverse two cells; EOL caret extends nothing', () => {
+  const pieces = rowPieces([], 'hey', { startCol: 0, width: 80, carets: [0, 3] });
+  assert.deepEqual(
+    pieces.map((p) => [p.text, p.inverse]),
+    [['h', true], ['ey', false]],
+    'the EOL caret (col 3) paints nothing — there is no cell past the end',
+  );
+  assert.equal(pieces.map((p) => p.text).join(''), 'hey', 'pieces reassemble the line');
+});
+
+test('rowPieces: caret inside a styled segment splits it, keeping the style', () => {
+  const segs = hl('const x = 1;');
+  // 'x' sits at visual column 6, inside the ' x = ' segment.
+  const pieces = rowPieces(segs, 'const x = 1;', { startCol: 0, width: 80, carets: [6] });
+  const inv = pieces.filter((p) => p.inverse);
+  assert.equal(inv.length, 1);
+  assert.equal(inv[0].text, 'x');
+  // The split piece inherits its segment's style exactly (here the plain-text
+  // token colour), so a caret can never restyle code.
+  assert.equal(inv[0].color, pieces.find((p) => p.text.includes('='))?.color ?? null);
+  assert.equal(pieces.map((p) => p.text).join(''), 'const x = 1;', 'pieces reassemble the line');
+});
+
+// ---------------------------------------------------------------------------
+// Caret point + gutter
+// ---------------------------------------------------------------------------
+
 // ---------------------------------------------------------------------------
 // Caret point + gutter
 // ---------------------------------------------------------------------------
