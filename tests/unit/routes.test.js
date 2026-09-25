@@ -52,7 +52,7 @@ const CURRICULUM = [
       // typing test (PC-11).
       { id: 'm1.l2', title: 'Lists', minutes: 12, challenges: [
         { id: 'c3', title: 'A list', prompt: 'Make a list.', lang: 'html', starter: '', hints: ['ul + li'], checks: [{ kind: 'src', label: 'has a list', re: '<ul' }], difficulty: 'easy', minutes: 6 },
-        { id: 'c4', title: 'Two files', prompt: 'Markup plus styles.', lang: 'html', files: { 'index.html': '<p>hi</p>\n', 'style.css': 'p {}\n' }, hints: [], checks: [], difficulty: 'easy', minutes: 6 },
+        { id: 'c4', title: 'Two files', prompt: 'Markup plus styles.', lang: 'html', files: { 'index.html': '<p>hi</p>\n', 'style.css': 'p {}\n', 'app.js': 'const x = 1;\n' }, hints: [], checks: [], difficulty: 'easy', minutes: 6 },
         // c5: a single-file CSS challenge so the emmet shorthand path (`m10` +
         // `;` → `margin: 10px;`) is drivable through the real route.
         { id: 'c5', title: 'Box model', prompt: 'Style it.', lang: 'css', starter: 'p {}\n', hints: [], checks: [], difficulty: 'easy', minutes: 4 },
@@ -695,17 +695,20 @@ test('next-UI routes + command host', async (t) => {
       }
     });
 
+    /** The autosaved buffer for a challenge (autosave debounces at 400ms).
+     *  Reads the STORE record — never dereference `lastCode` inside a waitFor
+     *  without this null-guard, or you get a TypeError instead of poll-false. */
+    const savedCode = (svc, key) => {
+      const rec = svc.store.challengeRecord(key);
+      return rec ? rec.lastCode : undefined;
+    };
+
     await t.test('challenge: emmet Tab expansion and the CSS `;` shorthand (classic parity)', async () => {
       rmSync(STORE_FILE, { force: true });
       const settings = fakeSettings();
       settings.data.editor.vimMode = false; // modeless editor: classic defaults
       const services = servicesFor(CURRICULUM, { settings });
       const app = mountApp(services);
-      /** The autosaved buffer for a challenge (autosave debounces at 400ms). */
-      const savedCode = (key) => {
-        const rec = services.store.challengeRecord(key);
-        return rec ? rec.lastCode : undefined;
-      };
       try {
         assert.ok(await waitFor(() => app.screen() === 'home'));
 
@@ -717,13 +720,13 @@ test('next-UI routes + command host', async (t) => {
         app.onKey({ name: 'tab' });
         const EXPANDED = '<div class="card"></div>\n<div class="card"></div>';
         assert.ok(
-          await waitFor(() => savedCode('m1.l1.c2') === EXPANDED),
+          await waitFor(() => savedCode(services, 'm1.l1.c2') === EXPANDED),
           'Tab expanded the compound abbreviation at the caret',
         );
         // One undo step reverts the WHOLE expansion (coalesce: false).
         app.onKey({ name: 'ctrl-z' });
         assert.ok(
-          await waitFor(() => savedCode('m1.l1.c2') === 'div.card*2'),
+          await waitFor(() => savedCode(services, 'm1.l1.c2') === 'div.card*2'),
           'one undo step reverts the whole expansion',
         );
 
@@ -735,14 +738,14 @@ test('next-UI routes + command host', async (t) => {
         app.onKey({ name: 'end' });
         app.onKey({ name: 'tab' }); // no abbreviation at the caret → an indent
         assert.ok(
-          await waitFor(() => savedCode('m1.l2.c5') === 'p {}  \n'),
+          await waitFor(() => savedCode(services, 'm1.l2.c5') === 'p {}  \n'),
           'plain Tab indents by two spaces',
         );
         app.onKey({ name: 'return' }); // the shorthand goes on its own line
         for (const ch of 'm10') app.onKey({ name: 'char', char: ch });
         app.onKey({ name: 'char', char: ';' });
         assert.ok(
-          await waitFor(() => savedCode('m1.l2.c5') === 'p {}  \nmargin: 10px;\n'),
+          await waitFor(() => savedCode(services, 'm1.l2.c5') === 'p {}  \nmargin: 10px;\n'),
           'the `;` shorthand expanded (the expansion supplies the semicolon)',
         );
 
@@ -760,9 +763,172 @@ test('next-UI routes + command host', async (t) => {
         app.onKey({ name: 'escape' }); // normal mode
         app.onKey({ name: 'tab' }); // normal-mode Tab: a motion, buffer untouched
         await new Promise((r) => setTimeout(r, 500)); // an indent would have autosaved by now
-        assert.equal(savedCode('m1.l1.c2'), 'div.card*2', 'normal-mode Tab leaves the buffer alone');
+        assert.equal(savedCode(services, 'm1.l1.c2'), 'div.card*2', 'normal-mode Tab leaves the buffer alone');
       } finally {
         delete settings.data.editor.vimMode;
+        app.inst.unmount();
+      }
+    });
+
+    // ---- P1-11: the four Tab/`;` boundary decisions, pinned by replay ------
+
+    await t.test('P1-11a: an armed snippet stop-walk outranks emmet and the indent', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const settings = fakeSettings();
+      settings.data.editor.vimMode = false;
+      const services = servicesFor(CURRICULUM, { settings });
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        // The qsel snippet is a JS-only extra, so the stop-walk replay runs on
+        // c4's app.js tab (single-file tab focus; the strip is not the point).
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c4' });
+        assert.ok(await waitFor(() => app.frame().includes('Two files')), 'c4 rendered');
+        // Wait for the MULTI-FILE session (any tab) to paint before switching:
+        // ctrl-w hits a null session otherwise.
+        assert.ok(await waitFor(() => app.frame().includes('<p>hi</p>')), 'the session painted');
+        app.onKey({ name: 'ctrl-w' }); // index.html → style.css
+        app.onKey({ name: 'ctrl-w' }); // style.css → app.js
+        assert.ok(await waitFor(() => app.frame().includes('const x = 1;')), 'the app.js buffer painted');
+
+        // This subtest is MODELESS (vim off): `end` parks at EOL, `return`
+        // opens a fresh line below, then the snippet name types normally.
+        // `forof` not `qsel`: bare `q` is a global quit binding that eats the
+        // key before the editor (the same constraint the PC-12 replay hit).
+        app.onKey({ name: 'end' });
+        app.onKey({ name: 'return' });
+        // Type the snippet name: the popup opens on the 2+-char prefix.
+        for (const ch of 'forof') app.onKey({ name: 'char', char: ch });
+        assert.ok(
+          await waitFor(() => app.frame().includes('Tab accept'), { timeout: 4000 }),
+          'the completion popup opened on the typed snippet name',
+        );
+
+        // Tab #1 ACCEPTS the snippet (emmet is null in JS by design — expandAt
+        // has no JS grammar), arming the stop-walk with FOUR stops.
+        app.onKey({ name: 'tab' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c4')?.['app.js'] === 'const x = 1;\nfor (const item of items) {\n  \n}\n', { timeout: 4000 }),
+          'Tab accepted the snippet (the typed prefix was replaced)',
+        );
+
+        // Tabs #2-#4 WALK the armed stops (caret-only moves; nothing edits the
+        // buffer — this is the order emmet and the indent must respect).
+        app.onKey({ name: 'tab' });
+        app.onKey({ name: 'tab' });
+        app.onKey({ name: 'tab' });
+        await new Promise((r) => setTimeout(r, 500));
+        assert.equal(
+          savedCode(services, 'm1.l2.c4')?.['app.js'],
+          'const x = 1;\nfor (const item of items) {\n  \n}\n',
+          'the stop-walk Tabs never touched the buffer',
+        );
+
+        // Tab #5: the walk is exhausted → the modeless indent finally applies
+        // at the caret (the walk ended at the snippet's end position, so the
+        // indent lands there — trailing, exactly where the caret sits).
+        app.onKey({ name: 'tab' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c4')?.['app.js'] === 'const x = 1;\nfor (const item of items) {\n  \n}  \n', { timeout: 4000 }),
+          'after the walk ends, Tab is an indent again',
+        );
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    await t.test('P1-11b: vim insert — emmet beats the popup, `;` keeps the classic shape gate', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const settings = fakeSettings();
+      settings.data.editor.vimMode = true; // the vim path is under test
+      const services = servicesFor(CURRICULUM, { settings });
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c5' });
+        assert.ok(await waitFor(() => app.frame().includes('p {}')), 'the starter painted');
+
+        // `o` from normal mode opens a FRESH line below and enters insert
+        // (a literal \n char does not newline in vim). Type the abbreviation:
+        // the popup opens on the 2+-char prefix while typing.
+        app.onKey({ name: 'o' });
+        for (const ch of 'flex') app.onKey({ name: 'char', char: ch });
+        // Tab must EXPAND (classic precedence: emmet outranks the popup on
+        // Tab) and close it — the expansion REPLACES the abbreviation.
+        app.onKey({ name: 'tab' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c5') === 'p {}\ndisplay: flex;\n', { timeout: 4000 }),
+          'Tab expanded the value-form abbreviation with the popup live',
+        );
+
+        // The decision on `;` in vim insert: CLASSIC-VERBATIM. The engine's
+        // own shape gate decides — an abbreviation-shaped token expands, prose
+        // does not. No extra vim-specific gating.
+        app.onKey({ name: 'escape' });
+        app.onKey({ name: 'o' }); // open a line below, insert mode
+        for (const ch of 'm10') app.onKey({ name: 'char', char: ch });
+        app.onKey({ name: 'char', char: ';' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c5') === 'p {}\ndisplay: flex;\nmargin: 10px;\n', { timeout: 4000 }),
+          'an abbreviation-shaped token before `;` expands in vim insert too',
+        );
+
+        // Prose `;`: typed literally — `zz;` is not abbreviation-shaped and
+        // expandAt answers null for it (pinned at the engine; here end to end).
+        app.onKey({ name: 'escape' });
+        app.onKey({ name: 'o' });
+        for (const ch of 'zz') app.onKey({ name: 'char', char: ch });
+        app.onKey({ name: 'char', char: ';' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c5') === 'p {}\ndisplay: flex;\nmargin: 10px;\nzz;\n', { timeout: 4000 }),
+          'prose before `;` types the semicolon instead of expanding',
+        );
+      } finally {
+        delete settings.data.editor.vimMode;
+        app.inst.unmount();
+      }
+    });
+
+    await t.test('P1-11c: Tab under a multi-cursor set indents every row as one undo step', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l1', challengeId: 'c1' });
+        assert.ok(await waitFor(() => app.frame().includes('<h1')), 'the starter painted');
+
+        // Three NON-BLANK rows (the engine's indent skips blank rows by
+        // design — no phantom indents), then three cursors via the PC-11
+        // construction (Enter inserts the newline BEFORE the caret's text).
+        app.onKey({ name: 'char', char: 'X' });
+        app.onKey({ name: 'return' });
+        app.onKey({ name: 'char', char: 'Y' });
+        app.onKey({ name: 'return' });
+        app.onKey({ name: 'char', char: 'Z' });
+        assert.ok(await waitFor(() => savedCode(services, 'm1.l1.c1') === 'X\nY\nZ<h1', { timeout: 4000 }), 'three rows built');
+        app.onKey({ name: 'ctrl-alt-up' });
+        app.onKey({ name: 'ctrl-alt-up' });
+        await new Promise((r) => setTimeout(r, 80));
+
+        // Tab: NOT an emmet expansion, NOT a no-op — every cursor's row
+        // indents in the same committed transaction.
+        app.onKey({ name: 'tab' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l1.c1') === '  X\n  Y\n  Z<h1', { timeout: 4000 }),
+          'Tab indented every cursor row at once',
+        );
+
+        // The set survived, normalised to the shifted columns: each cursor sat
+        // AFTER its row's typed char (col 1 → col 3 post-indent), so one char
+        // still lands on every row — appended after the char.
+        app.onKey({ name: 'char', char: 'W' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l1.c1') === '  XW\n  YW\n  ZW<h1', { timeout: 4000 }),
+          'the multi set is intact after the indent (columns shifted by the indent)',
+        );
+      } finally {
         app.inst.unmount();
       }
     });

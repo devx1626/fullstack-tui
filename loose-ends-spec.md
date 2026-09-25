@@ -572,6 +572,34 @@ item 4 is a docs edit. Size: one sitting.
   keymap docs), the vim-insert decision pinned by a test, docs updated, `npm run test:unit`
   + `npm run check` green.
 
+**Status (2026-09-25, CLOSED).** All four boundaries decided and pinned in
+`tests/unit/routes.test.js` (subtests P1-11a/b/c):
+
+1. **Stop-walk outranks everything.** The snippet-stop block moved ABOVE the emmet branch
+   in `applyKey` (it previously sat below — an armed walk could be stolen and cleared).
+   P1-11a replays it end-to-end with the `forof` JS snippet (four stops): Tab accepts →
+   three walk Tabs move only the caret → the exhausted Tab finally indents. (`qsel` was
+   unusable: bare `q` is a global quit binding that eats the keystroke before the editor —
+   the same constraint the PC-12 replay documented.)
+2. **`;` stays classic-verbatim.** No vim-specific gate: `expandAt`'s own shape gate
+   decides. P1-11b replays vim insert on a CSS challenge: `flex` + Tab expands
+   (`display: flex;`) with the popup live and closes it; `m10;` expands; `zz;` types
+   literally. (`flex` is the discriminator: the popup lists `flex-basis`… while the
+   abbreviation is also valid — emmet must win Tab.)
+3. **Tab under a multi set indents every row** as one undo step (the engine's existing
+   `indentAtCursors`, newly wired; cursors keep their columns, shifted by their row's
+   indent; blank rows skip — engine-by-design). P1-11c pins it, including a post-indent
+   typing batch. This replaces the former silent no-op.
+4. **Docs** — the full ladder lives in `docs/features.md` §4 ("What Tab and `;` do, per
+   mode").
+
+Test-construction notes (hard-won): the seed caret is 0:0, so typed text lands BEFORE the
+starter unless the caret is parked (`end`/`o`/`return` first); vim `o` is the only way to
+open a line (a literal `\n` char does not newline); the autosave debounces 400 ms per edit,
+so assertions must poll the store, never assume the last keystroke has landed; multi-file
+sessions need one paint-wait BEFORE `ctrl-w` (a tab switch on a null session is dropped) and
+`app.js` is TWO `ctrl-w` presses from `index.html`.
+
 ### P1-12 · Ignored-key feedback (Q12) on the Ink UI
 
 **Finding (post-flip).** The classic UI answered an unhandled key with the visible bell

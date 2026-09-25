@@ -69,7 +69,9 @@ import {
   clearCursors,
   createCursorSet,
   cursorCount,
+  cursorSetForEdit,
   deleteAtCursors,
+  indentAtCursors,
   insertAtCursors,
   normaliseCursors,
   primaryCursor,
@@ -527,9 +529,8 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   // flush it instead of dropping it (see below).
   const pendingSave = useRef(null);
   useEffect(() => {
-    if (!session || !challengeKey || !services?.store?.saveDraft) return undefined;
-    const write = () => {
-      const texts = sessionTexts(session);
+    if (!session || !challengeKey || !services?.store?.saveDraft) return undefined;      const write = () => {
+        const texts = sessionTexts(session);
       const starters = target?.challenge?.files
         ? target.challenge.files
         : { [session.active]: target?.challenge?.starter ?? '' };
@@ -603,6 +604,17 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     const name = session.active;
     const doc = sessionDoc(session, name);
 
+    // Snippet tab stops outrank emmet: an armed stop-walk means an accepted
+    // snippet is being edited, and Tab belongs to it while it lives (P1-11
+    // boundary 1). Without this order, the emmet branch below would expand an
+    // abbreviation-shaped token at a stop position and clear the walk.
+    if (ev && ev.name === 'tab' && stopsRef.current) {
+      const { stops, index } = stopsRef.current;
+      const at = Math.min(index + 1, stops.length - 1);
+      setSession(commit(session, session.active, moveCaret(sessionDoc(session), stops[at]), { history: false }));
+      stopsRef.current = at >= stops.length - 1 ? null : { stops, index: at };
+      return true;
+    }
     // Emmet (classic parity): Tab expands a markup/CSS abbreviation, `;`
     // completes a CSS shorthand (`m10` → `margin: 10px;`). It outranks the
     // completion popup on Tab, exactly like the classic key path ("Tab with a
@@ -630,15 +642,8 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     // falls through, which is what lets typing refilter the list.
     if (popupHandles(ev)) return true;
 
-    // Snippet tab stops: Tab walks an accepted snippet's placeholders, then
-    // releases the key back to the screen.
-    if (ev && ev.name === 'tab' && stopsRef.current) {
-      const { stops, index } = stopsRef.current;
-      const at = Math.min(index + 1, stops.length - 1);
-      setSession(commit(session, session.active, moveCaret(sessionDoc(session), stops[at]), { history: false }));
-      stopsRef.current = at >= stops.length - 1 ? null : { stops, index: at };
-      return true;
-    }
+    // Snippet tab stops live ABOVE the emmet branch (see the note at the top
+    // of the key path).
 
     // PC-11: multi-cursor editing. Keyed on the CURSOR SET (not a key): the
     // add/remove bindings live in the command executor below, and while more
@@ -667,6 +672,34 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       }
       if (ev && (ev.name === 'return' || ev.name === 'enter')) {
         return finishMulti(insertAtCursors(doc, set, '\n'), 'newline');
+      }
+      // P1-11 boundary 3: Tab under a multi set indents EVERY cursor's row in
+      // the same transaction (the engine's per-row indent), not a no-op and
+      // not an emmet expansion. Shift-Tab has no registry binding here, so
+      // outdent stays engine-only for now. Blank rows are skipped by the
+      // engine (no phantom indents); each surviving cursor keeps its column,
+      // shifted by the indent its row received.
+      if (ev && ev.name === 'tab') {
+        const res = indentAtCursors(doc, set, { tabSize: session.tabSize });
+        if (!res.changes.length) return true; // nothing to indent — consumed, no-op
+        const indentByRow = new Map(res.rows.map((row) => [row, Math.max(1, session.tabSize)]));
+        // cursorSetForEdit returns a plain ARRAY of collapsed positions.
+        const list = cursorSetForEdit(set, doc);
+        const primPos = primaryCursor(set);
+        const primAfter = indentByRow.has(primPos.row)
+          ? pos(primPos.row, primPos.col + indentByRow.get(primPos.row))
+          : primPos;
+        const moved = list.map((p) => {
+          const by = indentByRow.get(p.row);
+          return by ? pos(p.row, p.col + by) : p;
+        });
+        const applied = applyEdit(doc, res.changes, primAfter);
+        const nextSession = commit(session, name, applied.doc, { coalesce: false, label: 'indent' });
+        // wanted = primAfter, so normaliseCursors re-indexes the primary onto it.
+        setCursors(normaliseCursors({ cursors: moved, primary: 0 }, applied.doc, primAfter));
+        if (selection) setSelection(null);
+        setSession(nextSession);
+        return true;
       }
       if (ev && ['left', 'right', 'up', 'down', 'home', 'end'].includes(ev.name)) {
         const p = moveArrow(doc, ev.name);
