@@ -17,6 +17,14 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { Palette } from '../components/palette.jsx';
 import { commandsForScreen, mergeKeymap, displayBinding } from '../commands.js';
+
+/**
+ * Registered commands hidden from the palette. `browser.screenshot` (P0-3)
+ * is gated on the terminal's graphics protocol and an env opt-in — the M1
+ * action degrades to guidance when invoked unprepared, but the palette list
+ * should not advertise an action the session cannot render.
+ */
+const PALETTE_EXCLUDED = new Set(['browser.screenshot']);
 import { clampSelected } from '../fuzzy.js';
 import { useTheme, useIcons } from '../theme/context.jsx';
 
@@ -72,6 +80,7 @@ export function buildPaletteItems({ screen = null, curriculum = [], screens = []
   const items = [];
 
   for (const cmd of commandsForScreen(screen)) {
+    if (PALETTE_EXCLUDED.has(cmd.id)) continue;
     const binding = map.get(cmd.id);
     items.push({
       id: itemIdForCommand(cmd.id),

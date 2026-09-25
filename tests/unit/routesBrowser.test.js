@@ -191,6 +191,31 @@ test('browser route: C-b, live re-render, inspect, jump handoff, console', async
       assert.ok(app.frame().includes('no mockFetch'), 'this challenge has no table; it says so');
     });
 
+    await t.test('browser.screenshot: palette-dispatched, gated, guidance lands in the footer (P0-3)', async () => {
+      // Still on the browser screen. Services carry NO graphicsProbe and the
+      // test env does not opt in — the action must answer with guidance, not
+      // an image, and the playwright-adjacent modules must stay unimported.
+      delete process.env.FULLSTACK_SCREENSHOT;
+      harness.dispatchToScreen('browser.screenshot', { type: 'command', source: 'palette' });
+      assert.ok(
+        await waitFor(() => app.frame().includes('FULLSTACK_SCREENSHOT=playwright')),
+        'the disabled branch shows the opt-in hint in the footer notice',
+      );
+
+      // Opt in but keep the terminal protocol empty (no probe, no env): the
+      // no-protocol branch answers next.
+      process.env.FULLSTACK_SCREENSHOT = 'playwright';
+      try {
+        harness.dispatchToScreen('browser.screenshot', { type: 'command', source: 'palette' });
+        assert.ok(
+          await waitFor(() => app.frame().includes('no inline-image protocol')),
+          'the no-protocol branch shows terminal guidance',
+        );
+      } finally {
+        delete process.env.FULLSTACK_SCREENSHOT;
+      }
+    });
+
     app.onKey({ name: 'escape' });
     assert.ok(await waitFor(() => app.screen() === 'challenge'), 'Esc returns to the editor');
     app.inst.unmount();

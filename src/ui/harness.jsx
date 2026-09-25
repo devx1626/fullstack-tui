@@ -62,6 +62,8 @@ export { SettingsScreen, settingsLines, settingsLayout, rowMarker } from './scre
 export { TourScreen, tourSteps, tourReducer, SANDBOX_SAMPLE } from './screens/tour.jsx';
 export { eventParts } from './commands.js';
 export { cursorShape } from './multimedia.js';
+export { screenshotEnvEnabled, screenshotProtocol, screenshotAvailability, runScreenshotAction } from './screenshotAction.js';
+export { setPlaywrightLoader, isPlaywrightAvailable } from './screenshot.js';
 export { Text, Box } from 'ink';
 
 /** createElement shorthand for tests (children variadic). */

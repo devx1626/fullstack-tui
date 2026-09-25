@@ -44,6 +44,7 @@ import {
   TAB_HINTS,
 } from './screens/browserModel.js';
 import { BrowserScreen } from './screens/browser.jsx';
+import { runScreenshotAction } from './screenshotAction.js';
 /** The live re-render cadence (spec §14 Phase 3: debounced ~300 ms). */
 export const LIVE_POLL_MS = 300;
 
@@ -248,6 +249,27 @@ export function BrowserRoute({ moduleId, lessonId, challengeId }) {
     return () => resetConsoleSession();
   }, [challengeKey]);
 
+  // ---- M1 screenshot action (P0-3, docs/multimedia.md §3) -------------------
+  // Gated by the action module (env opt-in + graphics protocol + lazy
+  // Playwright); every failure mode degrades to a footer-notice line, exactly
+  // like the other shell-outs on this route. The rendered image goes straight
+  // to stdout as the terminal's inline-image escape — never through ink's
+  // frame, which is text-only.
+  const runScreenshot = useCallback(() => {
+    if (!parts) return;
+    setNotice('Rendering screenshot…');
+    runScreenshotAction(parts, services && services.graphicsProbe)
+      .then((res) => {
+        if (res.kind === 'rendered') {
+          process.stdout.write(res.image);
+          setNotice('Screenshot emitted to the terminal.');
+        } else {
+          setNotice((res.lines || ['Screenshot failed.']).join(' '));
+        }
+      })
+      .catch((err) => setNotice(`Screenshot failed: ${err && err.message ? err.message : err}`));
+  }, [parts, services]);
+
   // ---- pane rows ------------------------------------------------------------
   const bodyH = Math.max(1, height - 4);
   const paneRows = useMemo(() => {
@@ -347,6 +369,9 @@ export function BrowserRoute({ moduleId, lessonId, challengeId }) {
         if (next) setSession((s) => ({ ...s, tab: next, scroll: 0, follow: true }));
         return;
       }
+      case 'browser.screenshot':
+        runScreenshot();
+        return;
       case 'browser.consoleRun':
         if (now.tab === 'console') runConsole();
         else jumpToTreeRow(clampElement(page, now.elementIndex));

@@ -4,7 +4,7 @@
 `src/ui/commands.js` — do not edit by hand. `npm run check` fails when this
 file drifts from the registry; regenerate with `npm run keymap:docs`.*
 
-77 commands. User overrides live in `.data/keymap.json` and are
+78 commands. User overrides live in `.data/keymap.json` and are
 merged over these defaults; unknown ids are reported, never fatal. `Screen`
 shows where a binding applies (`any` = global).
 
@@ -117,3 +117,4 @@ shows where a binding applies (`any` = global).
 | `browser.consoleClearInput` | `<C-u>` | `browser` | Clear console input line |
 | `browser.consoleClear` | `<C-l>` | `browser` | Clear console output |
 | `browser.selfInput` | — *(palette only)* | `browser` | Type in the console |
+| `browser.screenshot` | — *(palette only)* | `browser` | Screenshot the rendered page |

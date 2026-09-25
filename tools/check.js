@@ -1573,10 +1573,11 @@ try {
 process.stdout.write('\n10. dead exports (task 2.12)\n');
 try {
   const SWEEP_DIRS = ['src/editor', 'src/ui'];
-  /** Documented seams: exported on purpose, wired when their feature lands. */
-  const DOCUMENTED_SEAMS = {
-    probeGraphicsTTY: 'docs/multimedia.md — M1 graphics probe, invoked when the screenshot feature is wired',
-  };
+  /** Documented seams: exported on purpose, wired when their feature lands.
+   *  EMPTY since P0-3 wired the M1 screenshot seam (PC-05): probeGraphicsTTY
+   *  is invoked from main.jsx's boot, and every graphicsProbe.js/screenshot.js
+   *  export has a real caller (screenshotAction.js). A new seam goes here. */
+  const DOCUMENTED_SEAMS = {};
   const exts = /\.(js|jsx|mjs|cjs|json|md)$/;
   const walk = (dir, out = []) => {
     for (const entry of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {

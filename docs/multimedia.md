@@ -88,13 +88,26 @@ and make the timeout path the default-assume-nothing path.
 
 ## 6. Implementation status
 
-The M0 byte builders are live in the classic UI (`src/ui/multimedia.js`: OSC 8 links,
-BEL, notification, DECSCUSR cursor shapes). The M1 pieces are **written and unit-tested but
-not yet invoked from the app**: `src/ui/graphicsProbe.js` (env + `probeGraphics`/`probeGraphicsTTY`)
-and `src/ui/screenshot.js` (lazy Playwright PNG builder) are only referenced by their own
-tests. Nothing calls the probe at startup yet, so `capabilities.js` still has no `graphics`
-field. Wiring is deliberately deferred to the browser Render-tab port, where the inline
-preview has something to draw into — until then the modules are inert, not a wiring bug.
+The M0 byte builders are live in the next UI (`src/ui/multimedia.js`: OSC 8 links,
+BEL, notification, DECSCUSR cursor shapes). **M1 is wired (P0-3, 2026-09-25):**
+
+- `browser.screenshot` (palette-only, Ctrl+K on the browser screen) runs the
+  gating ladder in `src/ui/screenshotAction.js`: `FULLSTACK_SCREENSHOT=playwright`
+  opt-in → inline-image protocol (the boot-time probe when one ran, else the env
+  heuristic) → lazy Playwright with guidance (`npm i -D playwright && npx
+  playwright install chromium`) when it is missing. Every failure mode lands in
+  the browser footer as a guidance line; nothing throws.
+- The authoritative probe (`probeGraphicsTTY`) runs once at boot in `main.jsx`,
+  before the input dispatcher claims raw stdin — per §4, using its own stdin
+  listener with the env heuristics (`graphicsFromEnv`) as the fallback when the
+  probe cannot run (CI, non-TTY, `NO_COLOR`). The result rides on services as
+  `graphicsProbe`; a probed result outranks env guesses.
+- The rendered image is written straight to stdout as the terminal's
+  inline-image escape (`kittyImage`/`iterm2Image`), never through ink's text
+  frame. Playwright stays out of the bundle graph (esbuild `external`), so the
+  zero-dependency install is untouched until the user opts in.
+- `check` §10's documented-seam allowlist is empty — the modules are live code
+  with real callers (PC-05).
 
 ## 7. Recommendation
 

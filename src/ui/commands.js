@@ -83,6 +83,11 @@ export const COMMANDS = [
   // them into typing; other panes hand them back to the global table via
   // host.run so nothing else changes.
   { id: 'browser.selfInput', title: 'Type in the console', screen: 'browser', keys: { default: [] }, run: 'browser.selfInput' },
+  // M1 screenshot action (P0-3): palette-only — the footer row shows hints,
+  // not a key, so unbound is correct; run through the palette (Ctrl+K) or
+  // `host.run('browser.screenshot')`. Hidden from the palette entirely when
+  // the gating ladder says the terminal can't render it.
+  { id: 'browser.screenshot', title: 'Screenshot the rendered page', screen: 'browser', keys: { default: [] }, run: 'browser.screenshot' },
 
   // Global
   { id: 'app.quit', title: 'Quit', screen: null, keys: { default: ['<C-c>', 'q'] }, run: 'quit' },

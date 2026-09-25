@@ -13,13 +13,20 @@ import { firstUnpassed } from '../core/targets.js';
 const ServicesContext = createContext(null);
 
 /** The non-React services screens need. Plain object, no methods that render. */
-export function createServices({ store, curriculum, settings, overall, lessonIndex }) {
+export function createServices({ store, curriculum, settings, overall, lessonIndex, graphicsProbe }) {
   return {
     store,
     curriculum,
     settings,
     overall,
     lessonIndex: lessonIndex || [],
+    /**
+     * P0-3 (M1): the boot-time graphics probe result ({ kitty, sixel,
+     * iterm2, protocol, probed }) or the { probed: false } env fallback.
+     * Read by the browser route's screenshot gating; null in tests that
+     * construct services without it.
+     */
+    graphicsProbe: graphicsProbe || null,
     /**
      * Q13 session accounting, shared with main.jsx's quit path (the Ink
      * counterpart of the classic app's sessionPassed/sessionFailures).

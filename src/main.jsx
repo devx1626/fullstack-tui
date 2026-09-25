@@ -12,6 +12,7 @@ import { render, Text, Box } from 'ink';
 import { detectCapabilities } from './ui/capabilities.js';
 import { themeForCapabilities } from './ui/theme/index.js';
 import { AltScreen } from './ui/altScreen.jsx';
+import { probeGraphicsTTY } from './ui/graphicsProbe.js';
 import { InputDispatcher } from './ui/input/dispatcher.js';
 import { getCurrentRoute } from './ui/useKeymap.js';
 import { AppRoot } from './ui/AppRoot.jsx';
@@ -66,7 +67,7 @@ function ChromeFrame({ theme, tier, input }) {
   );
 }
 
-export function main() {
+export async function main() {
   const caps = detectCapabilities();
   const theme = themeForCapabilities(caps, process.env.FULLSTACK_THEME);
 
@@ -75,6 +76,14 @@ export function main() {
     render(<ChromeFrame theme={theme} tier={caps.tier} input="none (pipe)" />, { patchConsole: false });
     return;
   }
+
+  // P0-3 (M1): the authoritative graphics probe runs HERE, before the
+  // dispatcher claims raw stdin (docs/multimedia.md §4 — "probe, don't
+  // guess"). The result rides on services; the browser route's screenshot
+  // action trusts it over env heuristics. Never runs under CI / non-TTY
+  // (the early return above; probeGraphicsTTY guards too), and a probe
+  // failure degrades to the env heuristic rather than blocking boot.
+  const graphicsProbe = await probeGraphicsTTY().catch(() => ({ probed: false }));
 
   // Singletons shared with the classic app (same files, same schema).
   const store = new Store();
@@ -85,6 +94,7 @@ export function main() {
     settings,
     overall: totals(),
     lessonIndex: allLessons(),
+    graphicsProbe,
   });
 
   // Ctrl+C is ours (E4 fix): exitOnCtrlC would unmount Ink's tree but leave
