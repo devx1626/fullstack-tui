@@ -180,7 +180,7 @@ flip.
    | PC-02 | Tier C/D emit no color SGR; `FULLSTACK_THEME=paper` reaches a screen | `npm run check` (§9 asserts both; fails on regressions) | ✅ |
    | PC-03 | Degrade tour: glyphs, meters, borders, 7-bit tier D, motion gate hold | `npm run check` (§9 verification tour) | ✅ |
    | PC-04 | Small/degenerate sizes render — the NEXT-UI equivalent of the classic size sweep (built 2026-09-23: check §9c sweeps 11 routes × 60×16/A, 40×12/A, 40×12/D = 33 frames, non-throw + non-blank + a 7-bit assertion on chrome routes at tiny tier D) | `npm run check` (§9c prints `small-size sweep: 11 routes × 3 window shapes rendered without throwing`) | ✅ |
-   | PC-05 | No dead exports / orphan modules, allowlist EMPTY after P0-3 wires the M1 seam | `npm run check` (§10; remove the `probeGraphicsTTY` entry) | ⬜ |
+   | PC-05 | No dead exports / orphan modules, allowlist EMPTY after P0-3 wires the M1 seam | `npm run check` (§10; remove the `probeGraphicsTTY` entry) — done 2026-09-25: `browser.screenshot` wired per P0-3 (env + boot-probe gating, lazy Playwright, guidance), §10 scans 76 files with an EMPTY allowlist, unit-tested (screenshotAction.test.js + a route-level palette-dispatch test) | ✅ |
    | PC-06 | Piped non-TTY stdin/stdout: one-shot static render, exit 0 | `npm run build && FULLSTACK_UI=next node bin/fullstack.js \| head -5; echo exit=$?` (re-run post-flip without the env) | ✅ |
 
    **B. Keys & commands**
@@ -229,15 +229,18 @@ flip.
 
    | ID | Requirement | Verification command | Status |
    |---|---|---|---|
-   | PC-29 | `bin/fullstack.js` loads `dist/main.js` directly; missing-build message kept; `FULLSTACK_UI` handling gone; `FULLSTACK_THEME`/`FULLSTACK_ICONS`/`EDITOR`/`VISUAL` envs stay | review + `npm run build && node bin/fullstack.js \| head -3` (piped one-shot) | ⬜ |
-   | PC-30 | `package.json`: `ui:next` script removed, description/keywords updated, deps unchanged | `git diff package.json` review + `npm start` pty smoke | ⬜ |
-   | PC-31 | Deleted: `src/tui/`, `src/views/`, `src/app.js`, `src/index.js` — zero references remain | `git grep -nE "src/(tui\|views)\|src/app\.js\|src/index\.js" -- src bin tests tools` → empty | ⬜ |
-   | PC-32 | Classic-only tests deleted (`editor.test.js` classic model, `canvasLinks.test.js`); check §6/§8 classic replay sections removed with every Q-item they covered asserted green on Ink equivalents (`routes.test.js`, `milestoneToasts.test.js`, `checkNotes.test.js`, `recap.test.js`) | `npm run test:unit` + `npm run check` | ⬜ |
-   | PC-33 | README flip minimum in the same commit: `npm start` = Ink, `FULLSTACK_UI` note, scripts table, status section | review + `npm run keymap:docs && git diff --exit-code docs/` | ⬜ |
+   | PC-29 | `bin/fullstack.js` loads `dist/main.js` directly; missing-build message kept; `FULLSTACK_UI` handling gone; `FULLSTACK_THEME`/`FULLSTACK_ICONS`/`EDITOR`/`VISUAL` envs stay | review + `npm run build && node bin/fullstack.js \| head -3` (piped one-shot) — verified on the flip commit: one-shot static frame, exit 0; the side doors (`--list/--verify/--reset/--help`) moved into the bin script so they need no build | ✅ |
+   | PC-30 | `package.json`: `ui:next` script removed, description/keywords updated, deps unchanged | `git diff package.json` review + `npm start` pty smoke — verified: alt-screen engaged + welcome frame painted under script(1); deps unchanged | ✅ |
+   | PC-31 | Deleted: `src/tui/`, `src/views/`, `src/app.js`, `src/index.js` — zero references remain | `git grep -nE "src/(tui\|views)\|src/app\.js\|src/index\.js" -- src bin tests tools` → only provenance comments and curriculum exercise strings (`touch src/app.js` in the git lesson); the one real consumer (`withTerminalReleased`) re-homed to `src/ui/terminalShell.js` | ✅ |
+   | PC-32 | Classic-only tests deleted (`editor.test.js` classic model, `canvasLinks.test.js`); check §6/§8 classic replay sections removed with every Q-item they covered asserted green on Ink equivalents (`routes.test.js`, `milestoneToasts.test.js`, `checkNotes.test.js`, `recap.test.js`) | `npm run test:unit` + `npm run check` — green on the flip tree (843 pass / 0 fail / 1 skip; the classic source-read replays in nextScreens/milestoneToasts removed with the classic, their Ink counterparts intact) | ✅ |
+   | PC-33 | README flip minimum in the same commit: `npm start` = Ink, `FULLSTACK_UI` note, scripts table, status section | review + `npm run keymap:docs && git diff --exit-code docs/` — clean; content untouched (`npm run verify`: 125 challenges, 823 checks, all reference solutions pass) | ✅ |
 
-   **Tally & gate rule.** As of 2026-09-25 (post-PC-22, pre-flip): **27 rows verified green** (✅), **6
-   rows carry work** (⬜) — the 5 build-test rows and PC-22 are done; what remains is
-   the flip-mechanics rows (PC-29–PC-33, PC-05's allowlist edit). **The flip commit is permitted only when every row in
+   **Tally & gate rule.** As of 2026-09-25 (post-flip, commit `7e79fdf`): **33 rows verified green** (✅),
+   **0 rows carry work** — the parity checklist is complete. Section F was executed as the
+   flip commit itself (PC-29–PC-33 verified on that tree, per the rule below), with PC-05
+   (P0-3 M1 seam) and PC-22 (E4 repro re-run) closed pre-flip. Post-flip gates stay
+   identical: the §13 merge bar, check §10 with an empty allowlist, and the floor-relative
+   perf gates from P0-1. **The flip commit is permitted only when every row in
    sections A–E reads ✅ and section F is executed as the commit itself.** Rows are ticked by
    running the command cell on the flip-candidate tree, never from memory.
 2. **Flip commit (big-bang, one commit):**
