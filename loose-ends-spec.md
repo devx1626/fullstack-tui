@@ -1,6 +1,7 @@
 # Loose Ends — Audit, Backlog & Execution Plan
 
-**Status:** spec — no work started
+**Status:** post-flip (2026-09-25) — P0 complete (CI green, the flip landed as
+commit `7e79fdf`, parity 33/33); P1 items are the live backlog below; P2 stays deferred
 **Date:** 2026-09-23
 **Supersedes:** nothing; complements `tui-overhaul-spec.md` (overhaul) and `errors-and-qol-spec.md` (errors & QoL)
 **Arbiter:** `npm run build && npm test && npm run test:unit` (the §13 merge bar), plus `tests/unit/*.test.js` per item
@@ -62,6 +63,8 @@ The loose ends fall into six clusters:
    quality have never been systematically reviewed against the learner experience.
 5. **Docs:** README describes the pre-flip world; features.md is part inventory, part
    changelog; CONTRIBUTING still points at a fixed workflow that the flip will change.
+   *(2026-09-25, post-flip: the README minimum is done and `docs/changelog.md` is started —
+   the rest of this cluster is P1-4.)*
 6. **Polish:** quiet chrome refinement, gentle micro-motion within degrade rules, and the
    motivation systems (goal, recap, milestones) finished and extended.
 
@@ -414,6 +417,11 @@ entries. features.md is part inventory, part changelog (dated progress notes int
 feature truth). CONTRIBUTING describes a workflow the flip changes (env var entry, deleted
 files). The specs themselves are honest but enormous; they're history documents now.
 
+> **Status (2026-09-25).** The flip-commit README minimum is landed, and `docs/changelog.md`
+> is started (the flip is its first entry, per deliverable 2 below). Remaining: the full
+> README rewrite pass, the features.md notes fold-in, the CONTRIBUTING refresh, and the
+> spec status notes.
+
 **Recommendation.** Four deliverables, sequenced around the flip:
 1. **README rewrite** (flip-forced minimum lands in the flip commit; the full rewrite as its
    own item): post-flip entry points, scripts, key table, features highlights, status section
@@ -526,6 +534,65 @@ vim engine; `relativeNumbers` stays reserved (decision 11).
 **Recommendation.** `%` goes live with the vim engine now present (vim.js is the mode gate;
 modeless keeps the palette-only behavior as documented). Verify in the vim acceptance table
 (`%` motions are table-covered); extend docs/vim.md via the generator.
+
+### P1-11 · Emmet × editor-mode interaction edge cases
+
+**Finding (post-flip).** The Emmet port (commit `f30f92f`, flip-blocker fix) wired
+`expandAt` into the challenge route's key path: Tab expands a markup/CSS abbreviation, `;`
+completes a CSS shorthand — fired only where text keys edit the buffer (vim insert or the
+modeless path), before the completion popup on Tab (classic precedence), with the no-abbreviation
+Tab falling through to a two-space indent. The route-level replay covers the modeless paths
+and one normal-mode gate. What is NOT yet pinned — and worth pinning or deciding, now that
+classic is gone and this is the only behavior:
+
+1. **Insert-mode Tab vs snippet tab stops vs completion accept vs emmet** — four Tab
+   consumers now share one key with a precedence order (snippet stops > emmet > popup >
+   indent). Each pair boundary needs one replay assertion: an accepted snippet whose next
+   tab stop sits where an abbreviation would match (emmet must NOT steal the stop-walk),
+   and a popup open with a valid abbreviation under the caret (emmet WINS, popup stays
+   open but stale — verify the `setPopup(null)` clears it).
+2. **Vim insert-mode `;`** — the CSS shorthand fires in insert mode by design (text key),
+   but a vim user typing prose containing `;` in a CSS file gets an expansion they may not
+   expect. Decide: require an abbreviation-shaped token immediately before the caret
+   (`emmetContext`-style gate) or accept the classic behavior verbatim. Pin the decision
+   with a vim-insert replay in a CSS challenge.
+3. **Multi-cursor + emmet** — the hook is gated on `cursorCount <= 1`; a Tab under a multi
+   set currently falls through to the multi path (no indent, no expansion). Decide whether
+   that is the contract (documented no-op) or whether Tab should indent at every cursor.
+4. **`docs/keymap.md`** — the generator lists commands, not key behaviors; the Tab/`;`
+   editor behaviors are documented only in README. Add an editor-behavior note (or a
+   features.md section) so the documentation has one place that explains what Tab and `;`
+   do per mode.
+
+**Recommendation.** Items 1-3 are small route-level replays (routes.test.js, reusing the
+c5 CSS + c2 markup fixtures) plus at most one gating predicate change in `maybeEmmet`;
+item 4 is a docs edit. Size: one sitting.
+
+- Acceptance: the four boundary replays green (or the multi-cursor no-op documented in
+  keymap docs), the vim-insert decision pinned by a test, docs updated, `npm run test:unit`
+  + `npm run check` green.
+
+### P1-12 · Ignored-key feedback (Q12) on the Ink UI
+
+**Finding (post-flip).** The classic UI answered an unhandled key with the visible bell
+(`visibleBell()` — a status-line note naming the key and the way out, Q12's contract,
+asserted by check §8 until the flip removed the classic replay). The Ink UI drops keys that
+no command, overlay, or the editor's raw handler claims: the dispatcher's global pass runs
+`dispatchGlobal`, which handles its table and **silently ignores** the rest. The parity
+checklist (PC-21 and friends) never covered it — a real parity gap found after the flip.
+
+**Recommendation.** Mirror the classic contract at the Ink global layer: in `host.jsx`'s
+`dispatchGlobal` (or the dispatcher's fallthrough), a key that resolves to nothing and is
+not a typing surface's input shows the one-line note — `'<z>' does nothing here — '?'
+lists the keys` — via the existing status line (`host.say(…, 'muted')`). The classic fired
+per keypress with no suppressor; add a same-key repeat suppressor (~1s) so a held key
+cannot spam re-renders — an improvement over parity, in the spirit of the quiet tone.
+Escape hatches stay exempt: `?` itself, keys on typing surfaces (the editor, the console pane,
+the palette), and keys an overlay declined on purpose (that is the overlay contract).
+- Acceptance: route-level replay — an ignored key on a scroll screen shows the note once
+  (and not twice for a burst), typing surfaces stay silent, `?` still opens help; check
+  §7's registry lint unchanged; the Q12 row of errors-and-qol-spec updated to point at the
+  Ink implementation.
 
 ---
 
