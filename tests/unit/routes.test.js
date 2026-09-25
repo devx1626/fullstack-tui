@@ -53,6 +53,9 @@ const CURRICULUM = [
       { id: 'm1.l2', title: 'Lists', minutes: 12, challenges: [
         { id: 'c3', title: 'A list', prompt: 'Make a list.', lang: 'html', starter: '', hints: ['ul + li'], checks: [{ kind: 'src', label: 'has a list', re: '<ul' }], difficulty: 'easy', minutes: 6 },
         { id: 'c4', title: 'Two files', prompt: 'Markup plus styles.', lang: 'html', files: { 'index.html': '<p>hi</p>\n', 'style.css': 'p {}\n' }, hints: [], checks: [], difficulty: 'easy', minutes: 6 },
+        // c5: a single-file CSS challenge so the emmet shorthand path (`m10` +
+        // `;` → `margin: 10px;`) is drivable through the real route.
+        { id: 'c5', title: 'Box model', prompt: 'Style it.', lang: 'css', starter: 'p {}\n', hints: [], checks: [], difficulty: 'easy', minutes: 4 },
       ] },
     ],
     project: { id: 'm1.p', title: 'Portfolio page', minutes: 45, checks: [{ id: 'k1' }, { id: 'k2' }] },
@@ -688,6 +691,78 @@ test('next-UI routes + command host', async (t) => {
         );
       } finally {
         rmSync(path.join(ROOT, '.workspace', 'm1'), { recursive: true, force: true });
+        app.inst.unmount();
+      }
+    });
+
+    await t.test('challenge: emmet Tab expansion and the CSS `;` shorthand (classic parity)', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const settings = fakeSettings();
+      settings.data.editor.vimMode = false; // modeless editor: classic defaults
+      const services = servicesFor(CURRICULUM, { settings });
+      const app = mountApp(services);
+      /** The autosaved buffer for a challenge (autosave debounces at 400ms). */
+      const savedCode = (key) => {
+        const rec = services.store.challengeRecord(key);
+        return rec ? rec.lastCode : undefined;
+      };
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+
+        // -- markup: `div.card*2` + Tab expands at the caret -----------------
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l1', challengeId: 'c2' });
+        assert.ok(await waitFor(() => app.frame().includes('Second heading')), 'c2 rendered');
+        await new Promise((r) => setTimeout(r, 450)); // let the session seed (starter is empty; no text paints)
+        for (const ch of 'div.card*2') app.onKey({ name: 'char', char: ch });
+        app.onKey({ name: 'tab' });
+        const EXPANDED = '<div class="card"></div>\n<div class="card"></div>';
+        assert.ok(
+          await waitFor(() => savedCode('m1.l1.c2') === EXPANDED),
+          'Tab expanded the compound abbreviation at the caret',
+        );
+        // One undo step reverts the WHOLE expansion (coalesce: false).
+        app.onKey({ name: 'ctrl-z' });
+        assert.ok(
+          await waitFor(() => savedCode('m1.l1.c2') === 'div.card*2'),
+          'one undo step reverts the whole expansion',
+        );
+
+        // -- modeless indent fallback, then the CSS `;` shorthand -------------
+        // (vim is still off here; c5's caret starts at 0:0, so park it at EOL.)
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c5' });
+        assert.ok(await waitFor(() => app.frame().includes('Box model')), 'c5 rendered');
+        await new Promise((r) => setTimeout(r, 450));
+        app.onKey({ name: 'end' });
+        app.onKey({ name: 'tab' }); // no abbreviation at the caret → an indent
+        assert.ok(
+          await waitFor(() => savedCode('m1.l2.c5') === 'p {}  \n'),
+          'plain Tab indents by two spaces',
+        );
+        app.onKey({ name: 'return' }); // the shorthand goes on its own line
+        for (const ch of 'm10') app.onKey({ name: 'char', char: ch });
+        app.onKey({ name: 'char', char: ';' });
+        assert.ok(
+          await waitFor(() => savedCode('m1.l2.c5') === 'p {}  \nmargin: 10px;\n'),
+          'the `;` shorthand expanded (the expansion supplies the semicolon)',
+        );
+
+        // -- vim normal mode gates emmet: Tab is a motion, not an indent -----
+        app.host().go('settings');
+        assert.ok(await waitFor(() => app.screen() === 'settings'));
+        assert.equal(
+          harness.getGlobalCommandSink()('settings.vimToggle'),
+          true,
+          'vim on for the gating subtest',
+        );
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l1', challengeId: 'c2' });
+        assert.ok(await waitFor(() => app.screen() === 'challenge'));
+        await new Promise((r) => setTimeout(r, 450));
+        app.onKey({ name: 'escape' }); // normal mode
+        app.onKey({ name: 'tab' }); // normal-mode Tab: a motion, buffer untouched
+        await new Promise((r) => setTimeout(r, 500)); // an indent would have autosaved by now
+        assert.equal(savedCode('m1.l1.c2'), 'div.card*2', 'normal-mode Tab leaves the buffer alone');
+      } finally {
+        delete settings.data.editor.vimMode;
         app.inst.unmount();
       }
     });

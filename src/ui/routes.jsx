@@ -41,6 +41,8 @@ import {
   moveCaret,
   viewOf,
   offsetOf,
+  docText,
+  pos,
 } from '../editor/document.js';
 import {
   acceptItem,
@@ -54,6 +56,8 @@ import {
 } from '../editor/completions.js';
 import { createVimState, reduceKey, isVisual } from '../editor/vim.js';
 import { typeText, typeBackspace, typeDelete, typeNewline, moveArrow } from '../editor/typekeys.js';
+import { expandAt } from '../core/emmet.js';
+import { normaliseLang } from '../core/complete.js';
 import { createRegisters } from '../editor/registers.js';
 import { copySequence as clipboardSequence } from '../editor/osc52.js';
 import { clickToPos } from '../editor/viewport.js';
@@ -110,6 +114,33 @@ function langOf(name) {
     yml: 'yaml', yaml: 'yaml',
   };
   return map[ext] || 'js';
+}
+
+/** Offset → {row, col} within a raw text string (emmet spans are always in range). */
+function posInText(text, offset) {
+  const before = String(text).slice(0, Math.max(0, offset));
+  const row = (before.match(/\n/g) || []).length;
+  return pos(row, offset - before.lastIndexOf('\n') - 1);
+}
+
+/**
+ * An emmet offset result (`{ text, offset, from, to }`: text is the WHOLE new
+ * document, from/to delimit the replaced span) → an applyEdit RANGE edit.
+ * applyEdit replaces `start..end` with `text`, so the replacement is the new
+ * document minus the untouched prefix/suffix — feeding the whole document as
+ * the replacement would append it at the caret instead.
+ */
+function editFromOffsetResult(doc, res) {
+  const original = docText(doc);
+  const from = Number.isFinite(res.from) ? res.from : 0;
+  const to = Number.isFinite(res.to) ? res.to : original.length;
+  const replacement = Number.isFinite(res.from)
+    ? res.text.slice(from, res.text.length - (original.length - to))
+    : res.text;
+  return {
+    changes: [{ start: posInText(original, from), end: posInText(original, to), text: replacement }],
+    caret: posInText(res.text, res.offset),
+  };
 }
 
 /** One failing check, rendered as a numbered status line (icons: the active set). */
@@ -569,6 +600,31 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       return restoreKeyRef.current ? restoreKeyRef.current(ev) === true : true;
     }
 
+    const name = session.active;
+    const doc = sessionDoc(session, name);
+
+    // Emmet (classic parity): Tab expands a markup/CSS abbreviation, `;`
+    // completes a CSS shorthand (`m10` → `margin: 10px;`). It outranks the
+    // completion popup on Tab, exactly like the classic key path ("Tab with a
+    // live popup: expand emmet if there is an abbreviation"), and only fires
+    // where text keys edit the buffer — vim insert or the modeless path; in
+    // vim normal mode Tab stays a motion, `;` repeats f/t, and a multi-cursor
+    // set edits through its own finishMulti path. Without an abbreviation the
+    // key falls through: the popup accepts, or the modeless tail indents.
+    if ((mode === 'insert' || !vim.enabled) && cursorCount(cursorsRef.current) <= 1) {
+      const emmetRes = maybeEmmet(name, doc, ev);
+      if (emmetRes) {
+        const applied = applyEdit(doc, emmetRes.changes, emmetRes.caret);
+        const nextSession = commit(session, name, applied.doc, { coalesce: false, label: 'emmet' });
+        setPopup(null); // the expansion makes any suggestion list stale
+        stopsRef.current = null;
+        if (selection) setSelection(null);
+        setCursors(createCursorSet(sessionDoc(nextSession, name)));
+        setSession(nextSession);
+        return true;
+      }
+    }
+
     // Task 2.7: while the completion popup is open it owns ↑/↓/Tab/Enter/Esc
     // (§10.3 row 1 — overlays outrank vim and the screen). Anything it declines
     // falls through, which is what lets typing refilter the list.
@@ -583,9 +639,6 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       stopsRef.current = at >= stops.length - 1 ? null : { stops, index: at };
       return true;
     }
-
-    const name = session.active;
-    const doc = sessionDoc(session, name);
 
     // PC-11: multi-cursor editing. Keyed on the CURSOR SET (not a key): the
     // add/remove bindings live in the command executor below, and while more
@@ -713,6 +766,9 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       next = sessionUndo(session, name);
     } else if (key === 'ctrl-y' || key === 'shift-ctrl-z') {
       next = sessionRedo(session, name);
+    } else if (key === 'tab') {
+      // No emmet abbreviation (maybeEmmet already ran): Tab is an indent.
+      next = commit(session, name, applyEdit(doc, typeText(doc, '  ').changes, typeText(doc, '  ').caret).doc, { coalesce: 'typing' });
     } else {
       consumed = false; // escape, ctrl combos, F-keys … → global handlers
     }
@@ -728,6 +784,40 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     if (next !== session) setSession(next);
     return consumed;
   }, [completeFrom, copyText, popupHandles, setMode, setRegisters, setSelection, setSession, setVim]);
+
+  /**
+   * Emmet expansion for one key event (classic `tryEmmetExpand` + the `;`
+   * CSS-shorthand branch of `typeChar`). Tab tries an abbreviation at the
+   * caret; `;` in CSS simulates itself into the text first, the contract
+   * `expandAt(…, { trigger: ';' })` is tested against, so the expansion
+   * supplies the semicolon rather than duplicating it. Returns null when the
+   * key is not an emmet opportunity — the caller falls through unchanged.
+   *
+   * Defined AFTER applyKey but safe for it to call (function hoisting), and a
+   * plain function ON PURPOSE (not useCallback): ChallengeRoute early-returns
+   * above this line, so a hook here would violate the Rules of Hooks. The
+   * params-only signature captures no render-scoped state, so the identity is
+   * stable and the language comes from the doc itself (completeFrom's trick).
+   */
+  const maybeEmmet = (_name, doc, ev) => {
+    if (!ev || ev.ctrl || ev.alt || !doc) return null;
+    // expandAt speaks the raw language key ('html'/'css'); normaliseLang is
+    // only the gate for the `;` trigger (the classic path does the same).
+    const lang = doc.language || 'js';
+    if (ev.name === 'tab') {
+      const res = expandAt(lang, docText(doc), offsetOf(doc), {});
+      if (!res) return null;
+      return editFromOffsetResult(doc, res);
+    }
+    if (ev.name === 'char' && ev.char === ';' && normaliseLang(lang) === 'css') {
+      const offset = offsetOf(doc);
+      const text = docText(doc);
+      const res = expandAt(lang, text.slice(0, offset) + ';' + text.slice(offset), offset + 1, { trigger: ';' });
+      if (!res) return null;
+      return editFromOffsetResult(doc, res);
+    }
+    return null;
+  };
 
   /** Registry commands (resolved keys, palette, host) — the id decides. */
   const onCommand = useCallback(async (id, ev) => {
