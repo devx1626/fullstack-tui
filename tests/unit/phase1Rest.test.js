@@ -309,6 +309,32 @@ test('phase 1: settings, tour and pane persistence', async (t) => {
     assert.equal(reopened.paneRatio('browser', 'render', 0.42), 0.6, 'reset is per screen');
   });
 
+  // PC-26 (parity checklist): `settings.json` corrupt recovers to defaults —
+  // corruption never blocks the TUI. The route's own policy lives in
+  // Settings.load (try/catch → defaults); this pins the observable contract
+  // through a real file, exactly the way a crash or hand-edit corrupts one.
+  await t.test('a corrupt settings.json recovers to defaults and keeps working', async () => {
+    const { mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
+    const dir = path.join(TMP, 'corrupt-settings');
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'settings.json');
+    writeFileSync(file, '{"version":1,"theme":"ember",'); // truncated mid-write
+    const settings = new Settings(file);
+    assert.equal(typeof settings.data, 'object', 'loads without throwing');
+    assert.deepEqual(settings.data.palette.recent, [], 'recovered data is the defaults shape');
+    assert.equal(settings.data.theme, null, 'corruption recovers to the default (auto) theme');
+    assert.equal(settings.data.editor.vimMode, true, 'nested defaults survive the recovery');
+    // Recovery must leave the file WRITABLE: the next save replaces the corrupt
+    // bytes with valid JSON (tmp + rename, same atomicity as the happy path).
+    settings.setTheme('paper');
+    const onDisk = JSON.parse(readFileSync(file, 'utf8'));
+    assert.equal(onDisk.theme, 'paper', 'a save after recovery rewrites valid JSON');
+    // Reopening the healed file keeps the saved values (no ping-pong).
+    assert.equal(new Settings(file).data.theme, 'paper', 'the healed file loads back');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   await t.test('settings merge tolerates a hand-edited panes value', async () => {
     const { mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
     const dir = path.join(TMP, 'panes-merge');
