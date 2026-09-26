@@ -1233,6 +1233,16 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         host.run('app.back');
         return;
       }
+      case 'app.help': {
+        // `?` is a live global binding (P1-12) and this screen is a typing
+        // surface: the vim machine owns `?` in normal mode (reverse-search)
+        // and inserts it in insert mode; the modeless editor types it
+        // (`a ? b : c`). The editor's claim wins, exactly like the `app.back`
+        // gate above — help stays reachable through the palette (Ctrl+K).
+        if (ev && ev.type === 'key') applyKey(ev);
+        else host.run('app.help');
+        return;
+      }
       default:
         host.run(id);
     }

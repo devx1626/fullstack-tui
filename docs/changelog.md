@@ -54,6 +54,16 @@ Earlier history lives in the dated progress notes of `tui-overhaul-spec.md` and
   completes CSS shorthands (`m10` → `margin: 10px;`) — classic parity, before
   the flip would have silently dropped it (mode-interaction edge cases are
   tracked as P1-11).
+- **Tab/`;` precedence pinned and multi-cursor Tab indents** (P1-11): snippet
+  stops outrank emmet, emmet outranks the completion popup, `;` keeps the
+  classic shape gate, and Tab under a multi-cursor set indents every row as
+  one undo step (docs/features.md §4).
+- **Visible bell for ignored keys** (Q12/P1-12): a key nothing claims answers
+  with a muted status-line note (`'z' does nothing here — '?' lists the
+  keys`) instead of vanishing; a ~1s same-key suppressor keeps held keys from
+  spamming. Typing surfaces and `?` stay exempt, which flushed out that `?`
+  had never parsed as a binding (`parseBinding` now reads bare punctuation;
+  the editor and console claim it as input).
 
 ### Fixed
 

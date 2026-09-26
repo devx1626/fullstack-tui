@@ -66,14 +66,81 @@ export function getGlobalCommandSink() {
   return sink.handler;
 }
 
+// ---------------------------------------------------------------------------
+// Q12 visible bell (P1-12) — ignored keys answer with a status-line note
+// ---------------------------------------------------------------------------
+
+/** Registered by CommandHost so dispatchGlobal can show a status-line note. */
+const bell = { handler: null };
+
+export function setGlobalBellSink(fn) {
+  bell.handler = fn;
+}
+
+export function getGlobalBellSink() {
+  return bell.handler;
+}
+
+/** Same-key repeat suppressor window (ms). The classic bell fired per
+ *  keypress; a held key spamming re-renders is a regression, not parity. */
+const BELL_REPEAT_MS = 1000;
+
+/** Last bell: its key token and when it fired (module-level: one app). */
+let lastBell = null;
+
+/** Display token for a key event: a plain char stays quoted text; anything
+ *  else renders in the registry's binding notation (`<S-tab>`, `<C-A-up>`) so
+ *  the note names the key the user actually pressed. */
+function bellToken(ev) {
+  if (ev.name === 'char' && ev.char) return ev.char;
+  let name = ev.name || '';
+  let mods = '';
+  for (;;) {
+    if (name.startsWith('ctrl-')) { mods += 'C-'; name = name.slice(5); continue; }
+    if (name.startsWith('alt-')) { mods += 'A-'; name = name.slice(4); continue; }
+    if (name.startsWith('shift-')) { mods += 'S-'; name = name.slice(6); continue; }
+    break;
+  }
+  return mods + name;
+}
+
+/**
+ * One-line note for a key NOTHING claimed (Q12's visible bell, mirrored at
+ * the Ink global layer). The escape hatches stay exempt by structure, not by
+ * list:
+ *   - `?` resolves to `app.help` in the registry and never reaches here;
+ *   - typing surfaces (the editor, the browser console pane) claim raw keys
+ *     in the dispatcher's screen pass, before the global one;
+ *   - the dispatcher DROPS what an overlay declines — its contract, so a
+ *     declined key is by design, never a dropped-by-accident one.
+ *
+ * A ~1s same-key suppressor keeps a held key from spamming re-renders (an
+ * improvement over the classic per-keypress bell); any other key handled by
+ * the host re-arms it, so a repeated key between others still answers.
+ */
+function ringBell(ev) {
+  if (!bell.handler) return;
+  const token = bellToken(ev);
+  const now = Date.now();
+  if (lastBell && lastBell.token === token && now - lastBell.at < BELL_REPEAT_MS) return;
+  lastBell = { token, at: now };
+  const shown = token.length === 1 ? `'${token}'` : `<${token}>`;
+  bell.handler(`${shown} does nothing here — '?' lists the keys`);
+}
+
 /**
  * Route one raw key event through the registry to the sink, for keys the
- * focused screen declined. Returns true when the host consumed it.
+ * focused screen declined. Returns true when the host consumed it; a key
+ * nothing claims rings the visible bell instead of vanishing (Q12/P1-12).
  */
 export function dispatchGlobal(ev, screen) {
   if (!ev || ev.type !== 'key' || !sink.handler) return false;
   const id = resolveKey(ev, screen ?? null);
-  if (!id) return false;
+  if (!id) {
+    ringBell(ev);
+    return false;
+  }
+  lastBell = null; // a handled key re-arms the suppressor
   return sink.handler(id, ev) === true;
 }
 
@@ -116,6 +183,15 @@ export function CommandHost({ onQuit, children }) {
   const say = useCallback((message, kind = 'info') => {
     setNotice({ message, kind, id: Math.random() });
   }, []);
+
+  // The bell is the say channel for keys nothing claimed (P1-12): 'muted' —
+  // the quiet tone — so an ignored key nudges without shouting. Registered
+  // once for the host's lifetime; the sink indirection keeps dispatchGlobal
+  // (a module function) able to reach it.
+  useEffect(() => {
+    setGlobalBellSink((message) => say(message, 'muted'));
+    return () => setGlobalBellSink(null);
+  }, [say]);
 
   const go = useCallback((name, params = {}) => {
     router.push(name, params);
@@ -368,7 +444,7 @@ export function CommandHost({ onQuit, children }) {
         ) : null}
         {notice ? (
           <Box marginTop={1}>
-            <Text color={notice.kind === 'error' ? theme.bad : notice.kind === 'warn' ? theme.warn : theme.accent}>
+            <Text color={notice.kind === 'error' ? theme.bad : notice.kind === 'warn' ? theme.warn : notice.kind === 'muted' ? theme.muted : theme.accent}>
               {' '}{ic.bullet} {notice.message} {ic.bullet}
             </Text>
           </Box>

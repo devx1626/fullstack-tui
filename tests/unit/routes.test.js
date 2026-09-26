@@ -121,6 +121,8 @@ test('next-UI routes + command host', async (t) => {
               module: harness.ModuleRoute,
               lesson: harness.LessonRoute,
               challenge: harness.ChallengeRoute,
+              browser: harness.BrowserRoute,
+              help: harness.HelpRoute,
               settings: harness.SettingsRoute,
               tour: harness.TourRoute,
             },
@@ -928,6 +930,92 @@ test('next-UI routes + command host', async (t) => {
           await waitFor(() => savedCode(services, 'm1.l1.c1') === '  XW\n  YW\n  ZW<h1', { timeout: 4000 }),
           'the multi set is intact after the indent (columns shifted by the indent)',
         );
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    // ---- Q12/P1-12: the visible bell at the Ink global layer ---------------
+    // The classic UI answered a key nothing claimed with a status-line note
+    // (app.js visibleBell); the Ink dispatcher dropped it silently. The bell
+    // now rings from dispatchGlobal's fallthrough via the host's say channel.
+    await t.test('P1-12: an ignored key rings the visible bell once, `?` still opens help', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('lesson', { moduleId: 'm1', lessonId: 'm1.l1' });
+        assert.ok(await waitFor(() => app.frame().includes('Headings')), 'the lesson (a scroll screen) rendered');
+
+        // A key nothing claims falls through the route to dispatchGlobal —
+        // the same path main.jsx's dispatcher takes for unclaimed keys.
+        // Assertions read the host NOTICE (state), not the frame: ink frames
+        // are cumulative, so stream text can never prove a second ring.
+        harness.dispatchGlobal({ type: 'key', name: 'char', char: 'z' }, 'lesson');
+        await waitFor(() => app.host().notice);
+        assert.ok(app.host().notice.message.includes("'z' does nothing here — '?' lists the keys"), `the bell note names the key and the way out (${app.host().notice.message})`);
+        assert.equal(app.host().notice.kind, 'muted', 'the bell is the quiet tone');
+        const firstId = app.host().notice.id;
+        assert.ok(
+          await waitFor(() => app.frame().includes("'z' does nothing here")),
+          'the note actually renders',
+        );
+
+        // The classic bell fired per keypress; the same-key suppressor is the
+        // deliberate improvement over parity — a burst must not re-notice.
+        harness.dispatchGlobal({ type: 'key', name: 'char', char: 'z' }, 'lesson');
+        await new Promise((r) => setTimeout(r, 60));
+        assert.equal(app.host().notice.id, firstId, 'a same-key burst shows the note once');
+
+        // `?` itself stays exempt by structure: it resolves to app.help and
+        // never reaches the bell's fallthrough.
+        harness.dispatchGlobal({ type: 'key', name: 'char', char: '?' }, 'lesson');
+        assert.ok(await waitFor(() => app.screen() === 'help'), '`?` still opens help');
+        app.onKey({ name: 'escape' });
+        assert.ok(await waitFor(() => app.screen() === 'lesson'), 'back on the lesson');
+
+        // Any handled key re-arms the suppressor, so a repeat after it rings
+        // again — the suppressor limits bursts, not honest feedback.
+        harness.dispatchGlobal({ type: 'key', name: 'pageup' }, 'lesson');
+        await waitFor(() => app.host().notice && app.host().notice.id !== firstId);
+        const secondId = app.host().notice.id;
+        assert.ok(!app.host().notice.message.includes('does nothing here'), 'pageup resolves to a command, not the bell');
+        harness.dispatchGlobal({ type: 'key', name: 'char', char: 'z' }, 'lesson');
+        await waitFor(() => app.host().notice && app.host().notice.id !== secondId);
+        assert.ok(app.host().notice.message.includes("'z' does nothing here"), 'the bell rings again for a repeat after a handled key');
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    await t.test('P1-12: typing surfaces stay silent — editor and browser console claim their keys first', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const services = servicesFor(CURRICULUM);
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+
+        // The editor is a typing surface: modeless `%` edits the buffer (the
+        // Q12 modeless guarantee) and must never ring the bell.
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c3' });
+        assert.ok(await waitFor(() => app.frame().includes('A list')), 'the challenge rendered');
+        app.onKey({ name: 'char', char: '%' });
+        assert.ok(
+          await waitFor(() => services.store.challengeRecord('m1.l2.c3').lastCode === '%', { timeout: 4000 }),
+          'modeless: % typed into the buffer',
+        );
+        assert.ok(!app.frame().includes("does nothing here"), 'the editor never rings the bell');
+
+        // The browser console pane is a typing surface too: `+` types there.
+        app.onKey({ name: 'ctrl-b' });
+        assert.ok(await waitFor(() => app.screen() === 'browser'), 'the browser opened');
+        app.onKey({ name: 'char', char: '4' });
+        assert.ok(await waitFor(() => app.frame().includes('CONSOLE')), 'the console pane shows');
+        app.onKey({ name: 'char', char: '+' });
+        assert.ok(await waitFor(() => app.frame().includes('+')), 'the char typed into the console input');
+        assert.ok(!app.frame().includes("does nothing here"), 'the console pane never rings the bell');
+        assert.ok(!app.frame().includes("'+' does nothing"), 'the plus never reads as an ignored key');
       } finally {
         app.inst.unmount();
       }

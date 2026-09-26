@@ -622,6 +622,28 @@ the palette), and keys an overlay declined on purpose (that is the overlay contr
   §7's registry lint unchanged; the Q12 row of errors-and-qol-spec updated to point at the
   Ink implementation.
 
+**Status (2026-09-26, CLOSED).** The bell lives in `src/ui/host.jsx`: a bell sink beside
+the command sink (`setGlobalBellSink`, registered by CommandHost → `say(…, 'muted')`, the
+quiet tone) lets the module-level `dispatchGlobal` ring a one-line note from its `!id`
+fallthrough — `'<z>' does nothing here — '?' lists the keys` (bare chars quoted, named
+keys and modifiers in binding notation, `<S-tab>`). The exemptions hold by structure, not
+by list: `?` resolves to `app.help` before the fallthrough, the editor (`applyKey`) and
+the browser console (`touchConsole`) claim typing in the screen pass, and the dispatcher
+DROPS what an overlay declines — the overlay contract. The ~1s same-key suppressor is in
+(an improvement over the classic per-keypress bell): a burst shows the note once, any
+handled key re-arms it.
+
+Found by the replay and fixed here: `parseBinding` accepted only `[A-Za-z0-9]` as a bare
+binding, so `app.help`'s `'?'` parsed as **null** — the key had been dead in the resolver
+since the registry landed (harmless while every resolver could only offer `q`/Esc, loud
+the moment the bell's own hint named it). `parseBinding` now parses bare punctuation, and
+the typing surfaces claim `?` before the global pass the way they claim Esc: the challenge
+route hands it to the editor (vim reverse-search / modeless ternary), the browser hands it
+to `touchConsole` on the console pane. Help stays reachable from those screens via the
+palette (Ctrl+K). Replay: `tests/unit/routes.test.js` subtests P1-12a (bell once + burst,
+re-arm after a handled key, `?` opens help) and P1-12b (editor + console silent). §7 lint
+unchanged; `npm run test:unit` + `npm run check` green.
+
 ---
 
 % — the `%` item is deliberately small; it rides the vim engine that landed in Phase 2.

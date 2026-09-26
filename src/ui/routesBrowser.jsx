@@ -421,6 +421,10 @@ export function BrowserRoute({ moduleId, lessonId, challengeId }) {
         host.run('app.quit');
         return;
       case 'app.help':
+        // `?` is a live global binding (P1-12): on the console pane it is a
+        // typed char (touchConsole is the shared predicate), everywhere else
+        // it opens help like on any non-typing screen.
+        if (ev && ev.type === 'key' && touchConsole(ev)) return;
         host.run('app.help');
         return;
       case 'app.palette':

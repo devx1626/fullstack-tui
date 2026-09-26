@@ -24,7 +24,11 @@ export function parseBinding(binding) {
     pageup: 'pageup', pagedown: 'pagedown', home: 'home', end: 'end',
   };
   // Bare single character ("s", "G", "4") — case-sensitive for letters.
-  if (/^[A-Za-z0-9]$/.test(binding)) return { ctrl: false, alt: false, shift: false, key: binding };
+  // Punctuation is legal too (P1-12): `app.help` is bound to `?`, and vim's
+  // `/`+`?` searches share the notation. Until this class read punctuation,
+  // such bindings parsed as null and the resolver silently dropped them —
+  // found by the visible-bell replay, whose own hint named a dead key.
+  if (/^[A-Za-z0-9!-\/:-@\[-`{-~]$/.test(binding)) return { ctrl: false, alt: false, shift: false, key: binding };
   // NOTE: the mods group must be non-capturing INSIDE a capturing repeat —
   // `([ACAS]-)*` keeps only the LAST repetition ("<C-A-left>" → "A-", losing
   // Ctrl), which silently mis-parsed stacked-modifier overrides and conflicts.
@@ -92,6 +96,10 @@ export const COMMANDS = [
   // Global
   { id: 'app.quit', title: 'Quit', screen: null, keys: { default: ['<C-c>', 'q'] }, run: 'quit' },
   { id: 'app.back', title: 'Go back', screen: null, keys: { default: ['<Esc>'] }, run: 'pop' },
+  // `?` parses as a bare-punctuation binding (P1-12), so typing surfaces must
+  // claim it before the global pass: the vim machine owns `?` (reverse-search)
+  // and the modeless editor types it (`a ? b : c`). Help stays reachable from
+  // those screens through the palette (Ctrl+K).
   { id: 'app.help', title: 'Help manual', screen: null, keys: { default: ['?'] }, run: "push('help')" },
   { id: 'app.repaint', title: 'Repaint screen', screen: null, keys: { default: ['<C-l>'] }, run: 'repaint' },
   // Palette moved to Ctrl+K in Phase 1 (overhaul §10.4): Ctrl+P is reserved for

@@ -32,7 +32,7 @@ export { AppRoot } from './AppRoot.jsx';
 export { ThemeProvider, useTheme, ThemeContext, ThemeControlProvider, useThemeControl, ThemeControlContext,
          IconsProvider, useIcons, IconsContext, IconsControlProvider, useIconControl, IconsControlContext } from './theme/context.jsx';
 export { ICON_SETS, ICON_CHOICES, iconsFor, normalizeIconSet, nextIconSet, iconSetLabel, autoIconSet, resolveIconSet } from './theme/icons.js';
-export { CommandHost, useHost, dispatchGlobal, setGlobalCommandSink, getGlobalCommandSink } from './host.jsx';
+export { CommandHost, useHost, dispatchGlobal, setGlobalCommandSink, getGlobalCommandSink, setGlobalBellSink, getGlobalBellSink } from './host.jsx';
 export {
   HomeRoute, ModuleRoute, ChallengeRoute,
   LessonRoute, ProjectsRoute,
