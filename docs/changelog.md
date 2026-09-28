@@ -7,7 +7,22 @@ Earlier history lives in the dated progress notes of `tui-overhaul-spec.md` and
 `errors-and-qol-spec.md`; those notes fold into this file as the docs workstream
 (loose-ends-spec P1-4) proceeds.
 
-## Unreleased — 2026-09-25 · The flip
+## Unreleased — 2026-09-26 · Dead-key fixes
+
+A post-flip audit of the key map found four keys whose global bindings resolved
+before the challenge editor and silently misbehaved. All four are fixed:
+
+- `Ctrl+Alt+↑/↓` (multi-cursor stack) now parse at the byte level; previously
+  the terminals' CSI 1;7 form degraded to Alt+[ garbage and the bindings were
+  unreachable from a real terminal.
+- `PageUp`/`PageDown` move the caret ten rows in the modeless editor instead of
+  being eaten by list navigation; `j`/`k`/`g`/`G` reach the editor too.
+- `y` types as a plain character unless the solution view is open, where it
+  copies the solution into the editor (classic behavior, restored).
+- `q` types instead of quitting the app on the challenge screen. Quit stays on
+  `Ctrl+C` and in the palette.
+
+## 2026-09-25 · The flip
 
 **The Ink UI is the only UI.** The classic canvas app (`src/app.js`,
 `src/views/`, `src/tui/`) and its entry (`src/index.js`) are deleted; the Phase

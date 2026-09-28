@@ -16,7 +16,7 @@ import { useKeymap } from './useKeymap.js';
 import { useRouter } from './router.jsx';
 import { browserJumpHandoff } from './routesBrowser.jsx';
 import { detectCapabilities } from './capabilities.js';
-import { nextIndex } from './nav.js';
+import { nextIndex, isListMove } from './nav.js';
 import { findChallenge, firstUnpassedIn } from '../core/targets.js';
 import { CelebrateLine, Modal } from './components/overlays.jsx';
 import { ICON_SETS } from './theme/icons.js';
@@ -795,6 +795,14 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     } else if (key === 'left' || key === 'right' || key === 'up' || key === 'down' || key === 'home' || key === 'end') {
       const p = moveArrow(doc, key);
       next = commit(session, name, moveCaret(doc, p), { history: false });
+    } else if (key === 'pageup' || key === 'pagedown') {
+      // Classic editor parity (app.js challengeKey): PgUp/PgDn move the caret
+      // 10 rows (the same step the list screens use). They previously fell out
+      // of the modeless tail unconsumed — the registry's nav.pageUp/Down ate
+      // them first, so the caret never moved.
+      const dir = key === 'pageup' ? 'up' : 'down';
+      const p = moveArrow(doc, dir, { count: 10 });
+      next = commit(session, name, moveCaret(doc, p), { history: false });
     } else if (key === 'ctrl-z') {
       next = sessionUndo(session, name);
     } else if (key === 'ctrl-y' || key === 'shift-ctrl-z') {
@@ -881,7 +889,18 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       applyKey({ name: id === 'nav.up' ? 'up' : 'down' });
       return;
     }
-    if (nextIndex(0, id, 0) !== null) return; // no list on this screen
+    // The registry's nav bindings are GLOBAL (j/k/g/G + the arrows resolve on
+    // every screen) and would swallow the editor's own keys here: classic
+    // typed every char into the buffer on this screen (its onKey explicitly
+    // exempted `challenge` from the `q`-quit list) and moved the caret for
+    // up/down/pageup/pagedown. The event carries the ORIGINAL key, so hand it
+    // back verbatim — vim motions through the machine, modeless typing
+    // through the tail. (Post-flip audit: the old `nextIndex(...) !== null`
+    // guard silently ate j/k/g/G/q — the modeless `q` even QUIT the app.)
+    if (isListMove(id)) {
+      applyKey(ev);
+      return;
+    }
     if (!target) return;
     // PC-27: the checkpoint list outranks the screen. The live dispatcher
     // already gives the overlay every key and drops what it declines; this
@@ -995,6 +1014,23 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         // Revealing a hint is progress the store must keep (classic parity).
         services.store.useHint(challengeKey);
         setStatus(`Hint ${i + 1}/${hints.length}: ${hints[i]}`);
+        return;
+      }
+      case 'challenge.copySolution': {
+        // `y` is a GLOBAL-single-char binding, so it resolves here before the
+        // editor's raw path. Classic gated it on the solution VIEW (app.js
+        // challengeKey): with the solution showing, y copies it into the
+        // editor; otherwise y is a plain typable char (`<style>`, `display:`).
+        // The next UI lost the gate — `y` anywhere said "not wired" and the
+        // char never reached the buffer.
+        if (showSolution || (ev && ev.type === 'command')) {
+          const solution = String(target.challenge.solution ?? '');
+          setSession(sessionSetText(session, activeName, solution, null, { coalesce: false, label: 'copy-solution' }));
+          setShowSolution(false);
+          setStatus('Solution copied into the editor. Now change it to make it yours.');
+        } else {
+          applyKey(ev);
+        }
         return;
       }
       case 'challenge.solution':
@@ -1233,14 +1269,31 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
         host.run('app.back');
         return;
       }
+      case 'app.quit': {
+        // `q` resolves to the GLOBAL app.quit before the editor's raw path.
+        // Classic exempted the challenge screen from q-quit (app.js onKey:
+        // the editor, the palette and the browser console type letters) — a
+        // keystroke here belongs to the editor (modeless: it types `q`; vim:
+        // the machine may not consume it, but a stray letter must never quit
+        // the app). Quitting stays Ctrl+C — the dispatcher owns it
+        // unconditionally — and the palette's Quit still quits: its dispatch
+        // carries an event marked `type: 'command'` (never a keypress shape),
+        // so the discriminator is explicit — QUIT only for a command-marked
+        // event. Keypresses and typeless driver events (`{ name: 'char' }`,
+        // the shape every replay and the harness drive) fall to the editor.
+        if (ev && ev.type === 'command') host.run('app.quit');
+        else applyKey(ev);
+        return;
+      }
       case 'app.help': {
         // `?` is a live global binding (P1-12) and this screen is a typing
         // surface: the vim machine owns `?` in normal mode (reverse-search)
         // and inserts it in insert mode; the modeless editor types it
         // (`a ? b : c`). The editor's claim wins, exactly like the `app.back`
         // gate above — help stays reachable through the palette (Ctrl+K).
-        if (ev && ev.type === 'key') applyKey(ev);
-        else host.run('app.help');
+        // Same command/keypress discrimination as app.quit above.
+        if (ev && ev.type === 'command') host.run('app.help');
+        else applyKey(ev);
         return;
       }
       default:

@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseKeys } from '../../src/ui/input/index.js';
 import '../helpers/runner-env.js';
 
 const ROOT = process.cwd();
@@ -51,7 +52,9 @@ const CURRICULUM = [
       // the challenge folder (PC-28), and its two rows anchor the multi-cursor
       // typing test (PC-11).
       { id: 'm1.l2', title: 'Lists', minutes: 12, challenges: [
-        { id: 'c3', title: 'A list', prompt: 'Make a list.', lang: 'html', starter: '', hints: ['ul + li'], checks: [{ kind: 'src', label: 'has a list', re: '<ul' }], difficulty: 'easy', minutes: 6 },
+        // c3 carries a `solution` too: the copySolution replay (P1-13a) needs
+        // a known string to assert the copy against.
+        { id: 'c3', title: 'A list', prompt: 'Make a list.', lang: 'html', starter: '', hints: ['ul + li'], solution: '<ul></ul>', checks: [{ kind: 'src', label: 'has a list', re: '<ul' }], difficulty: 'easy', minutes: 6 },
         { id: 'c4', title: 'Two files', prompt: 'Markup plus styles.', lang: 'html', files: { 'index.html': '<p>hi</p>\n', 'style.css': 'p {}\n', 'app.js': 'const x = 1;\n' }, hints: [], checks: [], difficulty: 'easy', minutes: 6 },
         // c5: a single-file CSS challenge so the emmet shorthand path (`m10` +
         // `;` → `margin: 10px;`) is drivable through the real route.
@@ -1019,6 +1022,119 @@ test('next-UI routes + command host', async (t) => {
       } finally {
         app.inst.unmount();
       }
+    });
+
+    // ---- Post-flip dead-key audit: four keys the global bindings ate ------
+    await t.test('P1-13a: modeless q and y type into the editor; palette Quit still quits', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const quits = [];
+      const settings = fakeSettings();
+      settings.data.editor.vimMode = false; // modeless editor: classic defaults
+      const services = servicesFor(CURRICULUM, { settings });
+      const app = mountApp(services, { onQuit: () => quits.push('q') });
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l2', challengeId: 'c3' });
+        assert.ok(await waitFor(() => app.frame().includes('A list')), 'the challenge rendered');
+
+        // Modeless `q` must TYPE: app.quit is a global binding, but the editor
+        // is a typing surface and a stray letter must never quit the app.
+        app.onKey({ name: 'char', char: 'q' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c3') === 'q', { timeout: 4000 }),
+          'modeless q typed into the buffer',
+        );
+        assert.equal(quits.length, 0, 'q never quit the app');
+
+        // Modeless `y` (no solution view open) is a plain typable char too.
+        app.onKey({ name: 'char', char: 'y' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c3') === 'qy', { timeout: 4000 }),
+          'modeless y typed into the buffer (no "not wired" dead end)',
+        );
+
+        // Ctrl+G opens the solution view; with it showing, y is the
+        // challenge.copySolution command again and copies the solution in.
+        app.onKey({ name: 'ctrl-g' });
+        assert.ok(await waitFor(() => /Solution for|Solution hidden/.test(app.frame())), 'solution toggle reported');
+        app.onKey({ name: 'char', char: 'y' });
+        assert.ok(
+          await waitFor(() => savedCode(services, 'm1.l2.c3') === '<ul></ul>', { timeout: 4000 }),
+          'y with the solution view open copied the solution into the editor',
+        );
+
+        // The palette's Quit is an explicit COMMAND, not a keypress: the
+        // route answers it with the host quit, unlike the same id arriving
+        // as a key while the editor holds focus.
+        const sink = harness.getGlobalCommandSink();
+        assert.equal(sink('app.quit'), true, 'the sink accepted the quit command');
+        assert.ok(await waitFor(() => quits.length === 1), 'the palette Quit still reaches the host quit hook');
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    await t.test('P1-13b: pageup/pagedown move the caret ten rows in the modeless editor', async () => {
+      rmSync(STORE_FILE, { force: true });
+      const settings = fakeSettings();
+      settings.data.editor.vimMode = false;
+      const services = servicesFor(CURRICULUM, { settings });
+      const app = mountApp(services);
+      try {
+        assert.ok(await waitFor(() => app.screen() === 'home'));
+        app.host().go('challenge', { moduleId: 'm1', lessonId: 'm1.l1', challengeId: 'c1' });
+        assert.ok(await waitFor(() => app.frame().includes('First heading')), 'the challenge rendered');
+        assert.ok(await waitFor(() => app.frame().includes('<h1')), 'the editor painted the starter');
+
+        // Build an 11-row buffer from the seed caret (0:0): each Enter inserts
+        // the newline BEFORE the caret and the caret follows it, so 10 Enters
+        // put the caret on row 10 (the '<h1' row) with rows 0-9 empty.
+        // PageUp (a 10-row step) must then move the caret to row 0 —
+        // nav.pageUp used to eat the key first and the caret never moved.
+        for (let i = 0; i < 10; i += 1) app.onKey({ name: 'return' });
+        assert.ok(
+          await waitFor(() => (savedCode(services, 'm1.l1.c1') ?? '').split('\n').length === 11, { timeout: 4000 }),
+          'the 11-row buffer is in place (caret on row 10)',
+        );
+
+        app.onKey({ name: 'pageup' });
+        await new Promise((r) => setTimeout(r, 60));
+        // Caret position is not directly observable through the store, but a
+        // typed char lands AT the caret: on row 0 it prepends to the buffer.
+        app.onKey({ name: 'char', char: 'Z' });
+        assert.ok(
+          await waitFor(() => (savedCode(services, 'm1.l1.c1') ?? '').startsWith('Z\n'), { timeout: 4000 }),
+          'pageup moved the caret from row 10 to row 0 (the char landed there)',
+        );
+
+        // PageDown steps back 10 rows, clamped at the last row. The caret
+        // sits at (0,1) after Z, so `home` re-parks it at col 0 first —
+        // up/down preserve the column, and col 1 of the '<h1' row is mid-word.
+        app.onKey({ name: 'home' });
+        await new Promise((r) => setTimeout(r, 60));
+        app.onKey({ name: 'pagedown' });
+        await new Promise((r) => setTimeout(r, 60));
+        app.onKey({ name: 'char', char: 'B' });
+        assert.ok(
+          await waitFor(() => (savedCode(services, 'm1.l1.c1') ?? '').endsWith('B<h1'), { timeout: 4000 }),
+          'pagedown moved the caret to row 10 (the 10-row step clamped at the last row)',
+        );
+      } finally {
+        app.inst.unmount();
+      }
+    });
+
+    await t.test('P1-13c: the ctrl-alt-up bytes parse to the multi-cursor binding', () => {
+      // The engine + route side is covered by the PC-11 replays above (they
+      // drive onKey with the parsed name). This pins the BYTE path: without
+      // the CSI 1;7 entries the xterm form degraded to Alt+[ garbage and the
+      // bindings were unreachable from a real terminal.
+      const evs = parseKeys('\x1b[1;7A\x1b[1;7B');
+      assert.deepEqual(
+        evs.map((e) => e.name),
+        ['ctrl-alt-up', 'ctrl-alt-down'],
+        'xterm CSI 1;7 arrows parse as ctrl-alt-up/down',
+      );
     });
 
     await t.test('challenge: pane nudge keys and a divider drag remember the split (task 1.2)', async () => {

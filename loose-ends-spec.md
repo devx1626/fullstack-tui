@@ -644,6 +644,48 @@ palette (Ctrl+K). Replay: `tests/unit/routes.test.js` subtests P1-12a (bell once
 re-arm after a handled key, `?` opens help) and P1-12b (editor + console silent). §7 lint
 unchanged; `npm run test:unit` + `npm run check` green.
 
+### P1-13 · Post-flip dead-key audit: four keys the global bindings ate
+
+**Finding (post-flip, working-tree audit).** Driving the real route after the bell work
+(P1-12) surfaced four keys whose GLOBAL bindings resolve before the editor's raw path and
+silently misbehaved on the challenge screen:
+
+1. `<C-A-↑/↓>` — the multi-cursor stack bindings (PC-11) were UNREACHABLE from a real
+   terminal: `src/ui/input/index.js` had no KEYMAP entries for the xterm CSI 1;7 form, so
+   the bytes degraded to Alt+[ garbage (the same class of gap the pane-nudge keys hit).
+   Only up/down: the registry binds no C-A left/right.
+2. PgUp/PgDn — the registry's `nav.pageUp/Down` ate them and the modeless editor's tail
+   never saw them; classic moved the caret 10 rows (app.js challengeKey).
+3. `y` — `challenge.copySolution` is a GLOBAL single-char binding, so `y` said "not wired"
+   anywhere except the solution view; classic gated it on the solution VIEW and let `y`
+   type as a plain char otherwise (`<style>`, `display:`).
+4. `q` — `app.quit` is a GLOBAL binding; the modeless `q` QUIT THE APP instead of typing.
+   Classic exempted the challenge screen from q-quit explicitly.
+
+**Status (2026-09-26, CLOSED).** All four fixed and pinned by replay:
+
+- The CSI 1;7 entries are in the KEYMAP (`ctrl-alt-up`/`ctrl-alt-down`); the PC-11
+  multi-cursor replays drive the parsed names, and `tests/unit/input.test.js`-style byte
+  coverage lives in the new routes subtest P1-13c (`parseKeys('\\x1b[1;7A…')`).
+- The modeless tail handles `pageup`/`pagedown` (10-row `moveArrow`, clamped), and the
+  route's command guard hands `isListMove` ids back to the editor with the ORIGINAL event
+  — which also un-ate j/k/g/G on this screen (vim motions through the machine, modeless
+  typing through the tail).
+- `challenge.copySolution` restores the classic gate: with the solution view open (or an
+  explicit command dispatch) it copies; otherwise `y` falls to the editor as a char.
+- `app.quit` (and the parallel `app.help`) now discriminate COMMAND dispatches
+  (`ev.type === 'command'` — the palette's shape) from keypresses AND typeless driver
+  events (`{ name: 'char' }`, the shape every replay and the harness drive): commands
+  quit/help, everything else types. The first cut (`ev.type === 'key'` → editor) broke the
+  replay path, which carries no `type` at all — the discriminator must name the command,
+  not the key.
+
+Tests: `tests/unit/routes.test.js` subtests P1-13a (modeless q/y type; y with the solution
+view copies; the palette Quit still reaches the host quit hook), P1-13b (pageup 10-row
+move and pagedown's clamped step, proven by where a typed char lands; the caret column is
+preserved across up/down, so the replay re-parks with `home` first), P1-13c (the byte
+path). Full suite green (851 pass / 1 by-design skip) + `npm run check` green.
+
 ---
 
 % — the `%` item is deliberately small; it rides the vim engine that landed in Phase 2.

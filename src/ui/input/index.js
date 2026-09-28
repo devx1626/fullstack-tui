@@ -30,6 +30,12 @@ const KEYMAP = {
   '\x1b[1;3C': 'alt-right', '\x1b[1;3D': 'alt-left',
   '\x1b[1;5C': 'ctrl-right', '\x1b[1;5D': 'ctrl-left',
   '\x1b[1;6C': 'ctrl-shift-right', '\x1b[1;6D': 'ctrl-shift-left',
+  // Ctrl+Alt arrows (xterm CSI 1;7): the multi-cursor stack (PC-11) binds
+  // <C-A-up>/<C-A-down>, and without these entries the bytes degrade to
+  // Alt+[ garbage — the bindings shipped unreachable (the same class of gap
+  // the pane-nudge keys hit; found by the post-flip dead-key audit). Only
+  // up/down: the registry binds no C-A left/right.
+  '\x1b[1;7A': 'ctrl-alt-up', '\x1b[1;7B': 'ctrl-alt-down',
   '\r': 'enter', '\n': 'enter', '\x7f': 'backspace', '\x08': 'backspace',
   '\t': 'tab', ' ': 'space',
   // Ctrl+Space (and Ctrl+@) is NUL in raw mode. It has no KEYMAP entry and is
