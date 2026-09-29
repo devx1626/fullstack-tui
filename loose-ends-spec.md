@@ -407,6 +407,14 @@ because of ink's re-tokenization; the ceiling catches *regressions*, not the wal
 a CI job ordering that runs `test:unit` first for fast feedback, then `check`. Also: a job
 timeout budget so a hung pty check can't eat the 10-minute default.
 
+**Status (2026-09-26, timeout budget done — ordering + report-only open).** Both CI jobs
+carry `timeout-minutes` now (unit 15, self-check 30 — several runners' worth of slack over
+the local ~5/~8 minute timings), so a hung pty check dies and marks red instead of running
+to GitHub's 360-minute job default. The two remaining halves stay open: making `self-check`
+wait on `unit` (`needs:`) for the fail-fast ordering, and §9's note lines only *mention* the
+renderer wall — a decision on report-only vs enforced ceilings for the ink-bound targets
+is still owed.
+
 ### P1-2 · Wire multi-cursor bindings
 
 **Finding.** Multi-cursor is engine-complete (`multicursor.js`, 50-cursor cap, per-cursor ops)
