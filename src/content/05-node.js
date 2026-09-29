@@ -189,9 +189,9 @@ function readingTime(words, wpm = 220) {
             '`capitalise(str)` -> first letter upper, rest lower',
             '`toKebab(str)` -> kebab-case for any input',
             '`initials(name)` -> `"Ama Kojo Mensah"` becomes `"AKM"`',
-            '`makeId(prefix)` -> `prefix_` plus a unique-ish suffix; two calls must never collide',
+            '`makeId(prefix)` -> `prefix_` plus a unique-ish suffix; two calls must never collide (this one is deliberately stateful - keep its state inside a closure)',
             '`isEmail(str)` -> a pragmatic email check (one `@`, a dot in the domain, no spaces)',
-            'All five functions must be pure: same input, same output, nothing global',
+            'The other four functions must be pure: same input, same output, nothing global',
           ],
           starter: ``,
           hints: [

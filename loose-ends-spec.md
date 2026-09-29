@@ -375,6 +375,34 @@ Still open in this half: the prose rubric read (tone, mentor-voice failure messa
 logic-vacuous checks the starter probe cannot see) for the remaining ten modules
 (js → devops).
 
+**QA tranche 2 (2026-09-29, js + git + node prose read).** The rubric read found no tone
+problems — the mentor voice is consistent and the failure messages carry the "why" — but
+the empirical reads caught five genuine defects the starter probe could not see, all
+fixed:
+
+- **js-01.write-format:** the rounding check was `formatMoney(1.005) .length > 6` — a
+  stray space and an assertion almost anything satisfies. Replaced with a real two-decimals
+  pattern check (`/^GHS \\d+\\.\\d{2}$/`).
+- **js-05.fix-dom-counter:** the prompt advertised "`+` jumps by 11", a symptom the starter
+  cannot produce (`Number(undefined)` is `NaN`, so the count poisons instead), and hint 1
+  contained literal mid-thought revision text. Prompt and hint now describe the real
+  failure: NaN poisoning plus the document-level listener.
+- **git-04.fix-secret-commit:** hint 3 advised `echo "*.env"`, which the challenge's own
+  check (`/^\\.env$/m`) rejects — the hint failed its own challenge. Hint now matches the
+  check, and both `.env` gitignore checks accept the equally correct `.env.*` form (the
+  rubric's correct-but-different case).
+- **git-02.fix-commits:** the requirement "at least 10 characters" had no enforcing check;
+  the message check now enforces both the type prefix and the length.
+- **git-04.write-undo-recover:** requirement said debug.log "untracked" where the check
+  (correctly) demands *ignored* — requirement wording aligned with git's actual model.
+- **node-01.write-module:** demanded "all five functions pure, nothing global" while its
+  own reference solution keeps a module-level counter for `makeId` — the requirement now
+  scopes purity to the four pure functions and names `makeId` as deliberately stateful.
+
+Gates after the tranche: unit 857/0/1, check green with all 125 reference solutions
+re-graded against the modified checks, probe clean. Remaining for the pass: express, sql,
+react, typescript, python, testing, devops prose reads.
+
 ### P0-5 · Editor caret fast path
 
 **Finding.** Documented, measured, and deliberately not built (`tui-overhaul-spec.md` §12,

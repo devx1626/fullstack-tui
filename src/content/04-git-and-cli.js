@@ -185,7 +185,7 @@ echo ".env" >> .gitignore`,
             T.git('all files exist', (r) => ['app/index.js', 'app/db/client.js', 'tests/index.test.js', 'package.json', 'README.md'].every((f) => r.exists(f)) || 'one of the five files is missing'),
             T.git('the README has the heading', (r) => (r.read('README.md') || '').includes('# My API') || 'README.md needs the line "# My API"'),
             T.git('.gitignore ignores node_modules', (r) => /node_modules/.test(r.read('.gitignore') || '') || 'add node_modules to .gitignore'),
-            T.git('.gitignore ignores .env', (r) => /^\.env$/m.test(r.read('.gitignore') || '') || 'add a line containing exactly .env'),
+            T.git('.gitignore ignores .env', (r) => /^\.env(\.\*)?(\s|$)/m.test(r.read('.gitignore') || '') || 'add a line that ignores .env'),
           ],
         },
       ],
@@ -340,8 +340,8 @@ git commit -m "docs: document how to run the project"`,
               const tracked = r.run('git ls-files');
               return (tracked.stdout || '').includes('app.js') || 'app.js was created but never staged';
             }),
-            T.git('every message has a type prefix', (r) => {
-              const bad = r.log().filter((c) => !/^(feat|fix|docs|chore|refactor|test|style|perf|build|ci)(\(.+\))?:\s/.test(c.subject));
+            T.git('every message has a type prefix and 10+ characters', (r) => {
+              const bad = r.log().filter((c) => !/^(feat|fix|docs|chore|refactor|test|style|perf|build|ci)(\(.+\))?:\s/.test(c.subject) || c.subject.length < 10);
               return bad.length === 0 || `unconventional message(s): ${bad.map((b) => b.subject).join(' | ')}`;
             }),
             T.git('the scaffold commit is the oldest', (r) => {
@@ -807,7 +807,7 @@ git commit -m "remove env"`,
           hints: [
             '`git rm` deletes the file from disk too. `git rm --cached` stops tracking while keeping it.',
             'A `.gitignore` entry does not untrack an already-committed file.',
-            '`echo "*.env"` then `!.env.example` - the `!` line must come after the broader rule.',
+            '`echo ".env"` then `!.env.example` - the `!` exception must come after the rule it excepts.',
           ],
           solution: `git init -b main
 echo "API_KEY=supersecret" > .env
@@ -831,7 +831,7 @@ git status`,
               const tracked = (r.run('git ls-files').stdout || '').split('\n');
               return !tracked.includes('.env') || '.env is still tracked by git';
             }),
-            T.git('.gitignore ignores .env', (r) => /^\.env$/m.test(r.read('.gitignore') || '') || 'add a line containing exactly .env'),
+            T.git('.gitignore ignores .env', (r) => /^\.env(\.\*)?(\s|$)/m.test(r.read('.gitignore') || '') || 'add a line that ignores .env'),
             T.git('.gitignore re-includes .env.example', (r) => /^!\.env/m.test(r.read('.gitignore') || '') || 'add the line !.env.example'),
             T.git('.env.example is tracked', (r) => (r.run('git ls-files').stdout || '').includes('.env.example') || '.env.example should be committed as documentation'),
             T.git('node_modules is not tracked', (r) => !(r.run('git ls-files').stdout || '').includes('node_modules') || 'node_modules must never be tracked'),
@@ -866,7 +866,7 @@ git status`,
             'A branch `experiment` was created, committed to, then deleted - and the commit exists nowhere in `main`',
             '`git reflog` can still see the deleted branch work (the checks look for it in the reflog)',
             '`notes.md` was deleted with `rm` and brought back with `git restore`, leaving it on disk and matching the committed version',
-            '`.gitignore` covers `*.log` and a `debug.log` file exists on disk but is untracked',
+            '`.gitignore` covers `*.log` and a `debug.log` file exists on disk but is ignored (not listed as untracked)',
           ],
           starter: ``,
           hints: [

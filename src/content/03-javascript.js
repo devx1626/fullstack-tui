@@ -251,7 +251,7 @@ function isFree(item) {
 }`,
           checks: [
             T.js('formatMoney(19.99) === "GHS 19.99"', 'formatMoney(19.99) === "GHS 19.99"'),
-            T.js('formatMoney rounds to two decimals', 'formatMoney(5) === "GHS 5.00" && formatMoney(1.005) .length > 6'),
+            T.js('formatMoney always renders two decimals', 'formatMoney(5) === "GHS 5.00" && /^GHS \\d+\\.\\d{2}$/.test(formatMoney(1234.5))'),
             T.js('toInt("42") === 42', 'toInt("42") === 42'),
             T.js('toInt("4.9") truncates', 'toInt("4.9") === 4', 'Use `Math.trunc` or `Math.floor`.'),
             T.js('toInt returns the fallback for junk', 'toInt("abc", -1) === -1 && toInt("", 7) === 7'),
@@ -1206,9 +1206,9 @@ render();`,
           lang: 'js',
           fixture: CLICK_FIXTURE,
           prompt:
-            'This counter almost works. The value never updates on screen, `+` jumps by 11 instead of 1, the reset button never disables, and ' +
-            'clicking anywhere in the app also fires the handlers. Fix the four bugs. The checks below simulate real clicks, so guesswork will ' +
-            'not pass.',
+            'This counter almost works. The display never updates, `+` silently poisons the count with `NaN` instead of adding 1, the reset ' +
+            'button never disables, and a listener on `document` reacts to clicks that are not buttons. Fix the four bugs. The checks below ' +
+            'simulate real clicks, so guesswork will not pass.',
           requirements: [
             'Clicking `#inc` increases the displayed value by exactly 1',
             'Clicking `#dec` decreases it by 1 and can go negative',
@@ -1243,7 +1243,7 @@ document.addEventListener('click', () => {
   render();
 });`,
           hints: [
-            '`#inc` has no `data-step`, so `Number(undefined)` is `NaN`... but actually look: `count += NaN` would break everything. The real bug is that `dataset.step` is missing, so the `+10` document listener is doing the damage.',
+            '`#inc` has no `data-step`, so `count += Number(undefined)` makes the count `NaN` - and every later arithmetic stays `NaN`, which is why the display never moves.',
             '`out.value` sets an attribute. To change what is displayed, use `textContent`.',
             'A click listener on `document` fires for every click in the app. Scope it to the buttons.',
             'Set `reset.disabled` inside `render()` so every path updates it.',
