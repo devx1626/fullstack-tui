@@ -51,6 +51,20 @@ starter no longer crashes the grader). Eight challenges gained a real third
 hint rung, two intro-labeled challenges sit in the normal difficulty scale,
 and the probe (`tools/qa-audit.mjs`) stays available for the next QA pass.
 
+### Content QA pass complete (P0-4)
+
+All twelve modules have now been read challenge by challenge against a fixed
+rubric — tone, hint ladders, difficulty steps, and whether each check can
+actually fail wrong code. Thirteen defects were fixed across the pass. The
+subtle ones: a git hint recommending a `.gitignore` line its own check
+rejected; a security check so strict it failed the parameterised SQL its hint
+taught; a rounding assertion that almost any wrong answer satisfied; and two
+prompts describing bugs the starter code could not produce. Every challenge
+now has a three-rung hint ladder, a normal difficulty label, and checks that
+were verified both to pass their reference solution and to fail a do-nothing
+submission. The link linter and the QA probe keep watching for regressions in
+future content work.
+
 ## 2026-09-25 · The flip
 
 **The Ink UI is the only UI.** The classic canvas app (`src/app.js`,

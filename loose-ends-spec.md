@@ -294,7 +294,7 @@ never probed. The render is the learner's own page — no network (mockFetch dis
   test asserting the not-installed guidance renders; docs/multimedia.md §6 status updated;
   §10 allowlist entry removed.
 
-### P0-4 · Content QA + gap-fill (all 12 modules)
+### P0-4 · Content QA + gap-fill (all 12 modules) — CLOSED 2026-09-29
 
 **Finding.** The curriculum was authored in one push; `npm test` verifies *structural* integrity
 and that reference solutions pass, but no pass has systematically reviewed the learner
@@ -427,6 +427,21 @@ crashes across all 125 challenges. Seven precision fixes landed:
 **P0-4 STATUS: the scripted half and the rubric half are both done.** All 12 modules have
 been read against the rubric; the link linter (§11) and the QA probe (qa-audit.mjs) stand
 as permanent regression nets for future content work.
+
+**Status (2026-09-29, CLOSED — both halves complete).** The scripted half landed as two
+permanent nets: check §11 lints every external URL (6 dead links found and replaced on its
+first pass) and `tools/qa-audit.mjs` grades every challenge's checks against its STARTER
+code plus lints ladder shape, difficulty vocabulary, async-flag correctness and adjacent
+difficulty steps across all 125 challenges / 823 checks. The rubric half ran in three
+tranches (html+css, js+git+node, then the remaining six) and fixed 13 defects, the most
+serious being `ops-04.write-graceful-shutdown`, whose checks could never fail anything
+(unscored async promises) and whose starter crashed the grader; the rest were precision
+failures — opaque assertions, hints that contradicted their own checks (git's `*.env`,
+express's digit-free-SQL rule rejecting `$1`), prompts describing symptoms the starter could
+not produce, and thin hint ladders. Verified per decision 12: the grader re-ran every
+reference solution through the modified checks (all green on CI three times), and the QA
+probe reports zero vacuous checks, zero thin ladders, zero starter crashes. New authoring
+remains out of scope (P2-3).
 
 ### P0-5 · Editor caret fast path
 
@@ -862,10 +877,11 @@ amendment), not a migration.
 New modules/topics (TypeScript module, capstone depth) — explicitly out of the QA + gaps
 scope (decision 6) and into the next backlog.
 
-### P2-4 · Content QA, wave 2 (the modules the sprint couldn't reach)
+### P2-4 · Content QA, wave 2 (the modules the sprint couldn't reach) — MOOT 2026-09-29
 
-If the P0-4 pass samples rather than covers all 12 modules (overflow rule), the remainder
-lands here.
+Superseded: P0-4 covered all 12 modules in full (three rubric tranches, no overflow), so
+there is no remainder. Future content changes keep the two nets green (check §11 links,
+qa-audit.mjs probe) as the standing regression gate.
 
 ### P2-5 · Perf: the ink wall itself
 
@@ -974,5 +990,6 @@ item, not just at the end. Items are sized to land in one sitting each (decision
 ---
 
 *End of spec. Work is under way — parity rows tick in the P0-2 checklist and item status is
-recorded under each finding. Wave 1 (P0-1, runner-proof CI) is closed: perf gates are
-floor-relative and the suite is green under `CI=true` twice consecutively.*
+recorded under each finding. Closed so far: P0-1 (runner-proof CI), P0-5 (caret fast path),
+P1-1 (CI noise reduction), P1-2, P1-6, P1-10, P1-11, P1-12, P0-4 (content QA, all 12
+modules).*
