@@ -1,5 +1,11 @@
 # TUI Overhaul — Specification
 
+> **Status (2026-09-29): superseded as a tracker.** The Ink rewrite this spec
+> planned is shipped — the Phase 4 flip made the Ink UI the only UI, and the
+> phase tables below are history, not a plan. Landed work is recorded in
+> `docs/changelog.md`; everything still open lives in `loose-ends-spec.md`.
+> Keep this file for rationale and design decisions.
+
 **Project:** `fullstack-tui` — interactive terminal curriculum for fullstack web development
 **Spec status:** Draft for review (no code written yet)
 **Date:** 2026-09-14

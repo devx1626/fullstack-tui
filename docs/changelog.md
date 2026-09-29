@@ -7,6 +7,17 @@ Earlier history lives in the dated progress notes of `tui-overhaul-spec.md` and
 `errors-and-qol-spec.md`; those notes fold into this file as the docs workstream
 (loose-ends-spec P1-4) proceeds.
 
+## Unreleased — 2026-09-29 · Docs refresh (P1-4)
+
+The published docs now describe the shipped app. The README lost its phase
+narrative (and its references to the deleted classic UI) for a straight
+description of entry points, keys, environments, and honest status; the
+feature inventory dropped its dated progress notes in favour of a clean list;
+CONTRIBUTING describes the real gate order and the content-QA tooling; and
+both big specs open with a note that they are history and rationale, with
+open work tracked in `loose-ends-spec.md`. The link linter gained a retry so
+a host hiccup warns instead of failing the gate at random.
+
 ## Unreleased — 2026-09-29 · Motivation systems
 
 The motivation half-features are finished: the daily goal is real, and the app

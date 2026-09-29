@@ -1083,6 +1083,19 @@ try {
     }
   };
 
+  /** Retry ONLY network-error results once (HTTP statuses are never retried —
+   *  a 404 is an answer, an ETIMEDOUT is an incident). One retry turns a
+   *  host's transient hiccup into a WARN instead of a random red gate; a
+   *  genuinely dead host times out on the retry too and still fails. */
+  const isNetworkError = (r) => r && !r.ok && !r.status;
+  const probeSteady = async (url) => {
+    const first = await probe(url);
+    if (!isNetworkError(first)) return first;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const second = await probe(url);
+    return isNetworkError(second) ? { ok: false, error: `${second.error} (2 probes)`, flaky: true } : { ok: true };
+  };
+
   // Small concurrency, generous timeouts: the gate stays polite to the hosts
   // it probes and finishes in well under a minute for ~150 URLs.
   const CONCURRENCY = 8;
@@ -1091,7 +1104,7 @@ try {
   const worker = async () => {
     while (idx < urls.length) {
       const url = urls[idx++];
-      const r = await probe(url);
+      const r = await probeSteady(url);
       results.set(url, r);
     }
   };
@@ -1106,7 +1119,12 @@ try {
     // EVERYTHING failed: almost certainly the machine, not the content.
     warn(`link linter: every probe failed — network unreachable? Skipping (${urls.length} URLs unverified)`);
   } else if (dead.length) {
-    for (const [url, r] of dead) fail(`link dead (first seen in module ${collected.get(url)}): ${url}${r.status ? ` — HTTP ${r.status}` : ` — ${r.error || 'no answer'}`}`);
+    for (const [url, r] of dead) {
+      // A URL that answered on the retry is a WARN, not a FAIL: the link
+      // resolves, the host was just flaky during this run.
+      if (r.flaky) warn(`link flaky but resolving (first seen in module ${collected.get(url)}): ${url} — ${r.error || 'no answer'}`);
+      else fail(`link dead (first seen in module ${collected.get(url)}): ${url}${r.status ? ` — HTTP ${r.status}` : ` — ${r.error || 'no answer'}`}`);
+    }
   } else {
     process.stdout.write(`   ok  all ${urls.length} probed URLs resolve\n`);
   }

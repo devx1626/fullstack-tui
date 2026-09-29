@@ -1,5 +1,11 @@
 # Errors & QoL — Specification
 
+> **Status (2026-09-29): superseded as a tracker.** The classic-scope items
+> (Q1–Q10, Q13, Q14) and the Ink-UI parity work shipped; the tables below are
+> history, not a plan. Landed work is recorded in `docs/changelog.md`;
+> everything still open (e.g. M2's curly-underline squiggles) lives in
+> `loose-ends-spec.md`. Keep this file for rationale and design decisions.
+
 **Project:** `fullstack-tui`
 **Spec status:** Draft for review (no code changes made)
 **Date:** 2026-09-14

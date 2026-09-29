@@ -3,7 +3,7 @@
 An interactive terminal curriculum for learning fullstack web development:
 12 modules from HTML to deployment, lessons, hands-on code challenges, debug
 hunts, and capstone projects — all in your terminal, with a real code editor,
-built-in browser preview, and live grading.
+a built-in browser, and live grading.
 
 ```
 $ npm start
@@ -12,141 +12,128 @@ $ npm start
   - most of them are bugs to hunt.
 ```
 
-## Highlights
-
-- **A curriculum that grades you for real.** Every challenge ships reference
-  solutions that the test suite runs — the checks you face are the checks the
-  maintainers verify. HTML/CSS/DOM via a real parser, JavaScript via sandboxed
-  evaluation, SQL against SQLite, Git against a live scratch repo, Python via
-  a `python3 -I -B` sandbox runner (used only if Python is installed).
-- **A built-in environment.** Multi-file editor with completions, Emmet
-  abbreviations (`Tab` expands, `;` completes CSS shorthands), Prettier-style
-  formatting (`Ctrl+F`), a DOM/Styles/Console inspector for HTML work, and a
-  browser preview (`Ctrl+P`) — no leaving the terminal.
-- **Progress that persists.** Drafts, streaks, time tracking, hints-used
-  accounting, and per-lesson scroll positions live in `.data/`, which also
-  holds your UI settings (`settings.json`) and keymap overrides
-  (`keymap.json`).
-
 ## Quick start
 
 ```bash
 npm install
-npm run build      # bundle dist/main.js (one-time; the TUI runs from the bundle)
-npm start          # the Ink UI — the only UI
+npm run build      # one-time: bundle dist/main.js (the TUI runs from the bundle)
+npm start
 ```
 
-`npm start` launches the Ink UI directly — the `FULLSTACK_UI` env var and the
-classic canvas UI are gone (Phase 4 flip). The plain-text side doors work
-without a build: `npm run list`, `npm run verify`, `npm run reset`.
+First launch opens a five-step welcome tour (skippable with `Esc`, replayable
+from the command palette). Optional: `python3` on `$PATH` enables the Python
+module's live checks — without it, that module's checks say so and everything
+else works.
+
+## Keys
 
 | Key | Action |
 | --- | --- |
 | `j` / `k`, arrows | Move · `Enter` open · `Esc` back |
 | `Ctrl+S` | Check my code (challenge screen) |
-| `Ctrl+H` | Reveal a hint |
-| `Ctrl+P` | Preview in the OS browser |
-| `Ctrl+K` | Command palette |
-| `Alt+1..5` | Top-level tabs: Dashboard · Projects · Progress · Resources · Workspace (`Alt+h`/`Alt+l` cycle) |
-| `Ctrl+←` / `Ctrl+→` | Resize the challenge split (drag the divider, or `Ctrl+K` → reset) |
+| `Ctrl+H` / `Ctrl+G` | Reveal a hint / show the worked solution |
+| `Ctrl+B` | The embedded browser (Render · Elements · Styles · Console · Network) |
+| `Ctrl+P` | Open the challenge preview in your real browser |
+| `Ctrl+K` | Command palette (every command, fuzzy-filtered) |
+| `Alt+1..5` | Dashboard · Projects · Progress · Resources · Workspace (`Alt+h`/`Alt+l` cycle) |
+| `Ctrl+←` / `Ctrl+→` | Resize the challenge split (or drag the divider) |
 | `s` | Settings, from the dashboard (`Space` toggles the focused row) |
-| `?` | Help manual · `q` or `Ctrl+C` quit |
+| `n` | Dismiss the comeback nudge, from the dashboard |
+| `Ctrl+C` | Quit (`q` works too, except while typing in the editor) |
 
-The full key table (77 commands, incl. multi-cursor and vim mode) lives in
-`docs/keymap.md`; vim mode is documented in `docs/vim.md`.
+The full table (80 commands, incl. multi-cursor editing and vim mode) is
+generated in `docs/keymap.md`; vim mode has its own sheet in `docs/vim.md`.
+Keys live in one registry (`src/ui/commands.js`) and are rebindable via
+`.data/keymap.json`.
 
-## Requirements
+## Environments
 
-- Node.js **≥ 20.9** (Node 22 recommended; the `ui:next` bundle targets 20).
-- Optional: `python3` on `$PATH` for the Python module's live checks — the
-  module degrades gracefully (checks report "python3 is not installed") when
-  it is missing.
+- `FULLSTACK_THEME=paper` — force a theme (`midnight`, `paper`, `ember`,
+  `dusk`, `sand`; auto-detected otherwise). Five curated palettes sharing one
+  token contract; colorless terminals render with no colour at all.
+- `FULLSTACK_ICONS=nerd|unicode|ascii` — force a glyph set (auto via a
+  terminal heuristic; Nerd is never guessed from colour depth alone). Both
+  are also live-preview pickers on the Settings screen.
+- `FULLSTACK_SCREENSHOT=playwright` — opt in to the Render tab's screenshot
+  action (headless Chromium via lazy-loaded Playwright).
+- `EDITOR` / `VISUAL` — the external editor `Ctrl+E` hands the buffer to.
+- `NO_ANIMATION=1` — render the static frame (also implied by `CI` and
+  colour-degraded tiers), keeping output deterministic.
 
 ## Scripts
 
 | Script | What it does |
 | --- | --- |
-| `npm start` | Launch the Ink UI (needs `npm run build` first) |
-| `npm run build` | Bundle the TUI **and the test harness** `dist/harness.js` (`-- --watch` to watch) |
-| `npm test` / `npm run check` | Deep curriculum validation + reference-solution verification + editor/sandbox unit checks |
-| `npm run test:unit` | node:test unit suite (`tests/unit/*.test.js`) |
+| `npm start` | Launch the TUI (needs `npm run build` first) |
+| `npm run build` | Bundle `dist/main.js` **and** the test harness `dist/harness.js` (`npm run dev` to watch) |
+| `npm test` / `npm run check` | The integration gate: curriculum deep-validation, headless screen renders, every reference solution re-graded, editor/sandbox unit checks, keymap + link + perf lints |
+| `npm run test:unit` | node:test suite (`tests/unit/*.test.js`) |
 | `npm run verify` | Reference-solution + buggy-starter assertions across all 12 modules |
 | `npm run list` | Print the curriculum as plain text |
 | `npm run keymap:docs` | Regenerate `docs/keymap.md` + `docs/vim.md` from their source tables |
-| `npm run reset` | Clear local progress (`.data/progress.json`) |
+| `npm run reset` | Clear local progress (`--reset --all` also wipes `.workspace/`) |
 
 ## Where things live
 
 ```
 src/
   main.jsx          the Ink entry point (bundled to dist/main.js)
-  index.js          CLI layer: the TUI launch + the plain-text side doors
-  core/             engines: grading, editor, completions, emmet, format,
-                    SQL/git/python sandboxes, progress store
-  content/          the curriculum (01-html … 12-deploy-and-devops)
-  ui/               the Ink UI: dispatcher, router, screens, components
-  ui/theme/         semantic colour tokens (`themes.js`), hex→256 down-mapping
-                    (`index.js`), and the `ThemeProvider`/`useTheme` context
+  ui/               the Ink UI: command registry + dispatcher, router,
+                    screens, components, theme/
   editor/           the editor engine (pure: document, history, vim,
                     search, multi-cursor, completions, highlight, diff)
+  core/             engines: grading, completions, emmet, format, softwrap,
+                    SQL/git/python sandboxes, progress store, recap
+  content/          the curriculum (01-html … 12-deploy-and-devops)
 tests/
   unit/             node:test suite
   helpers/          snapshot + keystroke-replay drivers
-tools/check.js      the integration test runner behind npm test
-docs/               features.md (tour), multimedia.md, ink-spike.md,
-                    keymap.md + vim.md (both generated by tools/gen-keymap-docs.js)
+tools/
+  check.js          the integration gate behind npm test
+  qa-audit.mjs      content QA probe (grades every check against its starter)
+docs/               features.md, keymap.md + vim.md (generated),
+                    changelog.md, multimedia.md, ink-spike.md
 ```
 
-Progress, settings, and drafts are stored under `.data/` (git-ignored except
-for `.gitkeep`-style placeholders). Deleting `.data/progress.json` resets
-progress; `.data/settings.json` and `.data/keymap.json` are optional and
-recover to defaults if corrupt.
+Progress, settings, drafts, and checkpoint history live under `.data/`
+(git-ignored). Deleting `.data/progress.json` resets progress; settings and
+keymap recover to defaults if corrupt; every write is atomic (tmp + rename)
+and merge-safe across writers.
+
+## The curriculum
+
+Twelve modules — HTML, CSS, JavaScript, Git & the Shell, Node.js, Express &
+APIs, Databases & SQL, React, TypeScript, Python, Testing & Debugging, and
+Deploy & DevOps — each with lessons, debug/write challenges, and a capstone
+project with a checkable task list.
+
+Grading is real, not string-matching: HTML/CSS checks query a parsed tree,
+JavaScript runs in a sandboxed `node:vm` with an infinite-loop killer,
+against SQLite for SQL, inside a live scratch repo for Git, and through a
+`python3 -I -B` runner for Python. Every challenge ships a worked solution,
+and the `npm test` gate re-grades all of them on every change — the checks
+you face are the checks the maintainers verify.
 
 ## Status
 
-**The Phase 4 flip is done (2026-09-25): the Ink UI is the only UI.** The
-classic canvas app (`src/app.js`, `src/views/`, `src/tui/`, `src/index.js`)
-and the `FULLSTACK_UI` switch were deleted; `npm start` launches the Ink UI
-from the built bundle directly.
+The app is the Ink UI, full stop. The Phase 4 flip (2026-09-25) deleted the
+classic canvas app and the `FULLSTACK_UI` switch; every screen — dashboard,
+module, lesson, projects, challenge with the full editor, the embedded
+browser and dev tools, help, resources, workspace, progress, settings — is
+ported, and the command palette plus a welcome tour sit on top.
 
-Every screen is ported (dashboard, module, lesson, projects, challenge with
-the full editor, help, resources, workspace, progress, settings, browser), the
-command palette runs on `Ctrl+K`, a first launch opens on the welcome tour,
-and split panes remember their width per screen (drag the divider, or
-`<C-left>`/`<C-right>`).
+The editor engine (`src/editor/`) is pure and framework-free: a document
+model behind one `applyEdit` chokepoint, undo/redo with typed coalescing,
+selection + registers + OSC52, a vim state machine, search/replace,
+multi-cursor, IDE completions, Emmet abbreviations, soft wrap, a Prettier-style
+formatter that refuses to mangle broken code, and a line-level LCS diff.
+The challenge screen binds it to a virtualized, mouse-aware component with
+checkpoints before every check run, jump-to-failing-line, and replay goldens
+pinning the behaviour (`tests/unit/editorReplay.test.js`).
 
-The editor engine lives in `src/editor/`: a pure document model with one
-`applyEdit` chokepoint, undo/redo, selection + registers + OSC52, a vim state
-machine, search/replace, multi-cursor, completions, Emmet abbreviations,
-highlighting, and a line-level LCS diff. The challenge screen binds it —
-`CodeEditor` with a virtualized viewport and mouse, the completion popup
-(`Ctrl+Space`, snippet tab stops, signature help), registry-derived footer
-hints, a vim mode badge and the one-time "press i to type" nudge.
-
-Colour comes from the theme module (`src/ui/theme/`): screens and chrome read
-semantic tokens through `ThemeProvider`/`useTheme`, so `FULLSTACK_THEME=paper`
-repaints the whole UI (not just the frame) and colorless terminals (tier C/D)
-render with no colour at all. Glyphs come from the same module: three complete
-sets (`nerd`/`unicode`/`ascii`) are selected by `FULLSTACK_ICONS` or the saved
-setting, degrade with the tier, and are live-switchable from Settings.
-
-`tests/unit/editorReplay.test.js` pins the editor's behaviour as replay
-goldens — solve-from-scratch, vim insert/undo/redo, a multi-file tab flow, the
-external-editor round-trip and multi-cursor typing — each driven through the
-real route. The browser & dev tools (Render/Elements/Styles/Console/Network,
-live re-render, click-to-inspect, jump-to-source, a warmed console session and
-an opt-in screenshot action) are covered by `tests/unit/routesBrowser.test.js`.
-
-The keystroke-to-paint p95 remains above the spec's 16 ms target, and the perf
-gate measures *why*: the same replay runs against a one-line control probe,
-and ink 6's own floor on this machine (p50 8–10 ms, p95 16–23 ms) already sits
-on 16 ms, so the target is a property of the renderer rather than of this UI's
-code (spec §12 records the measured deviation). The hard gate is
-floor-relative (a regression is a change in the ratio, not the absolute
-number); the absolute 100 ms line prints as an informational warn.
-See `tui-overhaul-spec.md`, `errors-and-qol-spec.md` and `loose-ends-spec.md`
-for the plan, the progress tables and the parity checklist.
-
-## License
-
-MIT
+Ongoing work is tracked in `loose-ends-spec.md` (see also `docs/changelog.md`
+for what landed recently). Known honest limitation: keystroke-to-paint p95
+sits above the 16 ms aspiration because ink 6 re-tokenizes the whole frame
+per paint — the measured renderer floor on this machine already touches the
+target, so the enforced perf gate is ratio-based (regressions fail, absolute
+numbers report). The measurement and rationale live in `tools/check.js` §9.

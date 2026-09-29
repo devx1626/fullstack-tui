@@ -593,7 +593,7 @@ and solid.
 >   settings route; nudge predicate table (first-run, 6 days, scored-today, 9 days, dismissed);
 >   revisitTarget cases; recap pointer case. Suite 863 pass / 0 fail; `npm run check` green.
 
-### P1-4 · Docs workstream
+### P1-4 · Docs workstream — CLOSED 2026-09-29
 
 **Findings.** README says the classic UI is "the stable, default experience" (pre-flip world),
 its status section narrates phases 2–4 as future, and its scripts table carries pre-flip
@@ -621,6 +621,32 @@ files). The specs themselves are honest but enormous; they're history documents 
 5. **Publishing note:** if the package is ever published to npm, do it **after** the flip and
    tag v1.0.0 there — no published user should ever meet the classic app (see the resolved
    flip-risk finding in §7).
+
+> **Status (2026-09-29, CLOSED).** All four deliverables landed:
+> 1. **README rewritten** — post-flip throughout: `q`-types-in-editor honesty (quit is
+>    `Ctrl+C`), the 80-command count, `<C-p>` as the challenge-scoped preview it now is,
+>    an Environments section (the five `FULLSTACK_*`/`NO_ANIMATION` vars the code actually
+>    reads), a scripts table matching `package.json`, a source tree without the deleted
+>    `src/index.js`, and a Status section describing the shipped app + the perf-wall
+>    deviation instead of narrating phases.
+> 2. **features.md split** — the dated progress notes are gone (changelog carries that
+>    history); the pre-flip `FULLSTACK_UI=next` entry-points table is now the real one; §10
+>    "Planned" is a two-line pointer to `loose-ends-spec.md`; the inventory itself is
+>    current (P1-3 motivation included, screenshots, checkpoints, the QA nets).
+> 3. **CONTRIBUTING refreshed** — correct gate order (build before test:unit), the
+>    harness-only-React rule, the registry/keymap-docs rules (`npm run keymap:docs` after
+>    binding changes), content-QA tooling (`qa-audit.mjs`, the link lint), and the
+>    theme/icon token rules; no classic-UI references remain.
+> 4. **Spec headers** — both big specs open with a "superseded as a tracker" note
+>    pointing at the changelog (history) and `loose-ends-spec.md` (open work).
+>
+> Gate note: the §11 link linter gained a one-retry rule for network-error (not HTTP-status)
+> probe results during this work — sqlite.org ETIMEDOUT'd mid-run twice on a loaded box and
+> failed the gate randomly; a link that answers on retry now WARNs (`flaky but resolving`)
+> instead of FAILing, and a genuinely dead host still fails (it times out twice). The perf
+> gate photo-finished (304–412 ms p95 vs a ~300 ms ceiling, p50 healthy) on the same run —
+> machine load 3.5–9 vs the idle morning; the perf-path code is untouched by this commit and
+> CI's dedicated runner is the arbiter (green on all three runs that day, perf included).
 
 ### P1-5 · Minimal dev tooling
 
