@@ -8,10 +8,10 @@
  * two React copies and crashes with the useContext null-dispatcher error.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { render, useInput, useApp } from 'ink';
+import { render, useInput, useApp, useCursor } from 'ink';
 import { useKeymap, getCurrentRoute, setCurrentRoute, clearRoute } from './useKeymap.js';
 
-export { render, useInput, useApp, useState, useEffect, useRef, useKeymap, getCurrentRoute, setCurrentRoute, clearRoute };
+export { render, useInput, useApp, useCursor, useState, useEffect, useRef, useKeymap, getCurrentRoute, setCurrentRoute, clearRoute };
 export { dispatchToScreen } from './useKeymap.js';
 export { SCREEN_TARGETS, TAB_TARGETS } from './screenTargets.js';
 export { preferenceRows, vimPreferenceRow, togglePreference, clampTabSize, nextTabSize, TAB_SIZES,

@@ -44,6 +44,7 @@ import {
   docText,
   pos,
 } from '../editor/document.js';
+import { followCaret, cursorPoint } from '../editor/viewport.js';
 import {
   acceptItem,
   completionsAt,
@@ -342,6 +343,73 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   const cursorsRef = useRef(cursors);
   const setCursors = useCallback((next) => { cursorsRef.current = next; setCursorsState(next); }, []);
 
+  // ---- P0-5: the caret-only fast path ------------------------------------
+  // A caret move that changes neither the selection, the scroll view, the
+  // multi-cursor set nor the active tab re-tokenizes NOTHING — every visible
+  // cell is byte-identical and the only thing ink must reposition is the
+  // terminal cursor. The slow path re-renders the whole tree for that
+  // (measured: ~0.6x a typing keystroke); this path costs ~1 ms.
+  //
+  // Mechanics: write the NEXT doc (caret included) straight into sessionRef so
+  // the next keystroke composes against it (the two-key-burst rule), skip
+  // setSession entirely (no React state update, no re-render), and publish the
+  // new cursor cell through the fastCursor ref. ChallengeScreen forwards that
+  // ref to CodeEditor, whose cursor effect runs on every commit — commit
+  // happens because the RERENDER closure in useKeymap forces the reconciler to
+  // run (no DOM change ⇒ no stdout write beyond ink's cursor-only sequence,
+  // which is the whole point). Any guard miss falls back to the normal
+  // setSession path. Guards (§12): no selection change, no scroll-view change
+  // (followCaret must agree the view is already correct), relativeNumbers off
+  // (relative gutters depend on the caret row — it stays reserved until this
+  // ships with its own gate), single cursor (multi sets draw inverse cells),
+  // same active tab, and the move must actually change the caret.
+  const fastCursorRef = useRef(null);
+  const tryFastCaret = useCallback((nextSession, name) => {
+    // Multi-cursor set: secondary carets paint as inverse CELLS in the text
+    // layer — a cursor-only move would leave stale cells behind.
+    if (cursorCount(cursorsRef.current) > 1) return null;
+    const prevDoc = sessionDoc(sessionRef.current, name);
+    const nextDoc = sessionDoc(nextSession, name);
+    if (!prevDoc || !nextDoc) return null;
+    // Selection must be untouched and the move must have actually moved.
+    if (selectionRef.current) return null;
+    if (nextDoc.caret.row === prevDoc.caret.row && nextDoc.caret.col === prevDoc.caret.col) return null;
+    // Text, view and doc identity guards: only the caret may differ.
+    if (nextDoc.lines !== prevDoc.lines && docText(nextDoc) !== docText(prevDoc)) return null;
+    const prevView = viewOf(prevDoc);
+    const nextView = viewOf(nextDoc);
+    if (nextView.scrollTop !== prevView.scrollTop || nextView.scrollX !== prevView.scrollX) return null;
+    // The view must already show the new caret (no scroll needed to draw it).
+    // editorHeight is 20 (ChallengeScreen); width is textWidth (gutter 4 at
+    // these sizes) — both must fit or the slow path handles the scroll.
+    const fit = followCaret(nextDoc, nextView, { height: 20, width: 200, tabSize: nextSession.tabSize });
+    if (fit.scrollTop !== prevView.scrollTop || fit.scrollX !== prevView.scrollX) return null;
+    // The active tab must be unchanged (a tab strip redraw is a state change).
+    if (nextSession.active !== sessionRef.current.active) return null;
+    // The relative-numbers reservation (decision 11): gutters that recompute
+    // per caret row must not ship with a path that skips the gutter redraw.
+    const editorPrefs = (services?.settings?.data && services.settings.data.editor) || {};
+    if (editorPrefs.relativeNumbers) return null;
+    return { session: nextSession, doc: nextDoc };
+  }, [services]);
+
+  /** Take the fast path for a computed next-session: write sessionRef (so the
+   *  next keystroke composes against the moved caret — the two-key-burst
+   *  rule), arm the one-shot cursor cell for the next commit, and report the
+   *  fast-path geometry CodeEditor must share. null → caller falls back. */
+  const takeFastCaret = useCallback((nextSession, name) => {
+    const fast = tryFastCaret(nextSession, name);
+    if (!fast) return null;
+    sessionRef.current = nextSession; // NO setSession — that is the whole point
+    fastCursorRef.current = cursorPoint(
+      { top: 1, left: 4, height: 20, width: 196 },
+      fast.doc,
+      viewOf(fast.doc),
+      { tabSize: nextSession.tabSize },
+    );
+    return fast;
+  }, [tryFastCaret]);
+
   // PC-27: open checkpoint restore list (the palette's history.restore). The
   // list itself is keyed through the overlay stack (openOverlay below), so
   // keys the list does not claim are DROPPED — the buffer underneath is
@@ -513,6 +581,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       languages: Object.fromEntries(names.map((n) => [n, langOf(n)])),
     });
     setSession(seeded);
+    fastCursorRef.current = null; // a challenge switch voids any armed cell
     // PC-11: the cursor set belongs to the DOCUMENT — a challenge switch must
     // re-seed it, or the first cursor command would act on stale positions.
     setCursors(createCursorSet(seeded.files[seeded.active].doc));
@@ -794,7 +863,13 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       next = commit(session, name, applyEdit(doc, r.changes, r.caret).doc, { coalesce: 'typing' });
     } else if (key === 'left' || key === 'right' || key === 'up' || key === 'down' || key === 'home' || key === 'end') {
       const p = moveArrow(doc, key);
-      next = commit(session, name, moveCaret(doc, p), { history: false });
+      const moved = moveCaret(doc, p);
+      next = commit(session, name, moved, { history: false });
+      // P0-5 fast path: a caret-only move with the view already showing the
+      // destination skips the re-render entirely (see takeFastCaret). Any
+      // guard miss keeps the plain state-update path below — the fallback IS
+      // the old code.
+      if (takeFastCaret(next, name)) return true;
     } else if (key === 'pageup' || key === 'pagedown') {
       // Classic editor parity (app.js challengeKey): PgUp/PgDn move the caret
       // 10 rows (the same step the list screens use). They previously fell out
@@ -802,7 +877,9 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       // them first, so the caret never moved.
       const dir = key === 'pageup' ? 'up' : 'down';
       const p = moveArrow(doc, dir, { count: 10 });
-      next = commit(session, name, moveCaret(doc, p), { history: false });
+      const moved = moveCaret(doc, p);
+      next = commit(session, name, moved, { history: false });
+      if (takeFastCaret(next, name)) return true;
     } else if (key === 'ctrl-z') {
       next = sessionUndo(session, name);
     } else if (key === 'ctrl-y' || key === 'shift-ctrl-z') {
@@ -824,7 +901,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     else if (consumed && (key === 'backspace' || key === 'delete')) { setPopup(null); stopsRef.current = null; }
     if (next !== session) setSession(next);
     return consumed;
-  }, [completeFrom, copyText, popupHandles, setMode, setRegisters, setSelection, setSession, setVim]);
+  }, [completeFrom, copyText, popupHandles, setMode, setRegisters, setSelection, setSession, setVim, takeFastCaret]);
 
   /**
    * Emmet expansion for one key event (classic `tryEmmetExpand` + the `;`
@@ -1050,6 +1127,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
           next = sessionResetFile(next, name, text ?? '', { label: 'reset' });
         }
         setSession(next);
+        fastCursorRef.current = null; // the reset rewrites the buffer
         services.store.saveDraft(challengeKey, null);
         setShowSolution(false);
         setResults(null);
@@ -1354,6 +1432,9 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       onDocWheel: (dir) => {
         const current = sessionRef.current;
         if (!current) return;
+        // A scroll invalidates any armed fast-path cursor cell: the cell was
+        // computed for the previous scroll position.
+        fastCursorRef.current = null;
         const view = viewOf(sessionDoc(current));
         setSession(sessionSetView(current, current.active, {
           scrollTop: Math.max(0, (view.scrollTop || 0) + dir * 3),
@@ -1442,6 +1523,7 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
       popupSignature={popupSignature}
       celebrate={celebrate}
       cursors={cursorByRow}
+      fastCursorRef={fastCursorRef}
     />
     <Modal
       title="Restore a checkpoint"

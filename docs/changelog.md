@@ -22,6 +22,17 @@ before the challenge editor and silently misbehaved. All four are fixed:
 - `q` types instead of quitting the app on the challenge screen. Quit stays on
   `Ctrl+C` and in the palette.
 
+### Editor caret fast path (P0-5)
+
+Caret-only moves in the modeless editor no longer repaint the frame. A move
+that changes nothing but the caret position — no selection, no scroll, no
+multi-cursor set, relative numbers off — updates the editor state and the
+terminal cursor directly and skips the React render entirely; ink emits only
+its cursor-move sequence instead of rebuilding the frame. Editing behavior is
+unchanged: any move the guards cannot prove safe falls back to the ordinary
+render path, and `relativeNumbers` remains reserved until its gutter gate
+ships.
+
 ## 2026-09-25 · The flip
 
 **The Ink UI is the only UI.** The classic canvas app (`src/app.js`,

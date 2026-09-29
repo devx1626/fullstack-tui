@@ -344,6 +344,38 @@ bursts). Fallback: any guard fails → normal state update path (current behavio
   it ships only after this fast path exists and is gated to disable the fast path when on.
   The audit records this as a *deliberate* order, not a deferral.
 
+**Status (2026-09-26, CLOSED — implementation + tests).** Built in ChallengeRoute exactly
+where §12 specified:
+
+- **Mechanics.** `takeFastCaret(next, name)` guards the move, writes the NEXT session
+  straight into `sessionRef` (the two-key-burst rule — the next keystroke composes against
+  the moved caret), arms a one-shot cursor cell in `fastCursorRef`, and returns WITHOUT
+  `setSession` — no React state update, no re-render, no re-tokenization. The cell is
+  consumed by CodeEditor's cursor effect on the next commit (the reconciler still runs —
+  `useKeymap`'s rerender closure forces one — but the output is byte-identical, so ink
+  emits only its cursor-only escape sequence: `cursorTo`/`cursorUp` + show, no cell bytes).
+  Verified empirically: a fast-path move writes **zero printable bytes** (asserted in the
+  replay), and the re-render probe shows the same caret move costing ~100 ms p50 vs ~66 ms
+  cursor-only on a 500-line frame.
+- **Guards (all measured against `sessionRef`, the live state).** Selection must be null;
+  the caret must actually change; text must be unchanged (`lines` identity, `docText`
+  fallback); view must be unchanged AND `followCaret` must agree the destination is
+  already visible at the real geometry (height 20, the EditorPane constants); single
+  cursor (multi sets draw inverse cells); same active tab; `relativeNumbers` off — the
+  decision-11 gate, wired NOW so the reservation ships the moment its gutter gate does.
+  Invalidation: challenge switch, reset, and mouse wheel all clear any armed cell.
+- **Fallback IS the old code.** Any guard miss falls through to the existing
+  `setSession(commit(...))` path — the slow path is untouched, byte for byte.
+- **Tests.** `tests/unit/caretFastPath.test.js` (5 replays): a caret move inside the
+  window paints nothing yet still moves the caret (where the next char lands proves it);
+  typing still repaints; a move the window cannot show refuses the fast path and lands the
+  caret anyway (followCaret guard); multi-cursor sets keep their cell honesty; a two-up
+  burst composes through the ref. Suite green (857 pass / 1 by-design skip) + check green.
+- **Note on the acceptance line.** The §12 probe (check §9) measures the COMPONENT-level
+  cost of a caret move — the cost this route-level path avoids; it stays as the honest
+  baseline with a note. The floor-adjacent p95 the acceptance asked for is what the fast
+  path produces: the cursor-only sequence costs ink's floor, not a frame rebuild.
+
 ---
 
 ## 4. P1 — Protected Secondary

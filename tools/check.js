@@ -537,6 +537,9 @@ try {
     const ms = (n) => `${n.toFixed(1)} ms`;
     const over = (v, base) => `${(v / base).toFixed(1)}x the floor`;
     process.stdout.write(`   note  caret-only moves on the same frame: p50 ${ms(caret.p50)}, p95 ${ms(caret.p95)} — ${(caret.p50 / p50).toFixed(2)}x what typing costs, because ink re-renders the whole tree on any update\n`);
+    // P0-5: the route now has a fast path that skips the re-render for guarded
+    // caret moves (see ChallengeRoute.takeFastCaret); this probe measures the
+    // component-level cost the fast path avoids, kept as the honest baseline.
     const floorVerdict = floor.p95 > 16
       ? "§12's 16 ms p95 is below ink's own floor here, i.e. the target is a property of the renderer rather than of the editor code"
       : "ink's floor is inside §12's 16 ms p95, so any editor overshoot is the editor's own";

@@ -41,6 +41,7 @@ function EditorPane({
   mouseSink,
   diagnostics,
   cursors,
+  fastCursorRef,
 }) {
   // Explicit prop wins (tests/previews); otherwise the app-wide theme tokens.
   const theme = themeProp || useTheme();
@@ -83,6 +84,7 @@ function EditorPane({
       mouseSink={mouseSink}
       diagnostics={diagnostics}
       cursors={cursors}
+      fastCursorRef={fastCursorRef}
     />
   );
 }
@@ -121,6 +123,7 @@ export function ChallengeScreen({
   vimEnabled, // vim on? the footer's nudge line only makes sense then
   celebrate = null, // §7.3 motion: {key} while the pass flourish shows
   cursors = null, // PC-11: secondary carets (row → cols Map) for the editor
+  fastCursorRef = null, // P0-5: fast-path cursor cell (ref; null → slow path only)
 }) {
   const theme = themeProp || useTheme();
   const ic = useIcons();
@@ -215,6 +218,7 @@ export function ChallengeScreen({
               mouseSink={mouseSink}
               diagnostics={diagnostics}
               cursors={cursors}
+              fastCursorRef={fastCursorRef}
             />
             <CompletionPopup popup={popup} signature={popupSignature} width={textWidth} />
           </Box>

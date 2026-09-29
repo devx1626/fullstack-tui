@@ -239,6 +239,7 @@ export function CodeEditor({
   mouseSink = null,
   diagnostics = null,
   cursors = null,
+  fastCursorRef = null, // P0-5: one-shot cursor cell from the route's fast path
 }) {
   // Syntax colours come from the app-wide theme unless a caller overrides it —
   // the route no longer has to thread tokens down through every pane.
@@ -309,11 +310,25 @@ export function CodeEditor({
 
   // Terminal cursor: the caret's cell inside this box, or hidden when scrolled
   // away. Coordinates are relative to this component's output origin.
+  // P0-5: when the route took the caret-only fast path it skipped the re-render
+  // and parked the next cursor cell in fastCursorRef; this commit reads it and
+  // positions the terminal cursor from it INSTEAD of the (unchanged) doc. The
+  // ref is consumed on read: the next commit (typing, a real re-render) goes
+  // back to the doc-derived position below. The fast-path geometry must match
+  // this component's layout — the route passes the same stripRows/gutter
+  // origin and height that EditorPane renders with (see tryFastCaret).
+  const fastRef = fastCursorRef;
   useEffect(() => {
+    if (fastRef && fastRef.current) {
+      const p = fastRef.current;
+      fastRef.current = null; // consume: one-shot, like log-update's cursorDirty
+      setCursorPosition(p);
+      return () => setCursorPosition(undefined);
+    }
     const p = cursorPoint({ top: stripRows, left: gutterW, height, width: textWidth }, doc, view, { tabSize });
     setCursorPosition(p);
     return () => setCursorPosition(undefined);
-  }, [doc, view, stripRows, gutterW, height, textWidth, tabSize, setCursorPosition]);
+  }, [doc, view, stripRows, gutterW, height, textWidth, tabSize, setCursorPosition, fastRef]);
 
   // Mouse: build the handler from intents, then publish it to the route's sink.
   // Publishing happens in an effect AND during render (sink.current) so a route
