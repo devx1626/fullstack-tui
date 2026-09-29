@@ -33,6 +33,14 @@ unchanged: any move the guards cannot prove safe falls back to the ordinary
 render path, and `relativeNumbers` remains reserved until its gutter gate
 ships.
 
+### Curriculum links repaired (P0-4, scripted half)
+
+`npm run check` now lints every external URL in the curriculum: a dead link
+fails the gate. Its first pass found six stale references — two MDN pages that
+moved, a retired Node.js Docker tutorial, and three old blog posts — all
+replaced with live pages (MDN's type-coercion glossary entry, the Docker
+Node.js language guide, and Julia Evans's debugging manifesto among them).
+
 ## 2026-09-25 · The flip
 
 **The Ink UI is the only UI.** The classic canvas app (`src/app.js`,

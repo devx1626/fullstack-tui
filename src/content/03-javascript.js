@@ -137,7 +137,7 @@ console.log(Number.isNaN(NaN));          // true`,
       ],
       resources: [
         { label: 'MDN: JavaScript data types', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures' },
-        { label: 'MDN: Type coercion', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Type_conversion' },
+        { label: 'MDN: Type coercion', url: 'https://developer.mozilla.org/en-US/docs/Glossary/Type_coercion' },
         { label: 'What the heck is the event loop? (later, for js-06)', url: 'https://www.youtube.com/watch?v=8aGhZQkoFbQ' },
       ],
       challenges: [

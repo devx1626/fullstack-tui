@@ -549,7 +549,7 @@ export default {
         { label: 'Vitest: Getting Started', url: 'https://vitest.dev/guide/' },
         { label: 'node:test (built into Node)', url: 'https://nodejs.org/api/test.html' },
         { label: 'Stryker: mutation testing', url: 'https://stryker-mutator.io/docs/' },
-        { label: 'Kent C. Dodds: Testing Trophy', url: 'https://kentcdodds.com/blog/the-testing-trophy-and-testing-classes' },
+        { label: 'Kent C. Dodds: Testing Trophy', url: 'https://kentcdodds.com/blog/the-testing-trophy-and-testing-classifications' },
       ],
       challenges: [
         {
@@ -1212,7 +1212,7 @@ export default {
         { label: 'node --inspect (debugger docs)', url: 'https://nodejs.org/en/learn/getting-started/debugging' },
         { label: 'git bisect documentation', url: 'https://git-scm.com/docs/git-bisect' },
         { label: 'Chrome DevTools: Debug JavaScript', url: 'https://developer.chrome.com/docs/devtools/javascript/' },
-        { label: 'Julia Evans: How to debug a program', url: 'https://jvns.ca/blog/2016/08/24/five-ways-to-avoid-being-stuck-debugging/' },
+        { label: 'Julia Evans: A debugging manifesto', url: 'https://jvns.ca/blog/2022/12/08/a-debugging-manifesto/' },
       ],
       challenges: [
         {

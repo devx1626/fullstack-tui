@@ -859,7 +859,7 @@ ORDER BY uses DESC, t.name;`,
       ],
       resources: [
         { label: 'SQLite: joins', url: 'https://www.sqlite.org/lang_select.html#joins' },
-        { label: 'MDN: Database normalisation', url: 'https://developer.mozilla.org/en-US/docs/Glossary/Normalization' },
+        { label: 'Wikipedia: Database normalization', url: 'https://en.wikipedia.org/wiki/Database_normalization' },
       ],
       challenges: [
         {

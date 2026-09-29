@@ -567,7 +567,7 @@ export default {
         'Explicit dimensions prevent layout shift',
       ],
       resources: [
-        { label: 'MDN: Images', url: 'https://developer.mozilla.org/en-US/docs/Learn/HTML/Multimedia_and_embedding/Images_and_graphics' },
+        { label: 'MDN: Images', url: 'https://developer.mozilla.org/en-US/docs/Learn/HTML/Multimedia_and_embedding/Images_in_HTML' },
       ],
       challenges: [
         {

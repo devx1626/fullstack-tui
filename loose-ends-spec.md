@@ -324,6 +324,25 @@ structure; content fixes carry targeted unit assertions where a check's behavior
 (e.g. a tightened check's reference solution and a wrong-answer rejection); tone/link fixes
 carry no new tests beyond the link linter.
 
+**Status (2026-09-26, link half complete — QA rubric open).** The scripted links half is
+built and its findings fixed:
+
+- `tools/check.js` gained §11 (content links): every external URL in `course`, `roadmap`,
+  and lesson `resources`/bodies is collected from `src/content/index.js` and probed
+  (HEAD, then GET fallback) with an 8 s timeout at concurrency 8. A SOFT status set
+  `{403,405,406,409,429,999}` counts as resolving (bot walls, not dead pages); localhost/
+  example fixtures are skipped; if EVERY probe errors (network down), the section WARNs
+  instead of failing so CI can't go red on a connectivity blip.
+- First pass probed 164 unique URLs and found 6 dead. All replaced with hand-verified
+  (HTTP 200) pages: MDN `Images_in_HTML` (was `Images_and_graphics`), MDN
+  `Glossary/Type_coercion` (the old `Type_conversion` reference page is gone), Wikipedia's
+  Database normalization article (MDN has no normalization glossary entry anymore), the
+  Docker Node.js language guide (replacing nodejs.org's retired docker tutorial), and two
+  stale blog links in testing — kentcdodds `…testing-classifications` (was `…classes`) and
+  Julia Evans's "A debugging manifesto" (was a dead 2016 post).
+- The rubric-driven module-by-module QA pass (tone, hint ladders, vacuous checks,
+  difficulty spikes) is the remaining half of P0-4 and stays open.
+
 ### P0-5 · Editor caret fast path
 
 **Finding.** Documented, measured, and deliberately not built (`tui-overhaul-spec.md` §12,

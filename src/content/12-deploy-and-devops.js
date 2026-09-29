@@ -546,7 +546,7 @@ export default {
       resources: [
         { label: 'Docker: Multi-stage builds', url: 'https://docs.docker.com/build/building/multi-stage/' },
         { label: 'Docker: Building best practices', url: 'https://docs.docker.com/build/building/best-practices/' },
-        { label: 'Node.js: Dockerizing a Node.js web app', url: 'https://nodejs.org/en/learn/getting-started/nodejs-with-docker' },
+        { label: 'Docker: Node.js language guide', url: 'https://docs.docker.com/language/nodejs/' },
       ],
       challenges: [
         {

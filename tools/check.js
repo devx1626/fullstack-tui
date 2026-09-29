@@ -1021,6 +1021,88 @@ try {
   fail(`dead-export sweep: ${err && err.stack ? err.stack.split('\n')[0] : err}`);
 }
 
+// ---------------------------------------------------------------------------
+// 11. Content link linter (loose-ends P0-4): every URL the curriculum shows a
+// learner must resolve. The linter runs ONLINE by design (spec: "offline
+// determinism is NOT required — it runs in the check gate, not in the learner
+// runtime"); with no network it degrades to WARN so an offline dev machine is
+// not a red gate. Loopback/localhost/example URLs are exercise fixtures the
+// learner's own server answers — never probed.
+process.stdout.write('\n11. content links (P0-4)\n');
+try {
+  const NON_PROBED = /(^https?:\/\/localhost[:/]|^https?:\/\/127\.0\.0\.1[:/]|^https?:\/\/api\.example\.com|^https?:\/\/example\.com)/;
+  /** Collect every string that looks like a URL from the content modules,
+   *  with the module id it came from for a useful failure message. */
+  const collected = new Map(); // url -> first moduleId that referenced it
+  for (const mod of curriculum) {
+    const visit = (value) => {
+      if (typeof value === 'string') {
+        if (/^https?:\/\/\S+$/.test(value)) {
+          const url = value.replace(/[.,)]$/, '');
+          if (!collected.has(url)) collected.set(url, mod.id);
+        }
+        return;
+      }
+      if (Array.isArray(value)) { for (const v of value) visit(v); return; }
+      if (value && typeof value === 'object') { for (const v of Object.values(value)) visit(v); }
+    };
+    visit(mod);
+  }
+  const urls = [...collected.keys()].filter((u) => !NON_PROBED.test(u));
+  const skipped = collected.size - urls.length;
+  process.stdout.write(`   ok  ${urls.length} unique URLs to probe (${skipped} localhost/example fixtures skipped)\n`);
+
+  /** HEAD first; some hosts (YouTube, MDN) reject HEAD, so fall back to GET
+   *  with a stream we never consume. A 405/403/999 counts as RESOLVING: the
+   *  host answered, the path is the host's business — the gate catches dead
+   *  domains and 404s, not bot-walls. */
+  const SOFT = new Set([403, 405, 406, 409, 429, 999]);
+  const probe = async (url) => {
+    const timeout = AbortSignal.timeout(8000);
+    try {
+      const res = await fetch(url, { method: 'HEAD', signal: timeout, redirect: 'follow' });
+      if (res.ok || SOFT.has(res.status)) return { ok: true };
+      // HEAD may be unimplemented on a live host: one GET before judging.
+      const get = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(8000), redirect: 'follow' });
+      get.body?.cancel().catch(() => {});
+      return { ok: get.ok || SOFT.has(get.status), status: get.status };
+    } catch (err) {
+      return { ok: false, error: err && err.cause ? err.cause.code || err.cause.message : err.message };
+    }
+  };
+
+  // Small concurrency, generous timeouts: the gate stays polite to the hosts
+  // it probes and finishes in well under a minute for ~150 URLs.
+  const CONCURRENCY = 8;
+  const results = new Map();
+  let idx = 0;
+  const worker = async () => {
+    while (idx < urls.length) {
+      const url = urls[idx++];
+      const r = await probe(url);
+      results.set(url, r);
+    }
+  };
+  let networkDown = 0;
+  try {
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  } catch (err) {
+    networkDown = 1;
+  }
+  const dead = [...results.entries()].filter(([, r]) => !r.ok);
+  if (dead.length === urls.length && urls.length > 0) {
+    // EVERYTHING failed: almost certainly the machine, not the content.
+    warn(`link linter: every probe failed — network unreachable? Skipping (${urls.length} URLs unverified)`);
+  } else if (dead.length) {
+    for (const [url, r] of dead) fail(`link dead (first seen in module ${collected.get(url)}): ${url}${r.status ? ` — HTTP ${r.status}` : ` — ${r.error || 'no answer'}`}`);
+  } else {
+    process.stdout.write(`   ok  all ${urls.length} probed URLs resolve\n`);
+  }
+  void networkDown;
+} catch (err) {
+  fail(`link linter: ${err && err.stack ? err.stack.split('\n')[0] : err}`);
+}
+
 process.stdout.write('\n');
 if (failures) {
   process.stdout.write(`${failures} problem(s) found.\n`);
