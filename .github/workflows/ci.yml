@@ -3,7 +3,9 @@ name: CI
 # The merge bar from tui-overhaul-spec.md §13: build + tests green. Two stages
 # because they fail for different reasons — `test:unit` is fast feedback on the
 # code, `check` grades every reference solution against the curriculum (and
-# takes minutes because the Python checks spawn real interpreters).
+# takes minutes because the Python checks spawn real interpreters). They run
+# in that order — `self-check` needs `unit` — so a broken build fails at the
+# cheap gate and never starts the long one.
 on:
   push:
     branches: [master, main]
@@ -32,6 +34,7 @@ jobs:
 
   self-check:
     name: curriculum + editor self-check
+    needs: unit
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

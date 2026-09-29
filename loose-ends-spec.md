@@ -407,13 +407,13 @@ because of ink's re-tokenization; the ceiling catches *regressions*, not the wal
 a CI job ordering that runs `test:unit` first for fast feedback, then `check`. Also: a job
 timeout budget so a hung pty check can't eat the 10-minute default.
 
-**Status (2026-09-26, timeout budget done — ordering + report-only open).** Both CI jobs
-carry `timeout-minutes` now (unit 15, self-check 30 — several runners' worth of slack over
-the local ~5/~8 minute timings), so a hung pty check dies and marks red instead of running
-to GitHub's 360-minute job default. The two remaining halves stay open: making `self-check`
-wait on `unit` (`needs:`) for the fail-fast ordering, and §9's note lines only *mention* the
-renderer wall — a decision on report-only vs enforced ceilings for the ink-bound targets
-is still owed.
+**Status (2026-09-29, budget + ordering done — report-only open).** Both CI jobs carry
+`timeout-minutes` (unit 15, self-check 30 — several runners' worth of slack over the local
+~5/~8 minute timings), so a hung pty check dies and marks red instead of running to GitHub's
+360-minute job default, and `self-check` now declares `needs: unit` — a broken build fails
+at the cheap gate and never starts the long one. The remaining half is the renderer wall:
+§9's note lines only *mention* it — a decision on report-only vs enforced ceilings for the
+ink-bound targets is still owed.
 
 ### P1-2 · Wire multi-cursor bindings
 
