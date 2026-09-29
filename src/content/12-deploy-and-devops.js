@@ -1422,6 +1422,7 @@ jobs:
           difficulty: 'hard',
           minutes: 22,
           lang: 'js',
+          async: true,
           prelude: RETRY_LOG_PRELUDE,
           prompt:
             'Write `createShutdown({ server, log, timeoutMs, setTimeoutFn })` returning `stop(signal)`. It stops accepting connections, waits for ' +
@@ -1436,14 +1437,11 @@ jobs:
           ],
           starter: `function createShutdown(options) {
   const server = options.server;
-  const log = options.log;
-
-  return function stop(signal) {
+  const log = options.log;  return function stop(signal) {
     log('info', 'shutting down', { signal });
-    server.close();
+    server.close(() => {});
   };
-}
-`,
+}`,
           hints: [
             'Cache the promise: `if (stopping) return stopping; stopping = (async () => {...})(); return stopping;`',
             'Race the close callback against a timer: `Promise.race([closed, timeout])`.',

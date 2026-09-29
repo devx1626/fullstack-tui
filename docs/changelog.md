@@ -41,6 +41,16 @@ moved, a retired Node.js Docker tutorial, and three old blog posts — all
 replaced with live pages (MDN's type-coercion glossary entry, the Docker
 Node.js language guide, and Julia Evans's debugging manifesto among them).
 
+### Challenge QA fixes (P0-4, first QA tranche)
+
+A content QA probe that grades every challenge's checks against its starter
+code caught one challenge whose checks could never fail: the graceful-shutdown
+challenge's async checks were scored without being awaited, so any submission
+— including nothing at all — passed all four. It grades properly now (and its
+starter no longer crashes the grader). Eight challenges gained a real third
+hint rung, two intro-labeled challenges sit in the normal difficulty scale,
+and the probe (`tools/qa-audit.mjs`) stays available for the next QA pass.
+
 ## 2026-09-25 · The flip
 
 **The Ink UI is the only UI.** The classic canvas app (`src/app.js`,

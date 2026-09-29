@@ -96,7 +96,7 @@ export default {
         {
           id: 'fix-skeleton',
           kind: 'debug',
-          difficulty: 'intro',
+          difficulty: 'easy',
           minutes: 6,
           lang: 'html',
           prompt:
@@ -146,7 +146,7 @@ export default {
         {
           id: 'write-skeleton',
           kind: 'write',
-          difficulty: 'intro',
+          difficulty: 'easy',
           minutes: 8,
           lang: 'html',
           prompt:
@@ -162,6 +162,7 @@ export default {
           hints: [
             'Start with the declaration, then the root element, then head, then body.',
             '<meta name="description" content="..."> goes in the head next to the charset.',
+            'Full order, line by line: `<!DOCTYPE html>`, then `<html lang="en">`, then `<head>` holding charset, viewport, description and `<title>`, then `<body>` holding one `<h1>` and a `<p>`.',
           ],
           solution: `<!DOCTYPE html>
 <html lang="en">
@@ -383,6 +384,7 @@ export default {
           hints: [
             'Move the <ul> inside the <li> for "Mix the dough" instead of leaving it between two items.',
             'A <dl> holds <dt> (the term) and <dd> (the definition) pairs, in that order.',
+            'So: `<li>Mix the dough <ul><li>500g flour</li><li>375g water</li></ul></li>`, and after the <ol> a <dl> with `<dt>Knead</dt><dd>...</dd>` twice.',
           ],
           solution: `<!DOCTYPE html>
 <html lang="en">
@@ -493,7 +495,11 @@ export default {
             'Include at least one heading in each semantic area',
           ],
           starter: ``,
-          hints: ['Think of it as a nested tree: Header/Main/Footer as the top level.'],
+          hints: [
+            'Think of it as a nested tree: Header/Main/Footer as the top level.',
+            'Inside <main>, a <section> groups related content under a heading and an <article> is a self-contained piece - the requirement is one of each, each with its own heading.',
+            'Skeleton: `<header><nav>...</nav></header>`, then `<main><section><h2>...</h2></section><article><h2>...</h2></article></main>`, then `<footer>...</footer>`.',
+          ],
           solution: `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Layout</title></head>
@@ -584,7 +590,11 @@ export default {
           ],
           starter: `<a href="https://google.com" target="_blank">Google</a>
 <img src="banner.png">`,
-          hints: ['Check the rel attribute for links that open in new tabs.', 'Add width and height attributes to the img tag.'],
+          hints: [
+            'Check the rel attribute for links that open in new tabs.',
+            'Add width and height attributes to the img tag.',
+            'Concretely: `rel="noopener noreferrer"` on the <a>, and `alt="..." width="1200" height="400"` on the <img>.',
+          ],
           solution: `<a href="https://google.com" target="_blank" rel="noopener noreferrer">Google</a>
 <img src="banner.png" alt="Company Banner" width="1200" height="400">`,
           checks: [
@@ -647,7 +657,11 @@ export default {
             'Use <th> with scope="row" for the activities',
           ],
           starter: ``,
-          hints: ['The first cell of every data row should be a <th scope="row">.'],
+          hints: [
+            'A table reads top to bottom: <caption> names it, <thead> holds the header row, <tbody> holds the data rows.',
+            'The first cell of every data row should be a <th scope="row">.',
+            'Header row: `<tr><th scope="col">Activity</th><th scope="col">Mon</th><th scope="col">Tue</th></tr>`; data row: `<tr><th scope="row">Study</th><td>2h</td><td>1h</td></tr>`.',
+          ],
           solution: `<table>
   <caption>Study Schedule</caption>
   <thead>
@@ -735,7 +749,11 @@ export default {
   <label>Name</label>
   <input id="name">
 </form>`,
-          hints: ['The for attribute on the label must match the id of the input.'],
+          hints: [
+            'The for attribute on the label must match the id of the input.',
+            'Every input also needs a name - that is the key the server receives - and the email field wants type="email" plus required.',
+            'Pattern: `<label for="email">Email</label><input id="email" name="email" type="email" required>` - same shape for the name field.',
+          ],
           solution: `<form>
   <label for="email">Email</label>
   <input id="email" name="email" type="email" required>
@@ -810,7 +828,11 @@ export default {
 <img src="logo.png">
 <p>Hello <p>World</p></p>
 <section id="main">Content</section>`,
-          hints: ['Check for duplicate ids using search.', 'The <img> tag needs an alt attribute.'],
+          hints: [
+            'Check for duplicate ids using search.',
+            'The <img> tag needs an alt attribute.',
+            'Collapse the nested paragraphs into one `<p>Hello World</p>`, give the <h1> an id nothing else uses, and add `alt="Logo"` to the image.',
+          ],
           solution: `<h1 id="title">Title</h1>
 <img src="logo.png" alt="Logo">
 <p>Hello World</p>

@@ -1194,6 +1194,7 @@ a:focus-visible {
           hints: [
             '`min-height` plus `align-items` and `justify-content` centres on both axes.',
             '`flex: 1` on the media body is what makes the text fill the leftover space.',
+            'Header core: `.site-header { display: flex; justify-content: space-between; gap: 1rem; }`; media body: `.media__body { flex: 1; min-width: 0; }`.',
           ],
           solution: `.site-header {
   display: flex;

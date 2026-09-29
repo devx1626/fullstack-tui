@@ -343,6 +343,38 @@ built and its findings fixed:
 - The rubric-driven module-by-module QA pass (tone, hint ladders, vacuous checks,
   difficulty spikes) is the remaining half of P0-4 and stays open.
 
+**QA tranche 1 (2026-09-29, html + css + the scripted net).** The pass now runs on a probe
+(`tools/qa-audit.mjs`, local scratch like audit.mjs — not a gate section) that lints every
+challenge mechanically: hint-ladder shape, difficulty vocabulary, adjacent easy→hard spikes,
+metadata, and — the tooth — runs every check against the challenge's STARTER code, since a
+check that passes before the learner does anything tests nothing. First run over all 125
+challenges / 823 checks found:
+
+- **`ops-04.write-graceful-shutdown` could never fail anything** (found by the probe, root
+  caused by hand): its four T.js checks are async IIFEs but the challenge lacked
+  `async: true`, so the runner never awaited them and each promise object scored truthy —
+  every check auto-passed on ANY code. The only such challenge in the curriculum (swept).
+  Fixed with the flag, plus a starter hardening: the starter's `server.close()` crashed the
+  grader harness (check 1's fake server calls its callback) with an unhandled rejection —
+  a learner's natural first attempt would have killed the process. Starter now passes a
+  no-op callback; 3 of 4 checks fail on the starter post-fix, the fourth ("logs the signal")
+  is a true guard rail.
+- **8 thin hint ladders filled** (html ×7, css ×1) — every challenge now has a real
+  3-rung Concept → Strategy → Code ladder in the module's own voice, no filler rungs.
+- **`intro` difficulty ×2** (html-01) regraded to `easy` — back inside the 3-word vocabulary.
+- **ts-02 easy→hard spike: justified, not regraded.** `debug-optional-crash` is a one-line
+  `?.` + `??` fix; `write-exhaustive-union` is the lesson's designed synthesis (model a
+  discriminated union + `assertNever` from scratch) with a full ladder and `assertNever`
+  pre-provided in the starter. The 2-step rule flags it; the rubric's read is that this is
+  an honest step up inside one lesson, not an accident.
+- Starter-probe "passes on starter" hits are triaged as guard rails where the challenge
+  deliberately requires *some* behaviors to keep working (mutation bans, no-var rules) —
+  not vacuity. Write challenges with empty starters are the norm, not a finding.
+
+Still open in this half: the prose rubric read (tone, mentor-voice failure messages,
+logic-vacuous checks the starter probe cannot see) for the remaining ten modules
+(js → devops).
+
 ### P0-5 · Editor caret fast path
 
 **Finding.** Documented, measured, and deliberately not built (`tui-overhaul-spec.md` §12,
