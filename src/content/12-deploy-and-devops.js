@@ -353,7 +353,7 @@ export default {
           minutes: 15,
           lang: 'js',
           prompt:
-            'Three problems in one small file: the API key is hard-coded, an empty-but-present value is treated as missing (so `"0"` or `""` ' +
+            'Four problems in one small file: the API key is hard-coded, an empty-but-present value is treated as missing (so `"0"` or `""` ' +
             'slip through in other places), the default environment is `production`, and the error message prints the secret it was given. Fix ' +
             'all four.',
           requirements: [
@@ -1130,8 +1130,8 @@ jobs:
           lang: 'js',
           prompt:
             '`planDeploy(request)` decides what a deploy command does - and right now a typo in the environment name silently ships to ' +
-            'production, migrations run after the app is switched over, and an unconfirmed production deploy goes ahead anyway. Make it ' +
-            'default-deny and ordered correctly.',
+            'production, an unconfirmed production deploy applies anyway, and the plan never verifies its config or smoke-tests the result ' +
+            'before switching over. Make it default-deny and ordered correctly.',
           requirements: [
             'Known environments only: `development`, `staging`, `production` - anything else throws',
             'Anything other than production runs as `apply` without confirmation',

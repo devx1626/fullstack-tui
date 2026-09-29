@@ -1025,8 +1025,8 @@ export default {
     expect(implementation.average([1, 2, 3])).toBe(2);
   });
 
-  test('average of a list with repeats', () => {
-    expect(implementation.average([1, 2, 3])).toEqual(2);
+  test('average keeps floating point precision', () => {
+    expect(implementation.average([1, 2, 2])).toBeCloseTo(1.67, 2);
   });
 
   test('clamp turns NaN into the minimum', () => {

@@ -267,7 +267,7 @@ function replaceNote(req, res) {
 function deleteNote(req, res) {
 }`,
           hints: [
-            'Reset the store between checks by working with `notes` — but be careful: the checks reuse it. Create, then delete what you created.',
+            'The checks share one store seeded with the note `id 1` - leave that row alone and clean up anything you create, so later checks see the state they expect.',
             'Filtering: `[...notes.values()].filter((n) => n.title.toLowerCase().includes(q.toLowerCase()))`.',
             '`res.status(201).set("Location", `/api/notes/${id}`).json(note)` chains nicely.',
             '204 means no body at all: `res.status(204).end()`.',
@@ -1117,7 +1117,7 @@ function createRateLimiter({ windowMs = 60_000, max = 60 } = {}) {
   };
 }`,
           checks: [
-            T.js('the query is parameterised', '(() => { const q = findUserSql(1); return typeof q === "object" && Array.isArray(q.values) && !String(q.text).includes("1"); })()'),
+            T.js('the query is parameterised', '(() => { const q = findUserSql(1); const text = String(q.text); return typeof q === "object" && Array.isArray(q.values) && q.values.includes(1) && (text.includes("?") || text.includes("$")); })()', 'Bind the value as a parameter: `WHERE id = ?` (SQLite) or `$1` (Postgres), with the value in the array.'),
             T.js('injection attempts cannot change the SQL', '(() => { const q = findUserSql("1 OR 1=1"); return typeof q === "object" && !String(q.text).includes("OR 1=1"); })()', 'Validate, then bind - never concatenate.'),
             T.js('the query only selects safe columns', '!String(findUserSql(2).text).includes("*")'),
             T.js('publicUser strips the password hash', '(() => { const out = publicUser({ id: 1, name: "Ama", email: "a@b.c", passwordHash: "secret" }); return out.passwordHash === undefined && out.name === "Ama"; })()', 'Whitelist the fields you send.'),

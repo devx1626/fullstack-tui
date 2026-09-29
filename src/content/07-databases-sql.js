@@ -540,6 +540,7 @@ SELECT ...;
 SELECT ...;
 
 -- 4. name (never ordered)
+SELECT ...;
 
 -- 5. avg_order_value
 `,

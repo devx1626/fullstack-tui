@@ -977,7 +977,7 @@ function Summary({ tasks }) {
           prelude: REACT_PRELUDE + BUS_PRELUDE,
           prompt:
             '`watchPrice` subscribes to the price bus and calls the handler once immediately, but it never gives the caller a way to stop. ' +
-            'Navitaging away from a screen leaves every old handler attached, so one price change fires six callbacks. Make it return an ' +
+            'Navigating away from a screen leaves every old handler attached, so one price change fires six callbacks. Make it return an ' +
             'unsubscribe function that is safe to call more than once.',
           requirements: [
             '`watchPrice(symbol, handler)` returns a function',

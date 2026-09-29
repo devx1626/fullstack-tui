@@ -403,6 +403,31 @@ Gates after the tranche: unit 857/0/1, check green with all 125 reference soluti
 re-graded against the modified checks, probe clean. Remaining for the pass: express, sql,
 react, typescript, python, testing, devops prose reads.
 
+**QA tranche 3 (2026-09-29, the remaining six modules — the rubric pass is COMPLETE).**
+Express, sql, react, typescript, python, testing and devops read clean on tone, hint
+ladders, and metadata; the probe reports zero vacuous checks, zero thin ladders, zero
+crashes across all 125 challenges. Seven precision fixes landed:
+
+- **express fix-security (the tranche's real catch):** check 1 demanded the SQL text NOT
+  contain the digit `1` — which rejects the `$1` placeholder the challenge's own hint
+  recommends (and any `LIMIT 1`). The check now asserts the honest shape: the value is
+  bound in a values array and the text carries a `?`/`$` placeholder.
+- **express write-crud:** hint 1 was garbled authoring residue ("Reset the store... but be
+  careful: the checks reuse it"). Rewritten as real guidance about the shared seeded store.
+- **react debug-subscription-leak:** typo "Navitaging" → "Navigating".
+- **testing debug-toBe-misuse:** the solution's own test named "with repeats" used input
+  `[1,2,3]` (no repeats) and `toEqual` on a number — replaced with the toBeCloseTo test the
+  module actually teaches.
+- **devops debug-leaky-config:** prompt said "Three problems" then listed four.
+- **devops debug-unsafe-deploy:** prompt claimed migrations run after the switch-over, but
+  the starter already ordered them first — prompt rewritten to the real defects (no
+  verify-config, no smoke-test, no confirmation gate).
+- **sql write-queries:** starter query 4 lacked the `SELECT ...;` scaffold its siblings had.
+
+**P0-4 STATUS: the scripted half and the rubric half are both done.** All 12 modules have
+been read against the rubric; the link linter (§11) and the QA probe (qa-audit.mjs) stand
+as permanent regression nets for future content work.
+
 ### P0-5 · Editor caret fast path
 
 **Finding.** Documented, measured, and deliberately not built (`tui-overhaul-spec.md` §12,
