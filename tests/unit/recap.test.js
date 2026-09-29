@@ -58,3 +58,10 @@ test('buildRecap: only failures still produces a recap', () => {
   assert.match(lines, /2 failed checks/);
   assert.match(lines, /1m 0s/);
 });
+
+test('buildRecap: the revisit pointer names the stubborn challenge once (P1-3)', () => {
+  const lines = buildRecap({ seconds: 60, passed: ['a-01'], revisit: 'sql-03.query-4' }).join('\n');
+  assert.match(lines, /revisit {2}sql-03\.query-4 - it put up a fight/);
+  // The idle early-return sits above the pointer: nothing checked → nothing claimed.
+  assert.doesNotMatch(buildRecap({ seconds: 60 }).join('\n'), /revisit/);
+});

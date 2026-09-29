@@ -14,7 +14,8 @@ import { useKeymap, getCurrentRoute, setCurrentRoute, clearRoute } from './useKe
 export { render, useInput, useApp, useCursor, useState, useEffect, useRef, useKeymap, getCurrentRoute, setCurrentRoute, clearRoute };
 export { dispatchToScreen } from './useKeymap.js';
 export { SCREEN_TARGETS, TAB_TARGETS } from './screenTargets.js';
-export { preferenceRows, vimPreferenceRow, togglePreference, clampTabSize, nextTabSize, TAB_SIZES,
+export { preferenceRows, vimPreferenceRow, goalPreferenceRow, togglePreference, clampTabSize, nextTabSize, TAB_SIZES,
+         GOAL_CYCLE, clampGoal, nextGoal,
          THEME_NAMES, THEME_CYCLE, normalizeTheme, themeLabel, nextTheme, stepTheme,
          ICON_CYCLE, stepIcons } from './preferences.js';
 export { openOverlay, closeOverlay, clearOverlays, hasOverlays, routeToOverlays, _resetOverlays } from './input/overlayStack.js';

@@ -73,6 +73,15 @@ export function HomeScreen({
         </Text>
       ) : null}
 
+      {vm.nudge ? (
+        <Text>
+          <Text color={theme.muted}>
+            Welcome back — {vm.nudge.away} days since last time. The streak starts again today.
+          </Text>
+          <Text color={theme.muted}>   (n dismiss)</Text>
+        </Text>
+      ) : null}
+
       {vm.resume ? (
         <Text>
           <Text color={theme.muted}> Next up: </Text>

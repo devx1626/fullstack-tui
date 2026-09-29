@@ -22,7 +22,7 @@ import { CelebrateLine, Modal } from './components/overlays.jsx';
 import { ICON_SETS } from './theme/icons.js';
 import { milestoneToast } from './milestones.js';
 import { nextLesson } from '../content/index.js';
-import { preferenceRows, vimPreferenceRow, togglePreference, stepTheme, stepIcons } from './preferences.js';
+import { preferenceRows, vimPreferenceRow, goalPreferenceRow, togglePreference, stepTheme, stepIcons } from './preferences.js';
 import {
   applyEdit,
   docFromText,
@@ -174,6 +174,10 @@ export function HomeRoute() {
       case 'home.dismissBanner':
         if (services && services.settings) services.settings.dismissBanner();
         host.say('Banner dismissed for today.', 'ok');
+        return;
+      case 'home.dismissNudge':
+        if (services && services.settings) services.settings.dismissNudge();
+        host.say('Nudge dismissed for today.', 'ok');
         return;
       default:
         host.run(id);
@@ -1795,7 +1799,7 @@ export function SettingsRoute() {
   const [revision, setRevision] = useState(0);
 
   const rows = useMemo(
-    () => [...preferenceRows({ settings, icons }), vimPreferenceRow({ settings, icons })],
+    () => [...preferenceRows({ settings, icons }), vimPreferenceRow({ settings, icons }), goalPreferenceRow({ settings, icons })],
     [settings, revision], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
@@ -1817,8 +1821,11 @@ export function SettingsRoute() {
       host.say(result.message, 'ok');
       return;
     }
-    if (id === 'settings.toggle' || id === 'settings.vimToggle') {
-      const key = id === 'settings.vimToggle' ? 'vimMode' : (rows[host.cursor] && rows[host.cursor].key);
+    if (id === 'settings.toggle' || id === 'settings.vimToggle' || id === 'settings.goalSet') {
+      // The reserved goalSet command (errors-and-qol-spec §0.7a) lands here so
+      // the palette can cycle the goal from anywhere on the screen; the row's
+      // own Space still goes through settings.toggle with the focused key.
+      const key = id === 'settings.vimToggle' ? 'vimMode' : id === 'settings.goalSet' ? 'goal' : (rows[host.cursor] && rows[host.cursor].key);
       if (!key) return;
       const result = togglePreference(settings, key);
       // A picker change re-renders the whole tree immediately (AppRoot owns the

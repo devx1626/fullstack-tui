@@ -7,6 +7,21 @@ Earlier history lives in the dated progress notes of `tui-overhaul-spec.md` and
 `errors-and-qol-spec.md`; those notes fold into this file as the docs workstream
 (loose-ends-spec P1-4) proceeds.
 
+## Unreleased — 2026-09-29 · Motivation systems
+
+The motivation half-features are finished: the daily goal is real, and the app
+says one quiet thing when you come back.
+
+- **Daily goal.** Settings gains a Daily goal row; Space cycles Off → 1 → 3 →
+  5 → 10. The dashboard shows an `of goal N/M` chip while the goal is on, and
+  the on-quit recap keeps score against it. `<C-g>` cycles from anywhere on
+  the settings screen.
+- **Comeback nudge.** After a week or more away, the dashboard shows one line
+  — the streak starts again today — dismissible with `n` for the rest of the
+  day. A first-run learner never sees it.
+- **Worth revisiting.** The recap gains one pointer: the first challenge you
+  attempted three-plus times without ever passing, if there is one.
+
 ## Unreleased — 2026-09-26 · Dead-key fixes
 
 A post-flip audit of the key map found four keys whose global bindings resolved

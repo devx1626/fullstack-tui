@@ -552,7 +552,7 @@ route-level round-trip + collapse + single-undo batch (routes.test.js), caret-ce
 golden `editor-replay-multi-cursor-column-type`. The 50-cap notice is engine-level
 (multicursor.test.js) and surfaces through the status line.
 
-### P1-3 · Motivation systems: finish the half-built, extend gently
+### P1-3 · Motivation systems: finish the half-built, extend gently — CLOSED 2026-09-29
 
 **Findings.** `settings.goalSet` is a reserved registry command with no UI (errors-and-qol-spec
 §0.7a table); the session recap (Q13) exists and is good; milestone toasts (Q5) are one-shot
@@ -572,6 +572,26 @@ and solid.
   respectful line (streak broken, here's next-up) — one line, dismissible, no confetti.
 - All persistence through `.data/progress.json`/`settings.json` with the existing atomic-write
   and merge discipline; unit tests for the goal math and the nudge predicate.
+
+> **Status (2026-09-29, CLOSED).** All four parts landed.
+> - **Settings goal row:** `goalPreferenceRow` (Daily goal, Space cycles) appended to the
+>   settings rows; the reserved `settings.goalSet` command is live on `<C-g>` (screen-scoped;
+>   `g` was taken by the global `nav.first`, which the keymap lint caught) and dispatches
+>   through the same `togglePreference(settings, 'goal')` path as Space. Cycle: Off → 1 → 3 →
+>   5 → 10 → Off; hand-edited values clamp (0–99); 0 = off removes the chip and the recap's
+>   scorekeeping.
+> - **Dashboard chip:** `of goal N/M` chip appears only while the goal is on, capped at M with
+>   a `good` tone when met (quiet rule: a chip, never a celebration). **Comeback nudge:** one
+>   line after `lastSeenDaysAgo() ≥ 7` with nothing passed today, dismissed for the day with
+>   `n` (`home.dismissNudge`, already registered). First-run learners are explicitly excluded
+>   (`Infinity` ≠ "away forever").
+> - **Recap:** goal line already existed (streak row); added the **revisit** pointer —
+>   `store.revisitTarget()` returns the first recorded challenge (insertion order) attempted
+>   3+ times without ever passing; the recap prints it once as `revisit <id> - it put up a
+>   fight` and only when there is activity to recap.
+> - **Tests:** goal cycle/clamp/row unit tests + a real `<C-g>` replay through the mounted
+>   settings route; nudge predicate table (first-run, 6 days, scored-today, 9 days, dismissed);
+>   revisitTarget cases; recap pointer case. Suite 863 pass / 0 fail; `npm run check` green.
 
 ### P1-4 · Docs workstream
 

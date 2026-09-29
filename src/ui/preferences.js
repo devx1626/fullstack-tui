@@ -105,6 +105,43 @@ export function clampTabSize(n) {
   return Number.isFinite(v) ? Math.max(2, Math.min(8, Math.round(v))) : 2;
 }
 
+// ---------------------------------------------------------------------------
+// Daily goal (P1-3, loose-ends-spec; the reserved settings.goalSet command)
+// ---------------------------------------------------------------------------
+
+/** Goal stops, cycled by Space. 0 = the goal is off. */
+export const GOAL_CYCLE = [0, 1, 3, 5, 10];
+
+/** A sane daily goal from a (possibly hand-edited) settings value. */
+export function clampGoal(n) {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.max(0, Math.min(99, Math.round(v))) : 0;
+}
+
+/** The next stop Space lands on from `n` (wraps 10 → Off). */
+export function nextGoal(n) {
+  const at = GOAL_CYCLE.indexOf(clampGoal(n));
+  return GOAL_CYCLE[(at + 1) % GOAL_CYCLE.length] ?? GOAL_CYCLE[0];
+}
+
+function goalMessage(next) {
+  return next === 0
+    ? 'Daily goal off — the recap stops keeping score.'
+    : `Daily goal: ${next} challenge${next === 1 ? '' : 's'} a day.`;
+}
+
+/** The goal row the next UI adds: shows the current target, Space cycles it. */
+export function goalPreferenceRow({ settings, icons = ICON_SETS.unicode } = {}) {
+  const daily = clampGoal(settings && settings.data && settings.data.goal && settings.data.goal.daily);
+  return {
+    key: 'goal',
+    label: 'Daily goal',
+    value: `${daily === 0 ? 'Off' : daily}  (Space to cycle)`,
+    hint: `Space to cycle ${icons.bullet} the dashboard chip and the recap keep the score`,
+    toggleable: true,
+  };
+}
+
 /** The next width Space lands on from `n` (wraps 8 → 2). */
 export function nextTabSize(n) {
   const at = TAB_SIZES.indexOf(clampTabSize(n));
@@ -220,6 +257,13 @@ export function togglePreference(settings, key) {
           ? 'Vim keys on — the Phase 2 editor starts in normal mode.'
           : 'Vim keys off — the Phase 2 editor uses the simpler modeless keys.',
       };
+    }
+    case 'goal': {
+      data.goal = data.goal || {};
+      const next = nextGoal(data.goal.daily);
+      data.goal.daily = next;
+      save();
+      return { changed: true, kind: 'good', goal: next, message: goalMessage(next) };
     }
     default:
       return {

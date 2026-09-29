@@ -5,6 +5,7 @@
  * src/views/module.js); these functions are the same logic, extracted for
  * unit tests and reused by the next-UI components.
  */
+import { clampGoal } from '../preferences.js';
 
 /**
  * Clamp a scroll offset so `total` rows fit a `height`-row window: the offset
@@ -70,6 +71,19 @@ export function homeViewModel({ curriculum, stats, overall, store, settings, res
     ? { current: streak.current }
     : null;
 
+  // P1-3 comeback nudge: lastSeen 7+ days back (and nothing solved today) gets
+  // ONE line. Dismissed for the day by 'n' (settings.nudgeVisible).
+  let nudge = null;
+  if (store && typeof store.lastSeenDaysAgo === 'function' && settings && typeof settings.nudgeVisible === 'function') {
+    const away = store.lastSeenDaysAgo();
+    const todayCount = typeof store.passedToday === 'function' ? store.passedToday() : 0;
+    // Infinity (never seen) must NOT read as “away forever” — a first-run
+    // learner is not coming back, they are arriving.
+    if (Number.isFinite(away) && away >= 7 && todayCount === 0 && settings.nudgeVisible()) {
+      nudge = { away };
+    }
+  }
+
   let resume = null;
   const target = typeof resumeTarget === 'function' ? resumeTarget() : null;
   if (target) {
@@ -101,8 +115,11 @@ export function homeViewModel({ curriculum, stats, overall, store, settings, res
   });
 
   const t = stats.totals || {};
+  const goalDaily = clampGoal(settings && settings.data && settings.data.goal && settings.data.goal.daily);
+  const todayCount = store && typeof store.passedToday === 'function' ? store.passedToday() : 0;
   return {
     banner,
+    nudge,
     resume,
     headline: {
       modules: overall.modules ?? curriculum.length,
@@ -113,6 +130,12 @@ export function homeViewModel({ curriculum, stats, overall, store, settings, res
       { label: 'best', value: streak.best, tone: 'muted' },
       { label: 'minutes today', value: store.todayMinutes ? store.todayMinutes() : 0, tone: 'accent' },
       { label: 'this week', value: `${store.weekMinutes ? store.weekMinutes() : 0}m`, tone: 'muted' },
+      // P1-3: the goal chip only exists when the goal is on — no score, no
+      // chip, per the quiet presentation rule (a chip and a line, never a
+      // celebration).
+      ...(goalDaily > 0
+        ? [{ label: 'of goal', value: `${Math.min(todayCount, goalDaily)}/${goalDaily}`, tone: todayCount >= goalDaily ? 'good' : 'accent' }]
+        : []),
       {
         label: 'solved',
         value: `${t.challengesPassed ?? 0}/${t.challenges ?? 0}`,

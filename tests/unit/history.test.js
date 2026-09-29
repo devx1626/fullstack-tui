@@ -143,3 +143,35 @@ test('Store writes, reads, prunes and finds checkpoints on disk', () => {
 
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('Store: lastSeenDaysAgo + revisitTarget back the P1-3 nudge and recap pointer', () => {
+  const dir = path.join(process.cwd(), '.data', 'p13-store-test');
+  rmSync(dir, { recursive: true, force: true });
+  const store = new Store(path.join(dir, 'progress.json'));
+
+  // A fresh store has never been seen: Infinity, NOT 0 — the nudge predicate
+  // relies on this to skip first-run learners.
+  assert.equal(store.lastSeenDaysAgo(), Infinity, 'never seen reads as Infinity');
+
+  // A hand-crafted record 9 days back reads as 9 whole days.
+  const nineDaysAgo = new Date(Date.now() - 9 * 86400000).toISOString();
+  store.data.lastSeen = nineDaysAgo;
+  assert.equal(store.lastSeenDaysAgo(), 9);
+
+  // revisitTarget: the first recorded challenge (insertion order = how the
+  // learner met them) attempted 3+ times without ever passing.
+  assert.equal(store.revisitTarget(), null, 'nothing attempted → null');
+  store.data.challenges['sql-03.query-1'] = { attempts: 2, passed: false };
+  assert.equal(store.revisitTarget(), null, 'under three attempts → null');
+  store.data.challenges['sql-03.query-2'] = { attempts: 5, passed: false };
+  store.data.challenges['sql-03.query-3'] = { attempts: 4, passed: true, solvedAt: nineDaysAgo };
+  store.data.challenges['js-01.fix-something'] = { attempts: 7, passed: false };
+  // Object key insertion order decides: sql-03.query-2 was recorded first.
+  assert.equal(store.revisitTarget(), 'sql-03.query-2', 'first stubborn, never-passed challenge wins');
+
+  // A corrupt timestamp degrades to Infinity instead of throwing.
+  store.data.lastSeen = 'not-a-date';
+  assert.equal(store.lastSeenDaysAgo(), Infinity);
+
+  rmSync(dir, { recursive: true, force: true });
+});

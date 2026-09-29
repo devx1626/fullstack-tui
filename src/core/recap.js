@@ -26,6 +26,8 @@ function row(label, value) {
  *   todayCount?: number,       // challenges passed today
  *   dailyGoal?: number,        // 0 = goal off
  *   nextUp?: string | null,    // label of the next unpassed challenge
+ *   revisit?: string | null,   // label of the first challenge failed 3+ times
+ *                              // without a pass (P1-3 "worth revisiting")
  * }} session
  * @returns {string[]} lines, ready to print
  */
@@ -40,6 +42,7 @@ export function buildRecap(session = {}) {
     todayCount = null,
     dailyGoal = 0,
     nextUp = null,
+    revisit = null,
   } = session;
 
   const passedCount = passed.length;
@@ -74,6 +77,8 @@ export function buildRecap(session = {}) {
     lines.push(row('streak', `${streak} day${streak === 1 ? '' : 's'}${goal}`));
   }
   if (nextUp) lines.push(row('next up', nextUp));
+  // P1-3: one pointer to the hardest unfinished business — no list, no scolding.
+  if (revisit) lines.push(row('revisit', `${revisit} - it put up a fight`));
 
   return lines;
 }

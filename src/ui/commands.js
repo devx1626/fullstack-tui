@@ -120,6 +120,8 @@ export const COMMANDS = [
   { id: 'home.openProjects', title: 'Projects', screen: 'home', keys: { default: ['p'] }, run: "push('projects')" },
   { id: 'home.openSettings', title: 'Settings', screen: 'home', keys: { default: ['s'] }, run: "push('settings')" },
   { id: 'home.dismissBanner', title: 'Dismiss the streak banner', screen: 'home', keys: { default: ['x'] }, run: 'dismissBanner' },
+  { id: 'home.dismissNudge', title: 'Dismiss the comeback nudge', screen: 'home', keys: { default: ['n'] }, run: 'dismissNudge' },
+  { id: 'settings.goalSet', title: 'Cycle the daily goal', screen: 'settings', keys: { default: ['<C-g>'] }, run: 'goalSet' },
   { id: 'nav.resume', title: 'Resume where you left off', screen: 'home', keys: { default: ['r'] }, run: 'resume' },
 
   // Module & lesson

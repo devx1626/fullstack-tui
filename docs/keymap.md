@@ -4,7 +4,7 @@
 `src/ui/commands.js` — do not edit by hand. `npm run check` fails when this
 file drifts from the registry; regenerate with `npm run keymap:docs`.*
 
-78 commands. User overrides live in `.data/keymap.json` and are
+80 commands. User overrides live in `.data/keymap.json` and are
 merged over these defaults; unknown ids are reported, never fatal. `Screen`
 shows where a binding applies (`any` = global).
 
@@ -47,6 +47,7 @@ shows where a binding applies (`any` = global).
 | `home.openProjects` | `p` | `home` | Projects |
 | `home.openSettings` | `s` | `home` | Settings |
 | `home.dismissBanner` | `x` | `home` | Dismiss the streak banner |
+| `home.dismissNudge` | `n` | `home` | Dismiss the comeback nudge |
 
 ## Module
 

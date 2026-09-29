@@ -168,4 +168,49 @@ test('home + module screens', async (t) => {
     assert.ok(seen.includes('nav.resume'), 'r must resolve to nav.resume');
     inst.unmount();
   });
+
+  await t.test('view-model: the goal chip exists only while the goal is on (P1-3)', () => {
+    const base = {
+      curriculum: CURRICULUM,
+      stats: { totals: { challenges: 4, challengesPassed: 0, debug: 0, debugPassed: 0, write: 0, writePassed: 0 }, perModule: [], streak: { current: 1, best: 1 } },
+      overall: { modules: 2, challenges: 4 },
+      store: fakeStore(),
+      settings: { bannerVisible: () => false },
+      resumeTarget: () => null,
+      lessonIndex: [],
+    };
+    // Goal off → no chip at all: no score, no row (the quiet rule).
+    const off = harness.homeViewModel({ ...base, settings: { ...base.settings, data: { goal: { daily: 0 } } } });
+    assert.equal(off.chips.find((c) => c.label === 'of goal'), undefined, 'goal 0 means no chip');
+    // On → one chip, capped at the goal when the learner overshoots.
+    const goal2 = { ...base.settings, data: { goal: { daily: 2 } } };
+    const partial = harness.homeViewModel({ ...base, settings: goal2, store: { ...fakeStore(), passedToday: () => 1 } });
+    assert.deepEqual(partial.chips.find((c) => c.label === 'of goal'), { label: 'of goal', value: '1/2', tone: 'accent' });
+    const over = harness.homeViewModel({ ...base, settings: goal2, store: { ...fakeStore(), passedToday: () => 5 } });
+    assert.equal(over.chips.find((c) => c.label === 'of goal').value, '2/2', 'the chip never counts past the goal');
+    assert.equal(over.chips.find((c) => c.label === 'of goal').tone, 'good', 'met goal reads as good');
+  });
+
+  await t.test('view-model: comeback nudge fires once after 7+ days away, never on first run', () => {
+    const settings = { bannerVisible: () => false, nudgeVisible: () => true };
+    const base = {
+      curriculum: CURRICULUM,
+      stats: { totals: { challenges: 4, challengesPassed: 0, debug: 0, debugPassed: 0, write: 0, writePassed: 0 }, perModule: [], streak: { current: 0, best: 0 } },
+      overall: { modules: 2, challenges: 4 },
+      settings,
+      resumeTarget: () => null,
+      lessonIndex: [],
+    };
+    const vm = (storeExtra) => harness.homeViewModel({ ...base, store: { ...fakeStore(), ...storeExtra } });
+    // A first-run learner (never seen → Infinity) is arriving, not coming back.
+    assert.equal(vm({ lastSeenDaysAgo: () => Infinity }).nudge, null, 'no welcome BACK on first run');
+    assert.equal(vm({ lastSeenDaysAgo: () => 6 }).nudge, null, 'under a week away says nothing');
+    assert.equal(vm({ lastSeenDaysAgo: () => 9, passedToday: () => 2 }).nudge, null, 'already scored today → no nudge');
+    const away = vm({ lastSeenDaysAgo: () => 9 });
+    assert.deepEqual(away.nudge, { away: 9 }, 'a week+ away with nothing today gets one line');
+    // Dismissed for the day → gone (settings.nudgeVisible decides).
+    assert.equal(vm({ lastSeenDaysAgo: () => 9 }).nudge.away, 9);
+    const dismissed = harness.homeViewModel({ ...base, settings: { ...settings, nudgeVisible: () => false }, store: { ...fakeStore(), lastSeenDaysAgo: () => 9 } });
+    assert.equal(dismissed.nudge, null, "'n' dismissal holds for the day");
+  });
 });

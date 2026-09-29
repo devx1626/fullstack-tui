@@ -352,5 +352,56 @@ test('phase 1: settings, tour and pane persistence', async (t) => {
     assert.equal(onDisk.panes.challenge.brief, 0.3, 'other screens are preserved');
   });
 
+  await t.test('P1-3: the daily goal row cycles Off → 1 → 3 → 5 → 10 and clamps hand-edited values', async () => {
+    const settings = tempSettings('goal-cycle');
+    assert.equal(harness.clampGoal(3), 3);
+    assert.equal(harness.clampGoal(999), 99, 'a hand-edited goal is clamped');
+    assert.equal(harness.clampGoal('nope'), 0, 'garbage falls back to Off');
+    assert.deepEqual(harness.GOAL_CYCLE, [0, 1, 3, 5, 10]);
+    assert.equal(harness.nextGoal(0), 1, 'Off wraps to 1');
+    assert.equal(harness.nextGoal(10), 0, '10 wraps back to Off');
+    assert.equal(harness.nextGoal(7), 0, 'a hand-edited 7 lands on Off first (not in the cycle)');
+
+    // The row exists and shows the live value.
+    const row = harness.goalPreferenceRow({ settings });
+    assert.equal(row.key, 'goal');
+    assert.match(row.value, /^3/, 'the default 3 shows');
+
+    // togglePreference with key 'goal' persists through the real save path.
+    const first = harness.togglePreference(settings, 'goal');
+    assert.equal(first.goal, 5, 'default 3 steps to 5');
+    assert.equal(settings.data.goal.daily, 5, 'the cycle persists');
+    assert.match(first.message, /5 challenges a day/);
+    harness.togglePreference(settings, 'goal'); // → 10
+    const off = harness.togglePreference(settings, 'goal');
+    assert.equal(off.goal, 0);
+    assert.match(off.message, /goal off/);
+    const back = harness.togglePreference(settings, 'goal');
+    assert.equal(back.goal, 1, 'Off wraps to 1');
+  });
+
+  await t.test('P1-3: ctrl-g on the settings screen cycles the goal through the real route', async () => {
+    const settings = tempSettings('goal-route');
+    const app = mountApp(servicesFor(settings));
+    try {
+      assert.ok(await waitFor(() => app.screen() === 'home'), 'starts on the dashboard');
+      app.onKey({ name: 'char', char: 's' });
+      assert.ok(await waitFor(() => app.screen() === 'settings'), 's opens the settings screen');
+
+      const before = settings.data.goal.daily;
+      app.onKey({ name: 'ctrl-g' });
+      assert.ok(
+        await waitFor(() => settings.data.goal.daily !== before),
+        'ctrl-g cycles the goal via settings.goalSet',
+      );
+      assert.ok(await waitFor(() => app.frame().includes('Daily goal:')), 'the host announces the new goal');
+      // The row value re-renders with the new target.
+      assert.ok(await waitFor(() => app.frame().match(/Daily goal\s+\S+/)), 'the row shows the target');
+    } finally {
+      app.inst.unmount();
+      harness.clearRoute();
+    }
+  });
+
   rmSync(TMP, { recursive: true, force: true });
 });

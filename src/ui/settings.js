@@ -25,6 +25,7 @@ export function defaults() {
     goal: { daily: 3 }, // 0 = off
     milestonesSeen: [],
     bannerDismissedOn: null, // 'YYYY-MM-DD' when today's banner is dismissed
+    nudgeDismissedOn: null, // 'YYYY-MM-DD' when the comeback nudge was dismissed (P1-3)
     palette: { recent: [] },
     // Per-screen pane ratios (overhaul §7.4 / task 1.2):
     //   { challenge: { brief: 0.42 }, browser: { render: 0.5 } }
@@ -111,6 +112,17 @@ export class Settings {
 
   dismissBanner() {
     this.data.bannerDismissedOn = today();
+    this.save();
+  }
+
+  // -- P1-3 comeback nudge ---------------------------------------------------
+  /** True once per day while the nudge applies (the predicate lives in screenModel). */
+  nudgeVisible() {
+    return this.data.nudgeDismissedOn !== today();
+  }
+
+  dismissNudge() {
+    this.data.nudgeDismissedOn = today();
     this.save();
   }
 

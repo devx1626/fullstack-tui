@@ -260,6 +260,33 @@ export class Store {
     return this.data.days[today()]?.challenges || 0;
   }
 
+  /**
+   * Whole days since the last session (P1-3 comeback nudge). Returns Infinity
+   * when the learner has never been seen, 0 when today — a fresh Store writes
+   * nothing, so the nudge must not depend on touch() having run.
+   */
+  lastSeenDaysAgo() {
+    if (!this.data.lastSeen) return Infinity;
+    const then = new Date(this.data.lastSeen);
+    if (Number.isNaN(then.getTime())) return Infinity;
+    const days = Math.floor((Date.now() - then.getTime()) / 86400000);
+    return Math.max(0, days);
+  }
+
+  /**
+   * P1-3 "worth revisiting": the first challenge (in record order — how the
+   * learner actually met them) attempted 3+ times without ever passing. Null
+   * when there is none — the recap only then mentions it.
+   */
+  revisitTarget() {
+    const records = this.data.challenges || {};
+    for (const id of Object.keys(records)) {
+      const rec = records[id];
+      if (rec && !rec.passed && (rec.attempts || 0) >= 3) return id;
+    }
+    return null;
+  }
+
   recordAttempt(id, code, passed) {
     const day = today();
     const rec = this.challengeRecord(id);
