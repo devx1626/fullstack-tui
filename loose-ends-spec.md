@@ -407,13 +407,18 @@ because of ink's re-tokenization; the ceiling catches *regressions*, not the wal
 a CI job ordering that runs `test:unit` first for fast feedback, then `check`. Also: a job
 timeout budget so a hung pty check can't eat the 10-minute default.
 
-**Status (2026-09-29, budget + ordering done — report-only open).** Both CI jobs carry
+**Status (2026-09-29, CLOSED — decision recorded).** Both CI jobs carry
 `timeout-minutes` (unit 15, self-check 30 — several runners' worth of slack over the local
 ~5/~8 minute timings), so a hung pty check dies and marks red instead of running to GitHub's
-360-minute job default, and `self-check` now declares `needs: unit` — a broken build fails
-at the cheap gate and never starts the long one. The remaining half is the renderer wall:
-§9's note lines only *mention* it — a decision on report-only vs enforced ceilings for the
-ink-bound targets is still owed.
+360-minute job default, and `self-check` declares `needs: unit` — a broken build fails at
+the cheap gate and never starts the long one. The renderer-wall question is decided in
+`tools/check.js` §9: enforced ceilings stay FLOOR-RELATIVE (P0-1's 10× same-run ink floor,
+250 ms backstop); the ink-bound absolute targets (§12's 16 ms p95, §13.4's 33/100 ms lines)
+are report-only by design, not by omission — they measure the machine, and the floor probe
+itself routinely sits above the §12 line on ordinary runners, so enforcing the absolute
+would trade the gate's load-neutrality for CI flake. Re-baselining the absolutes is a
+manual step tied to the ink upgrade (P2-2): flip them into the fail branch only when the
+new renderer's floor probe lands under the §12 line on this gate.
 
 ### P1-2 · Wire multi-cursor bindings
 
@@ -780,8 +785,13 @@ lands here.
 ### P2-5 · Perf: the ink wall itself
 
 The ~3–6× floor overhead on all four §12 targets is ink's re-tokenization, not the app's.
-If ink 7's renderer changes the equation (P2-2), re-baseline. Until then, the floor-relative
-ceiling from P0-1 is the honest gate.
+If ink 7's renderer changes the equation (P2-2), re-baseline.
+
+**Status (2026-09-29, ratified as the P1-1 decision).** Until the ink upgrade, the
+floor-relative ceiling from P0-1 is the honest gate, and the ink-bound absolute targets
+(§12's 16 ms, §13.4's 33/100 ms) are report-only — see the §9 comment in `tools/check.js`.
+Re-baseline trigger: P2-2's renderer measuring its floor probe under §12's line on this
+gate, at which point the absolutes move into the fail branch by hand.
 
 ### P2-6 · Reserved-but-unshipped settings review
 

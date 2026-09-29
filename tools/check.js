@@ -433,8 +433,20 @@ try {
     // The hard regression ceiling is therefore FLOOR-RELATIVE: FAIL past
     // PERF_FAIL_MULT × the same-run floor p95 (a genuine ratio regression),
     // with the historical absolute kept only as a backstop against a
-    // degenerate-fast floor probe. The absolute lines stay as informational
-    // warns; they no longer fail the run by themselves.
+    // degenerate-fast floor probe.
+    //
+    // P1-1 decision (2026-09-29, recorded to close the item): the ink-bound
+    // ABSOLUTE targets — §12's 16 ms p95 and §13.4's 33/100 ms lines — are
+    // REPORT-ONLY, by design and not by omission. They measure the machine
+    // (see P0-1 above), and ink's own floor probe routinely sits above the
+    // §12 line on this gate, so enforcing the absolute would trade the gate's
+    // load-neutrality for CI flake on exactly the machines it exists to
+    // neutralize. The enforced gate is the floor-relative ceiling below; the
+    // absolute lines remain informational warns. Re-baselining is a MANUAL
+    // step tied to the ink upgrade (P2-2): when that renderer's floor probe
+    // lands under the §12 line here, move SPEC_FAIL_MS/WARN_MS into the fail
+    // branch — no automatic flip (a single noisy floor measurement hovering
+    // near the line would flip CI red at random).
     const WARN_MS = 33;
     const SPEC_FAIL_MS = 100;
     const FAIL_MS = 250; // backstop; only binds when the floor probe ran implausibly fast
@@ -556,9 +568,9 @@ try {
       if (r.p95 > ceiling) {
         fail(`perf: ${label} p95 ${ms(r.p95)} exceeds the floor-relative regression ceiling ${ms(ceiling)} (${PERF_FAIL_MULT}× the same-run ink floor, backstopped at ${FAIL_MS} ms). ${line}`);
       } else if (ratio >= PERF_WARN_MULT) {
-        warn(`perf: ${label} p95 is ${ratio.toFixed(1)}× the same-run ink floor — renderer-wall regression watch. ${line}`);
+        warn(`perf: ${label} p95 is ${ratio.toFixed(1)}× the same-run ink floor — renderer-wall regression watch (ink-bound absolute targets are report-only; P1-1 decision above). ${line}`);
       } else if (r.p95 > SPEC_FAIL_MS) {
-        warn(`perf: ${label} p95 ${ms(r.p95)} is over the spec's ${SPEC_FAIL_MS} ms line (p50 ${ms(r.p50)}). ${line}`);
+        warn(`perf: ${label} p95 ${ms(r.p95)} is over the spec's ${SPEC_FAIL_MS} ms line (p50 ${ms(r.p50)}) — informational; absolutes are report-only by the P1-1 decision. ${line}`);
       } else if (r.p95 > WARN_MS) {
         warn(`perf: ${label} p95 ${ms(r.p95)} over the ${WARN_MS} ms warn line — within CI headroom. ${line}`);
       } else if (noteTarget && r.p95 > 16) {
