@@ -79,7 +79,7 @@ export async function renderPreviewPng(parts, { timeoutMs = 4000 } = {}) {
       html,body{margin:0;padding:0;background:#fff}
       ${parts.css || ''}
       </style></head><body>${parts.html || ''}
-      <script>${parts.js || ''}<\/script></body></html>`;
+      <script>${parts.js || ''}</script></body></html>`;
     await page.setContent(doc, { waitUntil: 'load', timeout: timeoutMs });
     const buf = await page.screenshot({ type: 'png', timeout: timeoutMs });
     return buf.toString('base64');

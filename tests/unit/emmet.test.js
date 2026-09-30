@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  parseAbbreviation, renderForest, cssExpand, isAbbreviationAt,
+  parseAbbreviation, isAbbreviationAt,
   emmetContext, expandAt, expand,
 } from '../../src/core/emmet.js';
 

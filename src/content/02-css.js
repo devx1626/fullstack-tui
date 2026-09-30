@@ -1,6 +1,5 @@
 import { T } from '../core/grade.js';
 
-const NAV_DEMO = `<nav class="nav"><a href="#">Home</a><a href="#">Work</a><a href="#">Contact</a></nav>`;
 const CARD_DEMO = `<article class="card"><img src="cover.png" alt="Cover"><h2 class="card__title">Title</h2><p class="card__body">Body copy.</p><a class="btn" href="#">Read</a></article>`;
 
 export default {

@@ -12,7 +12,7 @@
 
 import fs from 'node:fs';
 import { existsSync } from 'node:fs';
-import { Store, PROGRESS_FILE, ROOT } from '../src/core/store.js';
+import { PROGRESS_FILE, ROOT } from '../src/core/store.js';
 import { curriculum, totals } from '../src/content/index.js';
 import { evaluate } from '../src/core/grade.js';
 
@@ -131,7 +131,6 @@ function printHelp() {
 }
 
 const argv = process.argv.slice(2);
-const FLAGGED = ['--list', '--verify', '--reset', '--help', '-h'].some((f) => argv.includes(f));
 
 if (argv.includes('--help') || argv.includes('-h')) {
   printHelp();

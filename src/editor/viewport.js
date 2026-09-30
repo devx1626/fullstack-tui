@@ -210,7 +210,7 @@ export function rowPieces(segs, line, { startCol = 0, width = Infinity, selFrom 
     const relFrom = Math.max(0, from - segStart);
     const relTo = Math.min(segW, to - segStart);
     // Walk the segment's own visual columns, splitting at sel edges too.
-    let pieceStart = relFrom;
+    const pieceStart = relFrom;
     const edges = [relFrom, relTo];
     if (hasSel) {
       const selRelFrom = selFrom - segStart;

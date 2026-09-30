@@ -44,7 +44,10 @@ function EditorPane({
   fastCursorRef,
 }) {
   // Explicit prop wins (tests/previews); otherwise the app-wide theme tokens.
-  const theme = themeProp || useTheme();
+  // The hook runs unconditionally (rules-of-hooks); the context default makes
+  // that safe where no provider is mounted.
+  const contextTheme = useTheme();
+  const theme = themeProp || contextTheme;
   if (showSolution || !doc) {
     return (
       <Box flexDirection="column" width={width}>
@@ -125,7 +128,8 @@ export function ChallengeScreen({
   cursors = null, // PC-11: secondary carets (row → cols Map) for the editor
   fastCursorRef = null, // P0-5: fast-path cursor cell (ref; null → slow path only)
 }) {
-  const theme = themeProp || useTheme();
+  const contextTheme = useTheme();
+  const theme = themeProp || contextTheme;
   const ic = useIcons();
   const leftWidth = leftWidthProp ?? Math.round(width * 0.42);
 

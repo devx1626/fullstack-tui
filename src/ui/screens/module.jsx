@@ -6,7 +6,7 @@
  * Input through useKeymap: j/k/up/down move, g/G jump, Enter opens the
  * highlighted lesson (registry ids nav.*, module.openLesson).
  */
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { moduleViewModel, meterCells, lessonMarks } from './screenModel.js';
 import { useKeymap } from '../useKeymap.js';

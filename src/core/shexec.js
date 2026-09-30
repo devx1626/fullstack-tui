@@ -267,7 +267,7 @@ export function createRepo({ files = {}, commands = [] } = {}) {
 
     if (bin === 'ls' || bin === 'cat' || bin === 'pwd') {
       const target = argv[1] ? path.resolve(cwd, argv[1]) : cwd;
-      let stdout = '';
+      let stdout;
       try {
         if (bin === 'ls') stdout = fs.readdirSync(target).join('\n');
         else if (bin === 'cat') stdout = fs.readFileSync(target, 'utf8');

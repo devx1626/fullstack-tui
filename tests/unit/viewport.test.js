@@ -41,7 +41,7 @@ test('clampScrollTop: negative and past-the-end scroll clamp into range', () => 
 });
 
 test('followCaret: no movement while the caret is inside the window', () => {
-  const doc = docFromText('one\ntwo\nthree\lfour\nfive');
+  const doc = docFromText('one\ntwo\nthree\nfour\nfive');
   doc.caret = pos(2, 1);
   const view = { scrollTop: 1, scrollX: 0 };
   assert.deepEqual(followCaret(doc, view, { height: 3, width: 20 }), { scrollTop: 1, scrollX: 0 });

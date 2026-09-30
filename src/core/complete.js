@@ -442,7 +442,7 @@ function markupItems(before, prefix) {
 
   if (open !== null) {
     const isClosing = open.startsWith('</');
-    const tagName = (open.match(/^<\/?([a-zA-Z][\w:-]*)/) || [, ''])[1].toLowerCase();
+    const tagName = (open.match(/^<\/?([a-zA-Z][\w:-]*)/) || ['', ''])[1].toLowerCase();
     const inner = open.replace(/^<\/?[a-zA-Z][\w:-]*/, '');
 
     // Still typing the tag name: suggest elements (with their closing tag).
@@ -686,7 +686,7 @@ export function completionsFor(lang, text, offset, limit = 60) {
   const family = normaliseLang(lang);
   const raw = String(text ?? '');
   const pos = Math.max(0, Math.min(offset, raw.length));
-  const { before, prefix, from, lineStart } = lineContext(family, raw, pos);
+  const { before, prefix, from } = lineContext(family, raw, pos);
 
   let items = [];
   let fromOverride = null;

@@ -3,7 +3,6 @@
  * Decoration reads the active icon set (nerd/unicode/ascii, §7.1), so the same
  * components render rounded+Nerd on Tier A and `+--`/ASCII on Tier D.
  */
-import React from 'react';
 import { Box, Text } from 'ink';
 import { useTheme, useIcons } from '../theme/context.jsx';
 

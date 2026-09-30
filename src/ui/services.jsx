@@ -7,7 +7,7 @@
  * keeps screens render-pure (all state lives in the services + local cursor
  * state) and lets tests inject fakes directly.
  */
-import React, { createContext, useContext } from 'react';
+import { createContext, useContext } from 'react';
 import { firstUnpassed } from '../core/targets.js';
 
 const ServicesContext = createContext(null);

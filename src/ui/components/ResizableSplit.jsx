@@ -23,7 +23,7 @@
  * divider ±1 column starts a drag, so clicking inside a pane is left to the
  * screen (a future click-to-inspect / click-to-caret handler).
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SplitPane } from './splitPane.jsx';
 import {
   RATIO_STEP,

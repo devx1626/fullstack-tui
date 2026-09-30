@@ -8,7 +8,7 @@
  * reports per-check results with duration, micro-notes and the failing-check
  * line numbers instead of a one-line shrug.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text } from 'ink';
 import { useHost } from './host.jsx';
 import { useServices } from './services.jsx';
@@ -18,7 +18,7 @@ import { browserJumpHandoff } from './routesBrowser.jsx';
 import { detectCapabilities } from './capabilities.js';
 import { nextIndex, isListMove } from './nav.js';
 import { findChallenge, firstUnpassedIn } from '../core/targets.js';
-import { CelebrateLine, Modal } from './components/overlays.jsx';
+import { Modal } from './components/overlays.jsx';
 import { ICON_SETS } from './theme/icons.js';
 import { milestoneToast } from './milestones.js';
 import { nextLesson } from '../content/index.js';
@@ -81,12 +81,9 @@ import { createSearchState, stepMatch } from '../editor/search.js';
 import { snapshotLabel } from '../core/history.js';
 import { openOverlay, closeOverlay } from './input/overlayStack.js';
 import { diffRows } from '../editor/diff.js';
-import { effectiveKeymap } from './keymap.js';
-import { resolveKey } from './commands.js';
 import { NUDGE_AFTER_MS } from './hints.js';
 import { useResizableSplit } from './components/ResizableSplit.jsx';
 import { useTheme, useIcons, useThemeControl, useIconControl } from './theme/context.jsx';
-import { CompletionPopup } from './components/CompletionPopup.jsx';
 import { HomeScreen } from './screens/home.jsx';
 import { ModuleScreen } from './screens/module.jsx';
 import { ChallengeScreen } from './screens/challenge.jsx';
@@ -281,8 +278,6 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
   // One session owns every file (docs + history + view state). The seed is
   // the saved draft → starter, exactly the classic's record-driven boot.
   const challengeKey = target ? `${target.lessonId}.${target.challengeId}` : null;
-  const record = target ? services.store.challengeRecord(challengeKey) : null;
-  const starter = target ? (target.challenge.starter ?? '') : '';
 
   // Every mutable editor value is ALSO held in a ref and written through a
   // ref-backed setter. React state is what re-renders the screen; the ref is
@@ -947,7 +942,6 @@ export function ChallengeRoute({ moduleId, lessonId, challengeId }) {
     // act on the state that keystroke produced, not on the last render's.
     const session = sessionRef.current;
     const vim = vimRef.current;
-    const registers = registersRef.current;
     const popup = popupRef.current;
     // Task 2.7 popup priority. ↑/↓ resolve to the GLOBAL nav ids (there is no
     // challenge-scoped binding) and would be swallowed by the list-move guard
@@ -1899,7 +1893,9 @@ export function TourRoute() {
       }
       case 'tour.skip':
       // Esc is the global `app.back`; on the tour that means skip (spec §9:
-      // "skippable at every step"), handled here rather than by a second binding.
+      // "skippable at every step"), handled here rather than by a second
+      // binding. Intentional fallthrough: both ids skip.
+      // falls through
       case 'app.back':
         finish('skip');
         return;

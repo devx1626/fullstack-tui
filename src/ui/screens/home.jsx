@@ -7,7 +7,7 @@
  * x dismisses the streak banner. All ids exist in the registry (nav.up/down/
  * first/last, home.openModule, nav.resume) so keymap.json can rebind them.
  */
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { homeViewModel, meterCells } from './screenModel.js';
 import { useKeymap } from '../useKeymap.js';

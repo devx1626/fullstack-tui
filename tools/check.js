@@ -153,7 +153,9 @@ process.stdout.write(`   unique ids: ${seenLessons.size} lessons, ${seenChalleng
 process.stdout.write('   ok  covered by the §9 screen smoke + route-tree unit suites (classic views deleted)\n');
 
 const { Store } = await import('../src/core/store.js');
-const tmpStore = new Store(path.join(ROOT, '.data', 'check-tmp.json'));
+// Constructed for its load/validate side effect; the temp file is removed
+// again below (and on --fail-fast).
+new Store(path.join(ROOT, '.data', 'check-tmp.json'));
 
 process.stdout.write('\n4. reference solutions + debug starters\n');
 const { evaluate } = await import('../src/core/grade.js');
@@ -661,6 +663,8 @@ try {
       D: { isTTY: true, tty: false, colorDepth: 0, unicode: false, tier: 'D', term: 'dumb', colorterm: '' },
     };
     const hasColorSgr = (s) => {
+      // Deliberate control-character matcher: this assertion finds escape
+      // bytes (no-control-regex is off in eslint.config.js for exactly this).
       const re = /\u001b\[([0-9;]*)m/g;
       let m;
       while ((m = re.exec(s))) {

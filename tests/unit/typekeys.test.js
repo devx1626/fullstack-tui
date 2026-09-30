@@ -20,12 +20,6 @@ import {
   typeText,
 } from '../../src/editor/typekeys.js';
 
-const type = (text, at, docTextString = 'x') => {
-  const doc = docFromText(docTextString);
-  doc.caret = at;
-  return typeText(doc, text);
-};
-
 test('typing inserts at the caret and moves it after the text', () => {
   const doc = docFromText('hello');
   doc.caret = pos(0, 5);

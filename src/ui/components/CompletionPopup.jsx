@@ -12,7 +12,6 @@
  * `attr`, `value`, `word`, `fn`, `kw`, `prop`); unmapped kinds fall back to a
  * neutral dot so an engine change can never blank the label.
  */
-import React from 'react';
 import { Box, Text } from 'ink';
 import { popupItem } from '../../editor/completions.js';
 import { useTheme, useIcons } from '../theme/context.jsx';

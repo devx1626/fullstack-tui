@@ -54,7 +54,6 @@ const KNOWN_TAGS = new Set([
 ]);
 
 const ATTR_NAME_RE = /^[a-zA-Z@:_.][\w:.-]*$/;
-const TAG_NAME_RE = /^[a-zA-Z][\w:-]*$/;
 
 // ---------------------------------------------------------------------------
 // Abbreviation alphabet (shared by the parser and the Tab guard)
@@ -421,7 +420,7 @@ export function cssExpand(src) {
   if (!/^[a-zA-Z-]+[0-9a-zA-Z%.#ex-]*(:[-a-zA-Z0-9%.#,\s]*)?$/.test(abbr)) return null;
 
   let prop = abbr;
-  let value = '';
+  let value;
   const colon = abbr.indexOf(':');
   if (colon !== -1) {
     prop = abbr.slice(0, colon);
@@ -512,8 +511,8 @@ export function emmetContext(lang, text, offset) {
 
 /** Does this markup token carry a structural hint, or name a real element? */
 function plausiblyMarkup(token) {
-  if (/[.#\[{}>+^*]/.test(token)) return true;
-  const name = token.split(/[.#\[{}>+^*]/)[0].toLowerCase();
+  if (/[.#{}>+^*[]/.test(token)) return true;
+  const name = token.split(/[.#{}>+^*[]/)[0].toLowerCase();
   return KNOWN_TAGS.has(name);
 }
 
@@ -544,7 +543,7 @@ export function expandAt(lang, text, offset, opts = {}) {
     // `;` trigger: cssExpand re-appends the semicolon the trigger consumed.
     expansion = cssExpand(token);
     label = 'css';
-  } else if (plausiblyMarkup(token) && (!requireStructure || /[.#\[{}>+^*]/.test(token))) {
+  } else if (plausiblyMarkup(token) && (!requireStructure || /[.#{}>+^*[]/.test(token))) {
     const forest = parseAbbreviation(token);
     if (forest) {
       // `>` trigger: emit open tags only — the user is about to nest children.

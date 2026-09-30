@@ -410,7 +410,7 @@ git commit -m "test: cover the users route"`,
             T.git('four commits with the right types', (r) => {
               const log = r.log();
               if (log.length !== 4) return `found ${log.length} commits, expected 4`;
-              const types = log.slice().reverse().map((c) => (c.subject.match(/^(\w+)/) || [, ''])[1]);
+              const types = log.slice().reverse().map((c) => (c.subject.match(/^(\w+)/) || ['', ''])[1]);
               const want = ['chore', 'feat', 'fix', 'test'];
               const mismatch = want.findIndex((w, i) => types[i] !== w);
               return mismatch === -1 || `commit ${mismatch + 1} is "${types[mismatch]}", expected "${want[mismatch]}"`;

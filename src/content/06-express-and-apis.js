@@ -1250,7 +1250,7 @@ function requireAuth(secret) {
             T.js('garbage tokens fail safely', 'verifyToken("nonsense", "secret") === null && verifyToken(undefined, "secret") === null'),
             T.js('requireAuth rejects a missing header', '(() => { const mw = requireAuth("secret"); const res = makeRes(); mw(makeReq({}), res, () => {}); return res.statusCode === 401 && res.body.error === "Missing token"; })()'),
             T.js('requireAuth rejects a bad token', '(() => { const mw = requireAuth("secret"); const res = makeRes(); mw(makeReq({ headers: { authorization: "Bearer junk.junk" } }), res, () => {}); return res.statusCode === 401 && res.body.error === "Invalid token"; })()'),
-            T.js('requireAuth accepts a good token and attaches the user', '(() => { const mw = requireAuth("secret"); const token = issueToken({ id: 9, email: "a@b.c" }, "secret"); const req = makeReq({ headers: { authorization: \`Bearer \${token}\` } }); let called = false; mw(req, makeRes(), () => { called = true; }); return called === true && req.user && req.user.id === 9; })()'),
+            T.js('requireAuth accepts a good token and attaches the user', '(() => { const mw = requireAuth("secret"); const token = issueToken({ id: 9, email: "a@b.c" }, "secret"); const req = makeReq({ headers: { authorization: `Bearer ${token}` } }); let called = false; mw(req, makeRes(), () => { called = true; }); return called === true && req.user && req.user.id === 9; })()'),
           ],
         },
       ],

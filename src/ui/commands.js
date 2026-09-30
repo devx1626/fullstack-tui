@@ -28,7 +28,7 @@ export function parseBinding(binding) {
   // `/`+`?` searches share the notation. Until this class read punctuation,
   // such bindings parsed as null and the resolver silently dropped them —
   // found by the visible-bell replay, whose own hint named a dead key.
-  if (/^[A-Za-z0-9!-\/:-@\[-`{-~]$/.test(binding)) return { ctrl: false, alt: false, shift: false, key: binding };
+  if (/^[A-Za-z0-9!-/:-@[-`{-~]$/.test(binding)) return { ctrl: false, alt: false, shift: false, key: binding };
   // NOTE: the mods group must be non-capturing INSIDE a capturing repeat —
   // `([ACAS]-)*` keeps only the LAST repetition ("<C-A-left>" → "A-", losing
   // Ctrl), which silently mis-parsed stacked-modifier overrides and conflicts.

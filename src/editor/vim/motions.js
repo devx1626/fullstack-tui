@@ -191,7 +191,8 @@ export function paragraphBack(doc, caret, count = 1) {
  */
 export function findChar(doc, caret, ch, { dir = 1, till = false, count = 1 } = {}) {
   if (!ch) return { caret, found: false };
-  let { row, col } = caret;
+  const { row } = caret;
+  let col = caret.col;
   for (let n = 0; n < normaliseCount(count, 1); n += 1) {
     const line = doc.lines[row];
     let i = col + dir;

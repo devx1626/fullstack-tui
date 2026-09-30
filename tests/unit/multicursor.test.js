@@ -48,8 +48,7 @@ test('multi-cursor: cursors collide, collapse, and stay clamped', () => {
 test('multi-cursor: the cap is enforced with a notice', () => {
   const lines = Array.from({ length: 60 }, (_, i) => `line ${i}`).join('\n');
   const d = doc(lines);
-  let set = createCursorSet(d, {});
-  set = { cursors: Array.from({ length: MAX_CURSORS }, (_, i) => pos(i, 0)), primary: 0 };
+  const set = { cursors: Array.from({ length: MAX_CURSORS }, (_, i) => pos(i, 0)), primary: 0 };
   const out = addCursorBelow(set, d);
   assert.equal(out.added, false);
   assert.equal(out.notice, CAP_NOTICE);
@@ -58,7 +57,7 @@ test('multi-cursor: the cap is enforced with a notice', () => {
 
 test('multi-cursor: addCursorBelow/Above walk outward from the set and report edges', () => {
   const d = doc('aa\nbb\ncc');
-  let set = setAt(d, pos(0, 1));
+  const set = setAt(d, pos(0, 1));
   const below = addCursorBelow(set, d);
   assert.equal(below.added, true);
   assert.deepEqual(below.set.cursors, [pos(0, 1), pos(1, 1)]);

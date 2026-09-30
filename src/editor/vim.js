@@ -43,9 +43,9 @@ import {
   BLOCKWISE, CHARWISE, LINEWISE, createRegisters, normaliseRegisterName, put, readRegister, yank,
 } from './registers.js';
 import * as S from './selection.js';
-import { applyMotion, MOTION_TOKENS, nextMatch, searchMatches, searchPattern } from './vim/motions.js';
+import { applyMotion, MOTION_TOKENS, nextMatch, searchMatches } from './vim/motions.js';
 import {
-  OPERATOR_NAMES, applyOperator, blockInsertChanges, deleteCharChanges, deleteLineChanges,
+  OPERATOR_NAMES, applyOperator, deleteCharChanges,
   joinChanges, putChanges, replaceCharChanges, resolveTarget,
 } from './vim/operators.js';
 import { describeEx, parseEx } from './vim/ex.js';
@@ -689,7 +689,6 @@ function insertKey(state, spec, ctx, registers) {
   }
 
   if (t === 'tab') {
-    const col = S.lineStart(doc, doc.caret.row).col + doc.caret.col;
     const size = Math.max(1, ctx.tabSize ?? 2);
     const spaces = size - (doc.caret.col % size);
     if (ctx.hardTabs) return insertEdit(state, ctx, registers, [{ start: doc.caret, end: doc.caret, text: '\t' }], { row: doc.caret.row, col: doc.caret.col + 1 }, 'indent');
@@ -948,7 +947,6 @@ function inputKey(state, spec, ctx, registers) {
 }
 
 function commitInput(state, ctx, registers) {
-  const { doc } = ctx;
   const input = state.input;
   if (input.kind === 'search') return commitSearch(state, ctx, registers, input);
   return commitEx(state, ctx, registers, input);

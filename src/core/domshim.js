@@ -147,8 +147,6 @@ class Style {
 
 const kebab = (s) => s.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
 
-const CUSTOM_PROPS = ['value', 'checked', 'disabled', 'href', 'src', 'type', 'name', 'id', 'for', 'placeholder'];
-
 class DomEvent {
   constructor(type, options = {}) {
     this.type = type;

@@ -8,7 +8,7 @@
  * in `ResizableSplit.jsx` (`useResizableSplit` + `<ResizableSplit>`), which
  * wraps this component; screens should use that one.
  */
-import React, { useLayoutEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { Box, Text } from 'ink';
 import { clampSplit } from './splitClamp.js';
 import { useTheme, useIcons } from '../theme/context.jsx';

@@ -13,7 +13,6 @@
  * a screen-scoped command. As an overlay the screen stays mounted and
  * `dispatchToScreen` can run the id exactly as the key would.
  */
-import React from 'react';
 import { Box, Text } from 'ink';
 import { Palette } from '../components/palette.jsx';
 import { commandsForScreen, mergeKeymap, displayBinding } from '../commands.js';

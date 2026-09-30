@@ -20,7 +20,7 @@
  *     learner's code executes once per edit, expressions evaluate on top of
  *     its values, and every fetch the session makes is recorded for Network.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text } from 'ink';
 import { useHost } from './host.jsx';
 import { useServices } from './services.jsx';
@@ -41,7 +41,6 @@ import {
   clampElement,
   elementRowToSource,
   paneClick,
-  TAB_HINTS,
 } from './screens/browserModel.js';
 import { BrowserScreen } from './screens/browser.jsx';
 import { runScreenshotAction } from './screenshotAction.js';
@@ -102,7 +101,6 @@ export function BrowserRoute({ moduleId, lessonId, challengeId }) {
     sessionRef.current = value;
     setSessionState(value);
   }, []);
-  const noticeRef = useRef(null);
 
   const target = useMemo(() => {
     if (!services) return null;

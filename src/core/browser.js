@@ -119,8 +119,6 @@ const SKIP_TAGS = new Set(['head', 'script', 'style', 'title', 'meta', 'link', '
 
 const HEADING_LEVEL = { h1: 1, h2: 2, h3: 3, h4: 4, h5: 5, h6: 6 };
 
-const def = 'inherit';
-
 /**
  * Resolve which rules matched which node. `viewport` is the notional width in
  * characters, used to decide whether a `min-width` media query applies.
@@ -138,10 +136,11 @@ export function styleMap(html, cssSource, viewport = 100, rootOverride = null) {
     for (const selector of rule.selectors) {
       // Pseudo-classes and pseudo-elements never match a static tree.
       if (selector.includes(':')) continue;
-      let matched = [];
+      let matched;
       try {
         matched = queryAll(root, selector);
       } catch {
+        // An invalid selector (possible from learner CSS) matches nothing.
         matched = [];
       }
       for (const node of matched) {

@@ -17,7 +17,11 @@
     "verify": "node bin/fullstack.js --verify",
     "list": "node bin/fullstack.js --list",
     "reset": "node bin/fullstack.js --reset",
-    "keymap:docs": "node tools/gen-keymap-docs.js"
+    "keymap:docs": "node tools/gen-keymap-docs.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "keywords": [
     "tui",
@@ -41,5 +45,12 @@
     "esbuild": "^0.28.2",
     "ink": "^6.8.0",
     "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.9"
   }
 }

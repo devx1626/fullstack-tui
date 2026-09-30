@@ -7,7 +7,6 @@
  * (store, curriculum, settings). The classic UI remains the default entry
  * until the Phase 4 cut-over.
  */
-import React from 'react';
 import { render, Text, Box } from 'ink';
 import { detectCapabilities } from './ui/capabilities.js';
 import { themeForCapabilities } from './ui/theme/index.js';

@@ -19,7 +19,6 @@
  * advances on <CR>; the interactive version lands with that editor (its own
  * step in Appendix E).
  */
-import React from 'react';
 import { Box, Text } from 'ink';
 import { useKeymap } from '../useKeymap.js';
 import { useTheme, useIcons } from '../theme/context.jsx';

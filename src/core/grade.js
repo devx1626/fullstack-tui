@@ -203,7 +203,6 @@ function assemble(ctx) {
   const results = [];
   const jsChecks = checks.filter((c) => c.kind === 'js');
   const pyExprChecks = checks.filter((c) => c.kind === 'py' && c.expr);
-  const pyCaptureChecks = checks.filter((c) => c.kind === 'py' && c.captureName);
 
   for (const check of checks) {
     if (check.kind === 'py') {

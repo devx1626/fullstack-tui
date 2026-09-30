@@ -331,28 +331,6 @@ export function deleteCharChanges(doc, caret, { count = 1, backward = false } = 
   return { changes: deleteRange(caret, end), caret, text: line.slice(caret.col, end.col) };
 }
 
-/** `dd` / `D`-style linewise deletion, used by `dd` and `cc`. */
-export function deleteLineChanges(doc, caret, count = 1) {
-  const times = Math.max(1, Number(count) || 1);
-  const last = Math.min(caret.row + times - 1, doc.lines.length - 1);
-  const sel = selectLineRange(doc, caret.row, last);
-  return {
-    changes: deleteChanges(sel),
-    caret: pos(Math.min(caret.row, doc.lines.length - 1), 0),
-    text: selText(doc, sel),
-  };
-}
-
-/** Block-column insert (`<C-v>I` / `<C-v>A`): one change per row. */
-export function blockInsertChanges(doc, selection, text, at = 'left') {
-  const lines = blockLines(doc, selection);
-  const changes = lines.map((l) => {
-    const col = at === 'left' ? l.start : l.end;
-    return { start: pos(l.row, col), end: pos(l.row, col), text };
-  });
-  return { changes, caret: changes.length ? changes[changes.length - 1].start : pos(0, 0) };
-}
-
 // ---------------------------------------------------------------------------
 
 export function firstNonBlankColumn(doc, row) {

@@ -18,7 +18,7 @@ import {
   BOOLEAN_ATTRS, SIGNATURES, acceptItem, activeParamIndex, completionsAt, createPopup,
   cycleSignature, extraItems, familyOf, findOpenParen, lineWord, minimalChange, nextStop,
   pairBackspaceChanges, popupClick, popupItem, popupKey, popupRefilter, shouldTrigger,
-  signatureAt, smartInsertChanges, snippetStops, tabStopsFor, wordsIn,
+  signatureAt, smartInsertChanges, snippetStops, wordsIn,
 } from '../../src/editor/completions.js';
 import { HTML_ENTITIES } from '../../src/editor/data/html.js';
 import { CSS_AT_RULES, CSS_PSEUDO_CLASSES } from '../../src/editor/data/css.js';

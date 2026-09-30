@@ -5,9 +5,9 @@
  * and passes content in. They never call process.stdout — everything renders
  * inside ink's frame, so they compose with the harness and snapshot tests.
  */
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import { openOverlay, closeOverlay } from '../input/overlayStack.js';
+import { openOverlay } from '../input/overlayStack.js';
 import { useTheme, useIcons } from '../theme/context.jsx';
 import { animationAllowed, framesFor, frameAt, createAnimator } from '../animation.js';
 import { detectCapabilities } from '../capabilities.js';

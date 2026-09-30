@@ -22,7 +22,7 @@
  * document, this component displays it. That split is what keeps the component
  * render-only and therefore snapshot-safe.
  */
-import React, { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { Box, Text, useCursor } from 'ink';
 import {
   cursorPoint,
@@ -242,8 +242,11 @@ export function CodeEditor({
   fastCursorRef = null, // P0-5: one-shot cursor cell from the route's fast path
 }) {
   // Syntax colours come from the app-wide theme unless a caller overrides it —
-  // the route no longer has to thread tokens down through every pane.
-  const theme = themeProp || useTheme();
+  // the route no longer has to thread tokens down through every pane. The hook
+  // is called unconditionally (rules-of-hooks); the context default makes that
+  // safe even where no provider is mounted, and an explicit prop still wins.
+  const contextTheme = useTheme();
+  const theme = themeProp || contextTheme;
   const doc = useMemo(() => toDoc(docProp), [docProp]);
   const view = doc.view || { scrollTop: 0, scrollX: 0 };
   const { setCursorPosition } = useCursor();

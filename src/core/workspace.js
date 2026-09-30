@@ -35,10 +35,11 @@ export function readArtifact(relPath) {
 export function listWorkspace() {
   const out = [];
   const walkDir = (dir, prefix = '') => {
-    let entries = [];
+    let entries;
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
+      // A vanished subdirectory contributes nothing.
       return;
     }
     for (const e of entries) {
@@ -83,7 +84,6 @@ export function openExternally(target) {
  * already we keep it, otherwise we scaffold one so the browser shows it nicely.
  */
 export function previewDocument({ html = '', css = '', js = '', title = 'Preview' } = {}) {
-  const isFullPage = /<html[\s>]/i.test(html);
   const base = `    * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 1.5rem; line-height: 1.6; color: #1b1b1f; background: #fbfbfd; }
     img { max-width: 100%; height: auto; }

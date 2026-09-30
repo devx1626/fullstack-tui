@@ -332,8 +332,8 @@ function formatCssFrom(raw, start, depth) {
 
     const isAt = prelude.text.startsWith('@');
     lines.push(`${pad}${isAt ? normaliseAtPrelude(prelude.text) : cssTopSplit(prelude.text).join(',\n' + pad)} {`);
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+
+    for (;;) {
       const res = formatCssFrom(raw, i, depth + 1);
       // A nested context MUST end on its own `}`; EOF here means unclosed.
       if (res === null || !res.closed) return null;
@@ -381,7 +381,6 @@ function maskJs(src) {
   const spans = [];
   let i = 0;
   const n = raw.length;
-  let lineStart = 0;
   let line = 0;
 
   const prevSignificant = () => {
@@ -399,7 +398,7 @@ function maskJs(src) {
 
   while (i < n) {
     const ch = raw[i];
-    if (ch === '\n') { out += '\n'; line += 1; lineStart = i + 1; i += 1; continue; }
+    if (ch === '\n') { out += '\n'; line += 1; i += 1; continue; }
 
     // comments
     if (ch === '/' && raw[i + 1] === '/') {

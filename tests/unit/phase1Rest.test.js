@@ -33,7 +33,6 @@ test('phase 1: settings, tour and pane persistence', async (t) => {
     t.skip('needs built harness (npm run build)');
     return;
   }
-  const { Store } = await import('../../src/core/store.js');
   const { Settings } = await import('../../src/ui/settings.js');
   const strip = helper.stripAnsi;
 

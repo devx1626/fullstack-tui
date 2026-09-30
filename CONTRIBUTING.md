@@ -12,14 +12,15 @@ npm install
 npm run build        # needed once before test:unit (the render tests skip
                      # themselves without dist/harness.js)
 npm run test:unit
+npm run lint         # ESLint: 0 errors is the bar (CI blocks on it)
 npm test             # the full integration gate (should pass on a fresh clone)
 ```
 
 Optional but recommended: have `python3` on `$PATH` so the Python module's
 live-check tests run instead of skip.
 
-`.github/workflows/ci.yml` runs `build`, `test:unit`, and `check` on every
-push and pull request — `self-check` starts only after `unit` is green. If a
+`.github/workflows/ci.yml` runs `lint`, `build`, `test:unit`, and `check` on
+every push and pull request — `self-check` starts only after `unit` is green. If a
 gate is red locally it will be red there; both jobs run under timeout budgets.
 
 ## The golden rule: every challenge is self-verifying
@@ -98,7 +99,7 @@ update `src/content/index.js` imports in curriculum order.
 - Run the full gate before pushing:
 
 ```bash
-npm run build && npm test && npm run test:unit
+npm run lint && npm run build && npm test && npm run test:unit
 ```
 
 ## Keymap and commands

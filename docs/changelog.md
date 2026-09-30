@@ -7,6 +7,19 @@ Earlier history lives in the dated progress notes of `tui-overhaul-spec.md` and
 `errors-and-qol-spec.md`; those notes fold into this file as the docs workstream
 (loose-ends-spec P1-4) proceeds.
 
+## Unreleased — 2026-09-30 · Dev tooling (P1-5)
+
+ESLint and Prettier arrive as dev dependencies — no runtime impact, no change to the
+app. `npm run lint` (flat config: recommended core rules, the two React-hooks rules,
+a few strictness basics; `no-control-regex` off because ESC-byte regexes are the
+product) runs as the first, blocking step of CI's `unit` job. The one-time cleanup
+pass shipped alongside the config and caught real bugs: three conditional
+`useTheme()` hook calls are now unconditional, and a handful of dead locals, imports,
+and two dead vim operator helpers are gone. The 19 remaining
+`react-hooks/exhaustive-deps` warnings are the known-intentional ref-backed-setter
+pattern, left advisory. `npm run format` (Prettier, no hard wrap — the house wraps
+manually) is wired but not gated; a repo-wide formatting pass is a separate decision.
+
 ## Unreleased — 2026-09-29 · Docs refresh (P1-4)
 
 The published docs now describe the shipped app. The README lost its phase

@@ -50,7 +50,7 @@ export function toBase64(text) {
 function utf8Bytes(str) {
   const out = [];
   for (const ch of str) {
-    let cp = ch.codePointAt(0);
+    const cp = ch.codePointAt(0);
     if (cp < 0x80) {
       out.push(cp);
     } else if (cp < 0x800) {

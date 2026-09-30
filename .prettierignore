@@ -1,0 +1,8 @@
+dist/
+node_modules/
+.data/
+.workspace/
+coverage/
+package-lock.json
+docs/keymap.md
+docs/vim.md

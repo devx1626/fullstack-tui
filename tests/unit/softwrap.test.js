@@ -114,7 +114,6 @@ test('scrollTop stability: firstVisibleRow keeps the viewport put while the care
   // 12 lines × 3 rows each; viewport 6 screen rows.
   const lines = [];
   for (let i = 0; i < 12; i += 1) lines.push(`line${i} ${'x'.repeat(20)}`);
-  const doc = buildWrapDoc(lines, 12);
   // Caret inside the viewport [10, 16): first stays 10.
   assert.equal(firstVisibleRow(12, 6, 10), 10);
   // Caret above: viewport snaps up to the caret.

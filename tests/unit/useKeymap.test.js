@@ -16,14 +16,6 @@ const harness = existsSync(harnessPath) ? await import(pathToFileURL(harnessPath
 if (!harness) {
   test('useKeymap tests need built harness (npm run build)', () => { assert.ok(true); });
 } else {
-  const helper = await import(
-    pathToFileURL(new URL('../helpers/snapshot.js', import.meta.url).pathname)
-  );
-
-  async function withScreen(Component, props = {}) {
-    const frame = await helper.renderToText(harness.el(Component, props), { render: harness.render });
-    return frame;
-  }
 
   test('useKeymap registers a route that resolves keys to command ids', async () => {
     const seen = [];

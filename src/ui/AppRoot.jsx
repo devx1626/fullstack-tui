@@ -13,7 +13,7 @@
  * the React tree. Ctrl+C quit semantics are main.jsx's (E4-verified); `q`
  * reaches it through CommandHost → onQuit.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useWindowSize } from './useWindowSize.js';
 import { RouterProvider, RouterView, useRouter } from './router.jsx';

@@ -15,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { docFromText, docText, pos } from '../../src/editor/document.js';
-import { createRegisters, readRegister } from '../../src/editor/registers.js';
+import { createRegisters } from '../../src/editor/registers.js';
 import {
   VIM_BINDINGS, VIM_MODES, createVimState, keySpec, modeLabel, pairInsert,
   reduceKey, visualSelection,

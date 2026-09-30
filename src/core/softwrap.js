@@ -110,7 +110,7 @@ export function moveVertical(ed, doc, delta) {
     return ed.col - seg.start;
   })();
 
-  let target = Math.max(0, Math.min(curRow + delta, doc.totalRows - 1));
+  const target = Math.max(0, Math.min(curRow + delta, doc.totalRows - 1));
   // Locate the logical line + segment for the target screen row.
   let line = doc.lines[0];
   for (const l of doc.lines) {

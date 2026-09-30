@@ -79,7 +79,7 @@ function parseRules(src, media, out, depth = 0) {
       if (!prelude) continue;
 
       if (prelude.startsWith('@')) {
-        const at = (prelude.match(/^@([\w-]+)/) || [, ''])[1].toLowerCase();
+        const at = (prelude.match(/^@([\w-]+)/) || ['', ''])[1].toLowerCase();
         if (['media', 'supports', 'layer', 'container', 'scope', 'document'].includes(at) && depth < 4) {
           parseRules(body, prelude, out, depth + 1);
         } else if (at === 'keyframes' || at.endsWith('keyframes')) {

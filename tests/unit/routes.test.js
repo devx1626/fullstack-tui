@@ -366,11 +366,11 @@ test('next-UI routes + command host', async (t) => {
       // micro-notes ("CHECKS  1/5   ·   40 ms", then the note lines).
       app.onKey({ name: 'ctrl-s' });
       assert.ok(
-        await waitFor(() => /CHECKS  \d+\/\d+/.test(app.frame()), { timeout: 20000 }),
+        await waitFor(() => /CHECKS {2}\d+\/\d+/.test(app.frame()), { timeout: 20000 }),
         'the checks header rendered with counts',
       );
       assert.ok(
-        await waitFor(() => /CHECKS  \d+\/\d+\s+·\s+\d+ ms/.test(app.frame()), { timeout: 8000 }),
+        await waitFor(() => /CHECKS {2}\d+\/\d+\s+·\s+\d+ ms/.test(app.frame()), { timeout: 8000 }),
         'header carries the run duration',
       );
       assert.ok(

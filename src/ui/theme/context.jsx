@@ -19,7 +19,7 @@
  * Default is the raw midnight theme so a component rendered outside a provider
  * (unit tests, isolated previews) still colors correctly.
  */
-import React, { createContext, useContext } from 'react';
+import { createContext, useContext } from 'react';
 import { midnight } from './themes.js';
 import { ICON_SETS } from './icons.js';
 

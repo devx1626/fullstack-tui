@@ -27,7 +27,7 @@
  * at, and a module-level sink so main.jsx's dispatcher can route keys that no
  * screen claims (its global pass) to the same command table.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useRouter } from './router.jsx';
 import { useServices } from './services.jsx';

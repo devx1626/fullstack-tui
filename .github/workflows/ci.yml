@@ -1,11 +1,12 @@
 name: CI
 
-# The merge bar from tui-overhaul-spec.md §13: build + tests green. Two stages
-# because they fail for different reasons — `test:unit` is fast feedback on the
-# code, `check` grades every reference solution against the curriculum (and
-# takes minutes because the Python checks spawn real interpreters). They run
-# in that order — `self-check` needs `unit` — so a broken build fails at the
-# cheap gate and never starts the long one.
+# The merge bar from tui-overhaul-spec.md §13: lint + build + tests green.
+# Three stages because they fail for different reasons — `lint` is pure static
+# analysis (no bundle needed), `test:unit` is fast feedback on the code, and
+# `check` grades every reference solution against the curriculum (and takes
+# minutes because the Python checks spawn real interpreters). They run in that
+# order — `self-check` needs `unit` — so a broken build fails at the cheap gate
+# and never starts the long one.
 on:
   push:
     branches: [master, main]
@@ -14,7 +15,7 @@ on:
 
 jobs:
   unit:
-    name: build + unit tests
+    name: lint + build + unit tests
     runs-on: ubuntu-latest
     # Hard budgets, not estimates: a hung run should die and mark red long
     # before GitHub's 6-hour default. Both jobs clear their local timings
@@ -27,6 +28,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Lint first: it needs no bundle, so a style/static-analysis break fails
+      # before any build or test minutes are spent. Blocking since P1-5 (the
+      # one-time cleanup pass shipped with the config; baseline is 0 errors).
+      - run: npm run lint
       # The classic UI runs from source; the Ink tree needs a bundle, and the
       # render tests need the harness bundle (they skip without it).
       - run: npm run build

@@ -88,7 +88,7 @@ test('paste: keys before the intro still parse', () => {
 
 test('coalescer: a lone Esc emits after the window', async () => {
   const c = new EscapeCoalescer(20);
-  let got = [];
+  const got = [];
   c.onEvent = (e) => got.push(e);
   const now = c.feed('\x1b');
   assert.equal(now.length, 0);

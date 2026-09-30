@@ -68,6 +68,8 @@ Keys live in one registry (`src/ui/commands.js`) and are rebindable via
 | `npm run build` | Bundle `dist/main.js` **and** the test harness `dist/harness.js` (`npm run dev` to watch) |
 | `npm test` / `npm run check` | The integration gate: curriculum deep-validation, headless screen renders, every reference solution re-graded, editor/sandbox unit checks, keymap + link + perf lints |
 | `npm run test:unit` | node:test suite (`tests/unit/*.test.js`) |
+| `npm run lint` / `npm run lint:fix` | ESLint over `src/`, `tests/`, `tools/`, `bin/` (flat config in `eslint.config.js`); errors block CI, `react-hooks/exhaustive-deps` warnings are advisory |
+| `npm run format` / `npm run format:check` | Prettier — 2-space indent, single quotes, no hard wrap (house style wraps manually); config in `.prettierrc.js` |
 | `npm run verify` | Reference-solution + buggy-starter assertions across all 12 modules |
 | `npm run list` | Print the curriculum as plain text |
 | `npm run keymap:docs` | Regenerate `docs/keymap.md` + `docs/vim.md` from their source tables |

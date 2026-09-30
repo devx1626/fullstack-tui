@@ -14,7 +14,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { themes, midnight, paper } from '../../src/ui/theme/themes.js';
+import { themes, midnight } from '../../src/ui/theme/themes.js';
 import { themeForCapabilities } from '../../src/ui/theme/index.js';
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;

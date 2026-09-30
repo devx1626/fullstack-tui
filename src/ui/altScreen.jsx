@@ -6,7 +6,7 @@
  * used: enter 1049 + hide cursor on mount, restore on unmount — including on
  * error/unmount so the user's shell is never left scrambled.
  */
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 
 const ALT_ON = '\x1b[?1049h';
 const ALT_OFF = '\x1b[?1049l';

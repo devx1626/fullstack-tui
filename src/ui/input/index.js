@@ -115,8 +115,8 @@ export class MouseParser {
     // Only full SGR sequences; anything without the \x1b[< intro is passthrough.
     let m;
     // Multiple sequences may arrive in one chunk.
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+
+    for (;;) {
       const idx = this.pending.indexOf('\x1b[<');
       if (idx === -1) break;
       m = MOUSE_RE.exec(this.pending.slice(idx));

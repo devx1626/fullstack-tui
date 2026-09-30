@@ -13,7 +13,7 @@
  * registered in a SCREENS map so the router has no view imports — Phase 1
  * ports add entries without touching this file.
  */
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { Text } from 'ink';
 import { useTheme } from './theme/context.jsx';
 

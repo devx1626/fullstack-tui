@@ -13,7 +13,6 @@
  *   │   reset editor                 ^G      │
  *   └────────────────────────────────────────┘
  */
-import React from 'react';
 import { Box, Text } from 'ink';
 import { filterCommands, clampSelected } from '../fuzzy.js';
 import { useTheme, useIcons } from '../theme/context.jsx';

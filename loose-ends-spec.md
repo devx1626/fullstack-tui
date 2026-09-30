@@ -660,6 +660,32 @@ a few rules: no-unused-vars, eqeqeq, no-var, prefer-const; JSX via a minimal con
 flipping to blocking after the first cleanup pass. Deliberately excluded: TypeScript
 (invasive; the zero-TS call was made at project start), plugin sprawl, import sorting.
 
+**Resolved (shipped 2026-09-30, blocking from day one).** The config is the small one the
+recommendation asked for — `@eslint/js` recommended plus `no-unused-vars` (args/caught
+exempt, `^_` reserved), `eqeqeq 'smart'`, `no-var`, `prefer-const`, and the two
+`react-hooks` rules — with two deliberate deviations:
+
+1. **`no-control-regex` is off.** This is a terminal app; regexes over ESC bytes are the
+   product, and the recommended blanket ban flagged 21 legitimate matchers.
+2. **`eslint-plugin-react` is out; `eslint-plugin-react-hooks` is in.** The former does not
+   support ESLint 10 yet (peer ceiling `^9.7`); the hooks plugin does, and the hooks rules
+   are the only ones this codebase needed from it.
+
+The cleanup pass shipped in the same commit as the config, so lint went straight to
+blocking in CI (first step of the `unit` job — it needs no bundle). The pass earned its
+keep: 3 real `rules-of-hooks` violations (`themeProp || useTheme()` conditionally called
+the hook — now unconditional, safe because the context default is `midnight`), 4 redundant
+regex escapes, 19 stray `import React` (dead since the esbuild automatic-JSX flip), two
+`while (true)` loops, annotated fall-throughs, and the unused-import/local sweep — 41
+errors → 0. The 19 remaining `react-hooks/exhaustive-deps` warnings are the known-
+intentional ref-backed-setter pattern and stay advisory. §10's dead-export gate then
+caught what the import prune exposed: `deleteLineChanges`/`blockInsertChanges` in
+vim/operators.js were dead even before their masking imports were removed — deleted.
+Prettier 3 is wired (`format`/`format:check`; 2-space, single quotes, **no `printWidth`**
+— the house wraps manually and a hard wrap would churn the repo) but deliberately
+unenforced: full normalisation would rewrite ~186 files for style alone, so that decision
+stays open.
+
 ### P1-6 · Unwritten round-trip goldens — CLOSED 2026-09-23
 
 **Finding.** The 2.9 acceptance named "Ctrl+P/Ctrl+E round-trip goldens" as unwritten; the

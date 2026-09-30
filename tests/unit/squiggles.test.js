@@ -23,7 +23,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const ROOT = process.cwd();
-const { docFromText, pos } = await import('../../src/editor/document.js');
+const { docFromText } = await import('../../src/editor/document.js');
 const { rowPieces, squiggleRows } = await import('../../src/editor/viewport.js');
 const { squiggle, squiggleSgr } = await import('../../src/ui/multimedia.js');
 

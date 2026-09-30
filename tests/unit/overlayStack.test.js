@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   hasOverlays, topOverlay, overlayDepth, openOverlay, closeOverlay,
-  clearOverlays, routeToOverlays, _resetOverlays,
+  routeToOverlays, _resetOverlays,
 } from '../../src/ui/input/overlayStack.js';
 import { InputDispatcher } from '../../src/ui/input/dispatcher.js';
 
