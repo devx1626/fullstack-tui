@@ -62,7 +62,8 @@ function EditorPane({
             </Text>
             <Text>
               {r.segs.map((s, j) => (
-                <Text key={j} color={s.color || undefined} bold={s.bold || undefined} italic={s.italic || undefined}>
+                <Text key={j} color={s.color || undefined} bold={s.bold || undefined} italic={s.italic || undefined}
+                  underline={s.changed && (r.kind === 'mod-cur' || r.kind === 'mod-ref') ? true : undefined}>
                   {s.text}
                 </Text>
               ))}

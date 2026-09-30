@@ -13,13 +13,102 @@
  * a row pair is shown as a modify pair (`!`/`?` like the classic) or as a
  * separate delete+insert — that threshold is a parameter, not a hidden guess.
  *
+ * Modify rows additionally carry WORD-level marks: `changedCols` runs
+ * jsdiff's whitespace-glued word diff over the pair and returns per-character
+ * masks, and `diffRows` overlays them onto the highlight segments as a
+ * `changed` flag, so the view can spotlight the tokens that differ instead of
+ * the whole line. Every input shape degrades to "no marks" — never an error.
+ *
  * Everything is pure; `diffLines` never throws on any input shape.
  */
 import { highlightLine } from './highlight.js';
+import { diffWordsWithSpace } from 'diff';
 
 /** Default cap: beyond this many rows the diff degrades to positional compare
  * (documented, and still correct at the ends — just no real alignment). */
 const MAX_LCS_CELLS = 1_000_000;
+
+/** Word-diff cap, per modify pair: jsdiff is quadratic in the worst case, and
+ * a pair this long has no useful spotlight anyway — degrade to no marks. */
+const MAX_WORD_DIFF_CELLS = 4096;
+
+/** Beyond this many word-level parts the change is churn, not a spotlight. */
+const MAX_WORD_PARTS = 64;
+
+/**
+ * Word-level change masks for a modify pair. Returns
+ * `{ del, add }` — per-character boolean arrays (jsdiff offsets are UTF-16
+ * code units, matching segment text indexing) — or null when the pair is
+ * identical, too large to word-diff, or diffs into pure churn.
+ */
+export function changedCols(currentText, referenceText) {
+  const a = String(currentText ?? '');
+  const b = String(referenceText ?? '');
+  if (a === b) return null;
+  if (!a || !b) return null; // empty-vs-content would spotlight the whole line
+  if (a.length * b.length > MAX_WORD_DIFF_CELLS) return null;
+  let parts;
+  try {
+    parts = diffWordsWithSpace(a, b);
+  } catch {
+    return null; // jsdiff on hostile input must never take the view down
+  }
+  if (parts.length > MAX_WORD_PARTS) return null;
+  const del = new Array(a.length).fill(false);
+  const add = new Array(b.length).fill(false);
+  let ia = 0;
+  let ib = 0;
+  let touched = false;
+  for (const p of parts) {
+    if (p.added) {
+      for (let k = 0; k < p.value.length; k += 1) add[ib + k] = true;
+      ib += p.value.length;
+      touched = true;
+    } else if (p.removed) {
+      for (let k = 0; k < p.value.length; k += 1) del[ia + k] = true;
+      ia += p.value.length;
+      touched = true;
+    } else {
+      ia += p.value.length;
+      ib += p.value.length;
+    }
+  }
+  return touched ? { del, add } : null;
+}
+
+/**
+ * Overlay per-character change marks onto highlight segments: segments inside
+ * a marked run gain `changed: true` and runs are split at mark boundaries so
+ * the renderer can style exactly the changed words. Unmarked input passes
+ * through untouched (same array when nothing is marked).
+ */
+function overlayMarks(segs, mask) {
+  if (!mask) return segs;
+  const out = [];
+  let pos = 0;
+  for (const s of segs) {
+    const text = String(s.text ?? '');
+    const end = pos + text.length;
+    let any = false;
+    for (let i = pos; i < end; i += 1) {
+      if (mask[i]) { any = true; break; }
+    }
+    if (!any) {
+      out.push(s);
+    } else {
+      let runMark = !!mask[pos];
+      let start = pos;
+      for (let i = pos + 1; i <= end; i += 1) {
+        if (i === end || !!mask[i] !== runMark) {
+          out.push({ ...s, text: text.slice(start - pos, i - pos), changed: runMark });
+          if (i < end) { runMark = !!mask[i]; start = i; }
+        }
+      }
+    }
+    pos = end;
+  }
+  return out;
+}
 
 /**
  * Longest common subsequence over lines, returning the matched index pairs
@@ -163,7 +252,9 @@ export function similarity(x, y) {
 /**
  * Diff rows → renderable line rows for the DiffView. Each returned row is
  * `{ kind: 'equal'|'add'|'del'|'mod-cur'|'mod-ref', marker, text, segs }` with
- * segments already highlighted (roles resolved through `theme`).
+ * segments already highlighted (roles resolved through `theme`). On modify
+ * rows, segments covering word-level changes carry `changed: true` (and runs
+ * are split at mark boundaries); every other row's segments are unmarked.
  */
 export function diffRows(currentText, referenceText, { lang = 'js', theme = null, modifyThreshold = 0.5 } = {}) {
   const rows = diffLines(currentText, referenceText, { modifyThreshold });
@@ -178,8 +269,11 @@ export function diffRows(currentText, referenceText, { lang = 'js', theme = null
     } else if (r.op === 'delete') {
       out.push({ kind: 'del', marker: '- ', text: r.text, segs: hl(r.text) });
     } else {
-      out.push({ kind: 'mod-cur', marker: '! ', text: r.current, segs: hl(r.current) });
-      out.push({ kind: 'mod-ref', marker: '? ', text: r.reference, segs: hl(r.reference) });
+      // Word-level spotlight on modify pairs: marks survive as a `changed`
+      // flag on the segments; add/delete/equal rows pass through unmarked.
+      const marks = changedCols(r.current, r.reference);
+      out.push({ kind: 'mod-cur', marker: '! ', text: r.current, segs: overlayMarks(hl(r.current), marks ? marks.del : null) });
+      out.push({ kind: 'mod-ref', marker: '? ', text: r.reference, segs: overlayMarks(hl(r.reference), marks ? marks.add : null) });
     }
   }
   return out;

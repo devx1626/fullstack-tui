@@ -7,6 +7,14 @@ Earlier history lives in the dated progress notes of `tui-overhaul-spec.md` and
 `errors-and-qol-spec.md`; those notes fold into this file as the docs workstream
 (loose-ends-spec P1-4) proceeds.
 
+## Unreleased — 2026-09-30 · Diff view word-level spotlight
+
+In the solution view, a modify pair (`!`/`?` rows) used to colour both whole
+lines and leave you to find the difference. The rows now underline exactly
+the words that changed (jsdiff's word-level diff, overlaid on the syntax
+highlighting), with size and churn guards: a heavily rewritten line degrades
+to the old whole-line display instead of spotlighting everything.
+
 ## Unreleased — 2026-09-30 · Dev tooling (P1-5)
 
 ESLint and Prettier arrive as dev dependencies — no runtime impact, no change to the
