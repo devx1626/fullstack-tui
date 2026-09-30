@@ -30,7 +30,12 @@ const base = {
   // ever dynamic-imports it, and it is not installed by default. Keep it out
   // of the bundle graph entirely; the loader throws at runtime (caught by
   // isPlaywrightAvailable → guidance) when the user has not installed it.
-  external: ['playwright'],
+  // Same story for the `esbuild` package itself: tsstrip.js uses its
+  // transformSync at runtime (the TypeScript grading lane), and bundling the
+  // API client would pull the platform binary shim into dist/. It stays an
+  // externals-listed runtime import — esbuild is a dependency, so `npm
+  // install` always provides it.
+  external: ['playwright', 'esbuild'],
   // Ink deps (signal-exit etc.) still call require() for node builtins;
   // give the ESM bundle a working require via createRequire. The binding is
   // renamed so bundled sources that import `createRequire` themselves (e.g.

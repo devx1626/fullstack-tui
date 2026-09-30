@@ -1,9 +1,10 @@
 import { T } from '../core/grade.js';
 
 /**
- * TypeScript challenges are *executed*: the TUI strips the annotations the same
- * way Node does and runs the result in the sandbox, so behaviour is verified
- * for real.
+ * TypeScript challenges are *executed*: the TUI strips the annotations with
+ * esbuild's transform (the same engine that builds this app — no Node version
+ * floor beyond the app's own) and runs the result in the sandbox, so behaviour
+ * is verified for real.
  *
  * Types themselves are not compiled here - that needs `tsc`. So each challenge
  * pairs a behavioural check with `T.src` checks that assert the annotations you

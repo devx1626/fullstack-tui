@@ -7,6 +7,20 @@ Earlier history lives in the dated progress notes of `tui-overhaul-spec.md` and
 `errors-and-qol-spec.md`; those notes fold into this file as the docs workstream
 (loose-ends-spec P1-4) proceeds.
 
+## Unreleased — 2026-09-30 · TypeScript grading engine: esbuild
+
+The TypeScript lane no longer depends on Node's built-in type stripper (which
+needed Node 22.13+, well past the app's declared 20.9 floor) — it uses
+esbuild's transform, the same engine that builds the app and a package already
+in `dependencies`, so there is no new dependency and no version floor change.
+esbuild also accepts the full TS surface (enums, namespaces — a superset of
+the erasable-only builtin) and reports syntax errors with line/column
+coordinates against the learner's original source; a `compactTsError` helper
+keeps the status bar to one line. The transform stays out of the bundle (the
+`esbuild` package is externalised, like Playwright) and resolves from
+`node_modules` at runtime. Type-checking remains out of scope, as before:
+`npx tsc --noEmit` is still the compiler's opinion.
+
 ## Unreleased — 2026-09-30 · Diff view word-level spotlight
 
 In the solution view, a modify pair (`!`/`?` rows) used to colour both whole

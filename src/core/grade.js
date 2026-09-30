@@ -21,7 +21,7 @@ import { Dom, extractScripts, extractStyles, lint } from './html.js';
 import { Css } from './css.js';
 import { runSql } from './sqlrun.js';
 import { createRepo, parseScript } from './shexec.js';
-import { stripTypes } from './tsstrip.js';
+import { compactTsError, stripTypes } from './tsstrip.js';
 import { runPy, pyAvailable } from './pyrun.js';
 
 /**
@@ -166,10 +166,13 @@ function prepare(challenge, code) {
       try {
         jsSource = stripTypes(jsSource);
       } catch (err) {
+        // The TS lane's engine is esbuild (see tsstrip.js); keep one compact
+        // line for the status bar instead of esbuild's bundled diagnostics.
+        const message = compactTsError(err) || `TypeScript syntax error: ${err.message}`;
         ctx.jsRun = {
           ok: false,
-          error: `TypeScript syntax error: ${err.message}`,
-          results: jsChecks.map((c, i) => ({ i, ok: false, error: err.message })),
+          error: message,
+          results: jsChecks.map((c, i) => ({ i, ok: false, error: message })),
           captured: {},
           logs: [],
         };
