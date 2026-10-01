@@ -6,6 +6,7 @@
  * These are .js tests importing .jsx components — resolved through the built
  * dist bundle when present, else skipped with a note (build required).
  */
+import '../helpers/runner-env.js'; // static, before harness — ink's is-in-ci check runs at module load (spec P0-1)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';

@@ -6,6 +6,7 @@
  * First run creates the golden; UPDATE_SNAPSHOTS=1 rewrites it; every later
  * run compares. Goldens are committed as plain (ANSI-stripped) text.
  */
+import '../helpers/runner-env.js'; // static, before harness — ink's is-in-ci check runs at module load (spec P0-1)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';

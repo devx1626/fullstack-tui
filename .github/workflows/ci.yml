@@ -35,7 +35,14 @@ jobs:
       # The classic UI runs from source; the Ink tree needs a bundle, and the
       # render tests need the harness bundle (they skip without it).
       - run: npm run build
+      # CI=0 mirrors is-in-ci's truthiness rule, so ink (imported by render
+      # tests) always picks its streaming frame mode even on this runner.
+      # Belt and braces: the suites also self-neutralize via
+      # tests/helpers/runner-env.js, but a new test that renders ink without
+      # that import must not depend on remembering why its frame is empty.
       - run: npm run test:unit
+        env:
+          CI: 0
 
   self-check:
     name: curriculum + editor self-check
@@ -50,6 +57,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # Python reference checks run live when python3 exists (ubuntu runners
-      # ship it) and are skipped gracefully when it does not.
+      # CI=0 for the same reason as the unit job: §9 of check.js reads frames
+      # streamed from ink against a fake stdout (it also clears CI itself
+      # around the harness import; this keeps any future section safe).
       - run: npm run check
+        env:
+          CI: 0

@@ -159,6 +159,19 @@ Verified: two consecutive green `test:unit` runs under `CI=true` **and** two cle
 snapshot/deterministic-frames contract holds under CI: BusyLine's static frame is what the
 gate produces, and the unit tests pin it.
 
+**Audit follow-up (2026-10-01, P0-1 enforcement completed).** Re-auditing the tree against the
+cartridge above found the convention only half-enforced: of the 19 harness-importing test
+files, just one (`routes.test.js`) imported `runner-env.js` statically — the other 17 got it
+*transitively via snapshot.js*, which evaluates **after** their dynamic harness import. That
+still worked end to end (the fixture factories are env-neutral by luck of construction, and
+no test read mid-render frames), but any future test that reads a streamed frame before
+settle would silently regress to the buffer-until-exit failure mode this fix exists to kill.
+All 17 files now carry the static `import '../helpers/runner-env.js'` ahead of their other
+imports, matching this spec's stated contract exactly; `.github/workflows/ci.yml` additionally
+pins `CI: 0` on both jobs' test steps so a brand-new render test that forgets the import
+cannot depend on runner environment. Re-verified after the change: `CI=true` and clean-env
+runs both green (876 tests: 875 pass + 1 by-design skip), lint 0 errors.
+
 ### P0-2 · Phase 4 flip: parity checklist, then big-bang cut-over
 
 **Finding.** The flip is planned (`tui-overhaul-spec.md` §"Cut-over mechanics") and half-prepared

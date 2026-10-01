@@ -7,6 +7,7 @@
  * tests registered after a top-level await can be dropped by the runner's
  * collection race (see CONTRIBUTING, "Structure note").
  */
+import '../helpers/runner-env.js'; // static, before harness — ink's is-in-ci check runs at module load (spec P0-1)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';

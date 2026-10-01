@@ -5,6 +5,7 @@
  * Uses the awaited-subtest structure (see challengeScreen.test.js) to stay
  * immune to the node:test collection race with top-level awaits.
  */
+import '../helpers/runner-env.js'; // static, before harness — ink's is-in-ci check runs at module load (spec P0-1)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';

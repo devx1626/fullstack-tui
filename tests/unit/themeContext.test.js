@@ -9,6 +9,7 @@
  *
  * Run: node --test tests/unit/themeContext.test.js
  */
+import '../helpers/runner-env.js'; // static, before harness — ink's is-in-ci check runs at module load (spec P0-1)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
